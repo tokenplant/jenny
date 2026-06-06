@@ -101,10 +101,10 @@ Implement in this order:
    - Rebuild message history from transcript ✓
    - **Gap:** `readFileState` restoration, cost state, queue-only filtering, compaction boundaries
 
-7. - [ ] SSE streaming from API — [`sse-streaming.md`](./sse-streaming.md) _(moved from P2)_
-   - Stream via server-sent events; yield partial text as it arrives
-   - On streaming failure with fallback configured, retry non-streaming
-   - Emit `stream_request_start` before each API iteration
+7. - [x] SSE streaming from API — [`sse-streaming.md`](./sse-streaming.md) _(moved from P2)_
+   - Stream via server-sent events; yield partial text as it arrives ✓
+   - On streaming failure with fallback configured, retry non-streaming ✓
+   - Emit `stream_request_start` before each API iteration ✓
    - **Blocks:** full stream-json compliance and `--include-partial-messages`
 
 8. - [x] Stream-json output (NDJSON) — partial — [`stream-json.md`](./stream-json.md)

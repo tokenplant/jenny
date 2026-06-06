@@ -2,12 +2,10 @@
 title: SSE Streaming from API
 slug: sse-streaming
 priority: P0
-status: not_started
+status: done
 spec: complete
-code: not_started
+code: done
 package: internal/api
-gaps:
-  - Entire feature unimplemented; blocks include_partial_messages and live stream_event
 depends_on:
   - anthropic-api-client
 ---

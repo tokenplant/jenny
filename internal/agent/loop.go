@@ -322,6 +322,7 @@ type Usage struct {
 
 // RunStream executes the agent loop with streaming JSON output.
 // It outputs NDJSON lines to stdout for each message.
+// Uses SSE streaming for API calls when cfg.Enabled is true.
 func RunStream(ctx context.Context, prompt string, tools []tool.Tool, cwd string, cfg StreamConfig, model string) (string, string, error) {
 	// Use provided session ID or generate a new one
 	sessionID := cfg.SessionID
@@ -420,26 +421,48 @@ func RunStream(ctx context.Context, prompt string, tools []tool.Tool, cwd string
 
 	// Main agent loop
 	for i := 0; i < MaxIterations; i++ {
-		// Send message to API (pass nil for toolResults as we include them in messages)
-		resp, err := client.SendMessage(ctx, messages, apiTools, nil, systemPrompt)
-		if err != nil {
-			return "", "", fmt.Errorf("API error: %v", err)
+		// Emit stream_request_start before each API iteration (AC4)
+		if cfg.Enabled {
+			msg := StreamMessage{
+				Type: "stream_request_start",
+			}
+			data, _ := json.Marshal(msg)
+			fmt.Fprintln(os.Stdout, string(data))
 		}
 
-		// Process response content
+		// Create fallback function for streaming failures (AC3)
+		fallbackFn := func(fallbackCtx context.Context) (*api.Response, error) {
+			return client.SendMessage(fallbackCtx, messages, apiTools, nil, systemPrompt)
+		}
+
+		// Use streaming API (AC1)
+		blocksChan, streamResult := client.SendMessageStream(
+			ctx,
+			messages,
+			apiTools,
+			nil,
+			systemPrompt,
+			api.DefaultIdleTimeout,
+			api.DefaultFallbackTimeout,
+			fallbackFn,
+		)
+
+		// Process streaming blocks
 		var textOutput string
 		var toolResults []api.ToolResult
 		var toolUseBlocks []api.ToolUseBlock
+		var modelName string
 
-		for _, block := range resp.Content {
-			switch block.Type {
+		// Process blocks as they arrive
+		for block := range blocksChan {
+			switch block.Block.Type {
 			case "text":
-				textOutput += block.Text
+				textOutput += block.Block.Text
 				if cfg.Enabled && cfg.IncludePartial {
 					// Output partial text as we receive it
 					msg := StreamMessage{
 						Type:       "message",
-						Content:    block.Text,
+						Content:    block.Block.Text,
 						SessionID:  sessionID,
 						IsPartial:  true,
 						MessageIdx: i,
@@ -450,9 +473,9 @@ func RunStream(ctx context.Context, prompt string, tools []tool.Tool, cwd string
 			case "tool_use":
 				// Collect tool_use blocks for the assistant message
 				toolUseBlocks = append(toolUseBlocks, api.ToolUseBlock{
-					ID:    block.ToolID,
-					Name:  block.ToolName,
-					Input: block.ToolInput,
+					ID:    block.Block.ToolID,
+					Name:  block.Block.ToolName,
+					Input: block.Block.ToolInput,
 				})
 
 				if cfg.Enabled {
@@ -460,14 +483,29 @@ func RunStream(ctx context.Context, prompt string, tools []tool.Tool, cwd string
 					msg := StreamMessage{
 						Type:       "tool_use",
 						SessionID:  sessionID,
-						ToolName:   block.ToolName,
-						ToolInput:  block.ToolInput,
+						ToolName:   block.Block.ToolName,
+						ToolInput:  block.Block.ToolInput,
 						MessageIdx: i,
 					}
 					data, _ := json.Marshal(msg)
 					fmt.Fprintln(os.Stdout, string(data))
 				}
 			}
+		}
+
+		// Check if streaming completed with error
+		if streamResult.Error != "" && len(streamResult.Blocks) == 0 {
+			return "", sessionID, fmt.Errorf("streaming error: %v", streamResult.Error)
+		}
+
+		// Use results from streaming (or fallback)
+		resp := &api.Response{
+			Content:    streamResult.Blocks,
+			StopReason: streamResult.StopReason,
+			Usage:      streamResult.Usage,
+		}
+		if resp.Model == "" {
+			resp.Model = modelName
 		}
 
 		// Build and append assistant message with text and tool_use blocks
