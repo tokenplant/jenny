@@ -439,3 +439,140 @@ func TestManager_UserMessageExists(t *testing.T) {
 		t.Error("UserMessageExists() = false, want true (assistant message should not affect user message check)")
 	}
 }
+
+func TestManager_LoadTranscript_FiltersProgressTypes(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "jenny-test-*")
+	if err != nil {
+		t.Fatalf("MkdirTemp() error = %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	m, err := NewManager(tmpDir, false)
+	if err != nil {
+		t.Fatalf("NewManager() error = %v", err)
+	}
+
+	sessionID := "sess_progress_filter_test"
+
+	// Append a mix of chain participants and progress types
+	entries := []TranscriptEntry{
+		{Type: "user", Content: "Hello"},
+		{Type: "progress", Content: "Thinking..."},
+		{Type: "assistant", Content: "Hi there"},
+		{Type: "bash_progress", Content: "Running command"},
+		{Type: "mcp_progress", Content: "MCP tool running"},
+		{Type: "powershell_progress", Content: "PowerShell running"},
+		{Type: "attachment", Content: "file://foo.txt"},
+		{Type: "system", Content: "system prompt"},
+	}
+
+	for _, e := range entries {
+		if err := m.AppendEntry(sessionID, e); err != nil {
+			t.Fatalf("AppendEntry() error = %v", err)
+		}
+	}
+
+	loaded, err := m.LoadTranscript(sessionID)
+	if err != nil {
+		t.Fatalf("LoadTranscript() error = %v", err)
+	}
+
+	// Should only have4 chain participants: user, assistant, attachment, system
+	if len(loaded) != 4 {
+		t.Errorf("LoadTranscript() returned %d entries, want 4", len(loaded))
+	}
+
+	// Verify all returned entries are chain participants
+	for _, e := range loaded {
+		if progressTypes[e.Type] {
+			t.Errorf("LoadTranscript() returned progress type %q, want only chain participants", e.Type)
+		}
+	}
+
+	// Verify specific types are present
+	types := make(map[string]bool)
+	for _, e := range loaded {
+		types[e.Type] = true
+	}
+	wantTypes := []string{"user", "assistant", "attachment", "system"}
+	for _, wt := range wantTypes {
+		if !types[wt] {
+			t.Errorf("LoadTranscript() missing type %q", wt)
+		}
+	}
+}
+
+func TestManager_LoadTranscript_SkipsMalformedLines(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "jenny-test-*")
+	if err != nil {
+		t.Fatalf("MkdirTemp() error = %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	m, err := NewManager(tmpDir, false)
+	if err != nil {
+		t.Fatalf("NewManager() error = %v", err)
+	}
+
+	sessionID := "sess_malformed_test"
+
+	// Append valid entries
+	if err := m.AppendEntry(sessionID, TranscriptEntry{Type: "user", Content: "Hello"}); err != nil {
+		t.Fatalf("AppendEntry() error = %v", err)
+	}
+	if err := m.AppendEntry(sessionID, TranscriptEntry{Type: "assistant", Content: "Hi"}); err != nil {
+		t.Fatalf("AppendEntry() error = %v", err)
+	}
+
+	// Manually append malformed JSON
+	path := m.transcriptPath(sessionID)
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		t.Fatalf("OpenFile() error = %v", err)
+	}
+	if _, err := fmt.Fprintln(f, "this is not json{"); err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+	f.Close()
+
+	// LoadTranscript should skip malformed line and return valid entries
+	loaded, err := m.LoadTranscript(sessionID)
+	if err != nil {
+		t.Fatalf("LoadTranscript() error = %v", err)
+	}
+
+	if len(loaded) != 2 {
+		t.Errorf("LoadTranscript() returned %d entries, want 2 (malformed line skipped)", len(loaded))
+	}
+}
+
+func TestManager_Disabled_NoFilesCreated(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "jenny-test-*")
+	if err != nil {
+		t.Fatalf("MkdirTemp() error = %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	m, err := NewManager(tmpDir, true) // disabled
+	if err != nil {
+		t.Fatalf("NewManager() error = %v", err)
+	}
+
+	sessionID := "sess_disabled_test"
+
+	// AppendEntry should return nil (no-op) when disabled
+	if err := m.AppendEntry(sessionID, TranscriptEntry{Type: "user", Content: "Hello"}); err != nil {
+		t.Fatalf("AppendEntry() error = %v", err)
+	}
+
+	// SessionExists should return false when disabled
+	if m.SessionExists(sessionID) {
+		t.Error("SessionExists() = true, want false when disabled")
+	}
+
+	// No transcript file should be created
+	path := m.transcriptPath(sessionID)
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf(" transcript file should not exist when disabled, got err = %v", err)
+	}
+}
