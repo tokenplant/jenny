@@ -539,6 +539,8 @@ func (c *Client) SendMessageStream(
 				} else if delta.PartialJSON != "" {
 					// For partial JSON tool input, accumulate in toolInputJSON map
 					acc.appendToolInputJSON(index, delta.PartialJSON)
+					// Parse accumulated JSON into ToolInput so it's available during streaming
+					acc.finalizeToolInput(index)
 				}
 				log.Debug("Stream: content_block_delta", "index", index, "text", delta.Text)
 
