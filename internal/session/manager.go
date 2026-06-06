@@ -279,6 +279,15 @@ func (m *Manager) CheckRewriteSize(sessionID string) error {
 	return nil
 }
 
+// Flush flushes any pending writes to disk. Since writes are currently
+// synchronous, this is a NOP but provides a hook for future buffered
+// write implementation.
+func (m *Manager) Flush() error {
+	// Synchronous writes are already flushed by the OS.
+	// This exists for future buffered write implementation.
+	return nil
+}
+
 // RegisterShutdownFlush registers a signal handler to flush pending writes
 // before process exit. Since writes are synchronous, this is currently a NOP
 // but provides a hook for future buffered write implementation.
@@ -287,8 +296,7 @@ func (m *Manager) RegisterShutdownFlush() {
 		sigCh := make(chan os.Signal, 1)
 		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 		<-sigCh
-		// Synchronous writes are already flushed by the OS, so no action needed here.
-		// This hook exists for future buffered write implementation.
+		_ = m.Flush()
 		os.Exit(0)
 	}()
 }

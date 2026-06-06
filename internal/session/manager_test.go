@@ -440,6 +440,13 @@ func TestManager_UserMessageExists(t *testing.T) {
 	}
 }
 
+func TestManager_Flush(t *testing.T) {
+	m, _ := NewManager("", false)
+	if err := m.Flush(); err != nil {
+		t.Errorf("Flush() error = %v, want nil", err)
+	}
+}
+
 func TestManager_LoadTranscript_FiltersProgressTypes(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "jenny-test-*")
 	if err != nil {
