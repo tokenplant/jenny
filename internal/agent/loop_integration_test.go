@@ -18,7 +18,7 @@ func TestResumeSessionIntegration(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create session manager
-	mgr, err := session.NewManager(tmpDir)
+	mgr, err := session.NewManager(tmpDir, false)
 	if err != nil {
 		t.Fatalf("NewManager() error = %v", err)
 	}
@@ -121,7 +121,7 @@ func TestResumeSessionIntegration(t *testing.T) {
 // TestResumeWithEmptyTranscript tests resuming a session that has only user messages (no tools).
 func TestResumeWithEmptyTranscript(t *testing.T) {
 	tmpDir := t.TempDir()
-	mgr, err := session.NewManager(tmpDir)
+	mgr, err := session.NewManager(tmpDir, false)
 	if err != nil {
 		t.Fatalf("NewManager() error = %v", err)
 	}
@@ -165,7 +165,7 @@ func TestResumeWithEmptyTranscript(t *testing.T) {
 // TestPathTraversalPrevention tests that path traversal attempts are blocked.
 func TestPathTraversalPrevention(t *testing.T) {
 	tmpDir := t.TempDir()
-	mgr, err := session.NewManager(tmpDir)
+	mgr, err := session.NewManager(tmpDir, false)
 	if err != nil {
 		t.Fatalf("NewManager() error = %v", err)
 	}
@@ -210,7 +210,7 @@ func TestPathTraversalPrevention(t *testing.T) {
 // TestTranscriptPersistenceOnDisk verifies the transcript file exists and is valid JSONL.
 func TestTranscriptPersistenceOnDisk(t *testing.T) {
 	tmpDir := t.TempDir()
-	mgr, err := session.NewManager(tmpDir)
+	mgr, err := session.NewManager(tmpDir, false)
 	if err != nil {
 		t.Fatalf("NewManager() error = %v", err)
 	}

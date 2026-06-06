@@ -7,8 +7,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -32,12 +34,26 @@ type ToolUse struct {
 // Manager handles session persistence.
 type Manager struct {
 	transcriptDir string
+	Disabled      bool
+}
+
+// progressTypes are entry types that are not chain participants and should be
+// filtered when loading transcripts for chain rebuild.
+var progressTypes = map[string]bool{
+	"progress":            true,
+	"bash_progress":       true,
+	"powershell_progress": true,
+	"mcp_progress":        true,
 }
 
 // NewManager creates a new session manager with the given transcript directory.
-func NewManager(transcriptDir string) (*Manager, error) {
+// If disabled is true, no files are created, appended, or modified.
+func NewManager(transcriptDir string, disabled bool) (*Manager, error) {
 	if transcriptDir == "" {
 		transcriptDir = ".jenny/transcripts"
+	}
+	if disabled {
+		return &Manager{transcriptDir: transcriptDir, Disabled: true}, nil
 	}
 	// Ensure the directory exists
 	if err := os.MkdirAll(transcriptDir, 0755); err != nil {
@@ -107,6 +123,9 @@ func containsPathTraversal(s string) bool {
 
 // AppendEntry appends a transcript entry to the session's transcript file.
 func (m *Manager) AppendEntry(sessionID string, entry TranscriptEntry) error {
+	if m.Disabled {
+		return nil
+	}
 	if sessionID == "" {
 		return fmt.Errorf("session ID is required")
 	}
@@ -157,6 +176,8 @@ func (m *Manager) UserMessageExists(sessionID string, content string) (bool, err
 }
 
 // LoadTranscript loads all transcript entries for a session.
+// Progress/ephemeral entries (progress, bash_progress, powershell_progress, mcp_progress)
+// are filtered out since they are not chain participants.
 func (m *Manager) LoadTranscript(sessionID string) ([]TranscriptEntry, error) {
 	if sessionID == "" {
 		return nil, fmt.Errorf("session ID is required")
@@ -177,7 +198,7 @@ func (m *Manager) LoadTranscript(sessionID string) ([]TranscriptEntry, error) {
 
 	var entries []TranscriptEntry
 	lines := splitLines(string(data))
-	for i, line := range lines {
+	for _, line := range lines {
 		if line == "" {
 			continue
 		}
@@ -186,8 +207,11 @@ func (m *Manager) LoadTranscript(sessionID string) ([]TranscriptEntry, error) {
 			// Skip malformed lines but continue
 			continue
 		}
+		// Filter out progress/ephemeral entries
+		if progressTypes[entry.Type] {
+			continue
+		}
 		entries = append(entries, entry)
-		_ = i // silence unused variable warning
 	}
 
 	return entries, nil
@@ -222,4 +246,18 @@ func (m *Manager) SessionExists(sessionID string) bool {
 	path := m.transcriptPath(sessionID)
 	_, err := os.Stat(path)
 	return err == nil
+}
+
+// RegisterShutdownFlush registers a signal handler to flush pending writes
+// before process exit. Since writes are synchronous, this is currently a NOP
+// but provides a hook for future buffered write implementation.
+func (m *Manager) RegisterShutdownFlush() {
+	go func() {
+		sigCh := make(chan os.Signal, 1)
+		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+		<-sigCh
+		// Synchronous writes are already flushed by the OS, so no action needed here.
+		// This hook exists for future buffered write implementation.
+		os.Exit(0)
+	}()
 }

@@ -33,7 +33,7 @@ func TestManager_AppendAndLoad(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	m, err := NewManager(tmpDir)
+	m, err := NewManager(tmpDir, false)
 	if err != nil {
 		t.Fatalf("NewManager() error = %v", err)
 	}
@@ -83,7 +83,7 @@ func TestManager_LoadTranscriptNotFound(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	m, err := NewManager(tmpDir)
+	m, err := NewManager(tmpDir, false)
 	if err != nil {
 		t.Fatalf("NewManager() error = %v", err)
 	}
@@ -101,7 +101,7 @@ func TestManager_SessionExists(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	m, err := NewManager(tmpDir)
+	m, err := NewManager(tmpDir, false)
 	if err != nil {
 		t.Fatalf("NewManager() error = %v", err)
 	}
@@ -137,7 +137,7 @@ func TestManager_TranscriptPath(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	m, err := NewManager(tmpDir)
+	m, err := NewManager(tmpDir, false)
 	if err != nil {
 		t.Fatalf("NewManager() error = %v", err)
 	}
@@ -245,7 +245,7 @@ func TestManager_EmptySessionID(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	m, err := NewManager(tmpDir)
+	m, err := NewManager(tmpDir, false)
 	if err != nil {
 		t.Fatalf("NewManager() error = %v", err)
 	}
@@ -275,7 +275,7 @@ func TestManager_UserMessageExists(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	m, err := NewManager(tmpDir)
+	m, err := NewManager(tmpDir, false)
 	if err != nil {
 		t.Fatalf("NewManager() error = %v", err)
 	}

@@ -9,3 +9,7 @@ const Version = "0.1.0"
 
 // TranscriptDir is the directory name for session transcripts.
 const TranscriptDir = ".jenny/transcripts"
+
+// MaxTombstoneRewriteBytes is the maximum file size (50 MiB) before a tombstone
+// rewrite or full rewrite operation is refused to prevent OOM.
+const MaxTombstoneRewriteBytes = 50 * 1024 * 1024

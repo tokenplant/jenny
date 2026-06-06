@@ -438,7 +438,7 @@ func TestResumeWithToolCalls(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create session manager
-	mgr, err := session.NewManager(tmpDir)
+	mgr, err := session.NewManager(tmpDir, false)
 	if err != nil {
 		t.Fatalf("NewManager() error = %v", err)
 	}
