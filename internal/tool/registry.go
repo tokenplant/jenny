@@ -105,8 +105,8 @@ func (r *Registry) WithLSPEnabled(enabled bool) *Registry {
 }
 
 // WithLSPClient sets the LSP client for the LSP tool.
-func (r *Registry) WithLSPClient(client *lsp.Client) *Registry {
-	r.lspClient = client
+func (r *Registry) WithLSPClient(client lsp.Client) *Registry {
+	r.lspClient = &client
 	return r
 }
 

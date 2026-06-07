@@ -19,7 +19,6 @@ type MockClient struct {
 	prepareCHRes    []CallHierarchyItem
 	incomingRes     []CallHierarchyItem
 	outgoingRes     []CallHierarchyItem
-	shouldError     bool
 }
 
 // NewMockClient creates a new mock LSP client.
@@ -97,13 +96,6 @@ func (m *MockClient) SetOutgoingCallsResult(items []CallHierarchyItem) {
 	m.outgoingRes = items
 }
 
-// SetShouldError sets whether operations should return an error.
-func (m *MockClient) SetShouldError(shouldError bool) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.shouldError = shouldError
-}
-
 // GetCalls returns all the calls that were made (for verification).
 func (m *MockClient) GetCalls() []string {
 	m.mu.RLock()
@@ -131,9 +123,6 @@ func (m *MockClient) GoToDefinition(_ context.Context, _ string, _ int, _ int) (
 	m.recordCall("GoToDefinition")
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	if m.shouldError {
-		return nil, ErrNotImplemented
-	}
 	return m.goToDefResult, nil
 }
 
@@ -142,9 +131,6 @@ func (m *MockClient) FindReferences(_ context.Context, _ string, _ int, _ int) (
 	m.recordCall("FindReferences")
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	if m.shouldError {
-		return nil, ErrNotImplemented
-	}
 	return m.findRefsResult, nil
 }
 
@@ -153,9 +139,6 @@ func (m *MockClient) Hover(_ context.Context, _ string, _ int, _ int) (*HoverRes
 	m.recordCall("Hover")
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	if m.shouldError {
-		return nil, ErrNotImplemented
-	}
 	return m.hoverResult, nil
 }
 
@@ -164,9 +147,6 @@ func (m *MockClient) DocumentSymbol(_ context.Context, _ string) ([]DocumentSymb
 	m.recordCall("DocumentSymbol")
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	if m.shouldError {
-		return nil, ErrNotImplemented
-	}
 	return m.docSymResults, nil
 }
 
@@ -175,9 +155,6 @@ func (m *MockClient) WorkspaceSymbol(_ context.Context, _ string) ([]WorkspaceSy
 	m.recordCall("WorkspaceSymbol")
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	if m.shouldError {
-		return nil, ErrNotImplemented
-	}
 	return m.workspaceSymRes, nil
 }
 
@@ -186,9 +163,6 @@ func (m *MockClient) GoToImplementation(_ context.Context, _ string, _ int, _ in
 	m.recordCall("GoToImplementation")
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	if m.shouldError {
-		return nil, ErrNotImplemented
-	}
 	return m.goToImplResult, nil
 }
 
@@ -197,9 +171,6 @@ func (m *MockClient) PrepareCallHierarchy(_ context.Context, _ string, _ int, _ 
 	m.recordCall("PrepareCallHierarchy")
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	if m.shouldError {
-		return nil, ErrNotImplemented
-	}
 	return m.prepareCHRes, nil
 }
 
@@ -208,9 +179,6 @@ func (m *MockClient) IncomingCalls(_ context.Context, _ string, _ int, _ int) ([
 	m.recordCall("IncomingCalls")
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	if m.shouldError {
-		return nil, ErrNotImplemented
-	}
 	return m.incomingRes, nil
 }
 
@@ -219,19 +187,5 @@ func (m *MockClient) OutgoingCalls(_ context.Context, _ string, _ int, _ int) ([
 	m.recordCall("OutgoingCalls")
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	if m.shouldError {
-		return nil, ErrNotImplemented
-	}
 	return m.outgoingRes, nil
-}
-
-// ErrNotImplemented is returned by mock methods when shouldError is true.
-var ErrNotImplemented = &mockError{msg: "not implemented"}
-
-type mockError struct {
-	msg string
-}
-
-func (e *mockError) Error() string {
-	return e.msg
 }

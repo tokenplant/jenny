@@ -71,6 +71,7 @@ type SymbolInfo struct {
 }
 
 // Client defines the interface for LSP client operations.
+// All implementations must be safe for concurrent use.
 // All coordinate parameters are 0-based.
 type Client interface {
 	// Connected returns true if the LSP client is connected to a server.

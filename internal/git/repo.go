@@ -35,6 +35,11 @@ type stateCache struct {
 	branchMtime int64
 }
 
+// prependToSlice inserts elements at the beginning of a slice.
+func prependToSlice(slice []string, elems ...string) []string {
+	return append(elems, slice...)
+}
+
 // Per-root state caches
 var (
 	stateCaches   = make(map[string]*stateCache)
@@ -617,12 +622,13 @@ func IsIgnored(repoRoot, path string) (bool, error) {
 	}
 
 	// Also load patterns from parent directories up to repo root
+	// Deeper directory patterns are checked later (override shallower ones)
 	dir := filepath.Dir(absPath)
 	resolvedRootBase := resolvedRoot
 	for dir != resolvedRootBase && dir != filepath.Dir(dir) {
 		parentPatterns, err := loadGitignorePatterns(dir)
 		if err == nil {
-			patterns = append(patterns, parentPatterns...)
+			patterns = prependToSlice(patterns, parentPatterns...)
 		}
 		dir = filepath.Dir(dir)
 		if dir == resolvedRootBase {
@@ -636,16 +642,18 @@ func IsIgnored(repoRoot, path string) (bool, error) {
 // loadGitignorePatterns loads .gitignore patterns from a directory.
 func loadGitignorePatterns(dir string) ([]string, error) {
 	gitignorePath := filepath.Join(dir, ".gitignore")
-	data, err := os.ReadFile(gitignorePath)
+	file, err := os.Open(gitignorePath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
 		return nil, err
 	}
+	defer file.Close()
 
 	var patterns []string
-	scanner := bufio.NewScanner(strings.NewReader(string(data)))
+	scanner := bufio.NewScanner(file)
+	scanner.Buffer(make([]byte, 0, 1024*1024), 1024*1024)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		// Skip empty lines and comments
@@ -654,11 +662,15 @@ func loadGitignorePatterns(dir string) ([]string, error) {
 		}
 		patterns = append(patterns, line)
 	}
-	return patterns, nil
+	return patterns, scanner.Err()
 }
 
 // matchesGitignore checks if a path matches any of the gitignore patterns.
+// Git's rule: the last matching pattern wins, unless negated by a later pattern.
 func matchesGitignore(path string, patterns []string) bool {
+	var lastMatchNegated bool
+	var hasMatch bool
+
 	for _, pattern := range patterns {
 		negated := strings.HasPrefix(pattern, "!")
 		if negated {
@@ -666,16 +678,13 @@ func matchesGitignore(path string, patterns []string) bool {
 		}
 
 		matched := matchGitignorePattern(path, pattern)
-		if negated {
-			if matched {
-				// Negated pattern matches - path is NOT ignored
-				return false
-			}
-		} else if matched {
-			return true
+		if matched {
+			hasMatch = true
+			lastMatchNegated = negated
 		}
 	}
-	return false
+
+	return hasMatch && !lastMatchNegated
 }
 
 // matchGitignorePattern checks if a path matches a single gitignore pattern.
@@ -700,6 +709,8 @@ func matchGitignorePattern(path, pattern string) bool {
 	if strings.Contains(pattern, "**") {
 		// Split by **
 		parts := strings.Split(pattern, "**")
+
+		// Single ** - prefix/suffix matching
 		if len(parts) == 2 {
 			prefix := parts[0]
 			suffix := parts[1]
@@ -714,6 +725,32 @@ func matchGitignorePattern(path, pattern string) bool {
 			}
 			return true
 		}
+
+		// Multiple ** - find each segment in order
+		// Path must start with first part
+		if !strings.HasPrefix(path, parts[0]) {
+			return false
+		}
+
+		remaining := path[len(parts[0]):]
+
+		// Find each intermediate part
+		for i := 1; i < len(parts)-1; i++ {
+			part := parts[i]
+			idx := strings.Index(remaining, part)
+			if idx == -1 {
+				return false
+			}
+			remaining = remaining[idx+len(part):]
+		}
+
+		// Final part must be at the end
+		lastPart := parts[len(parts)-1]
+		if lastPart != "" && !strings.HasSuffix(remaining, lastPart) {
+			return false
+		}
+
+		return true
 	}
 
 	// Handle * glob (match any characters except /)
