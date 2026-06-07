@@ -5,7 +5,7 @@ import (
 )
 
 func TestBashTool_Execute(t *testing.T) {
-	tool := NewBashTool()
+	tool := NewBashTool(false)
 	cwd := "/tmp"
 
 	tests := []struct {
@@ -104,7 +104,7 @@ func TestBashTool_Execute(t *testing.T) {
 }
 
 func TestBashTool_ReadOnlyEnforcement(t *testing.T) {
-	tool := NewBashTool()
+	tool := NewBashTool(false)
 	cwd := "/tmp"
 
 	// These commands should be allowed (read-only AND within working directory)
@@ -172,7 +172,7 @@ func TestBashTool_ReadOnlyEnforcement(t *testing.T) {
 }
 
 func TestBashTool_Timeout(t *testing.T) {
-	tool := NewBashTool()
+	tool := NewBashTool(false)
 	cwd := "/tmp"
 
 	result, err := tool.Execute(map[string]any{
@@ -194,7 +194,7 @@ func TestBashTool_Timeout(t *testing.T) {
 }
 
 func TestBashTool_NameAndDescription(t *testing.T) {
-	tool := NewBashTool()
+	tool := NewBashTool(false)
 
 	if tool.Name() != "bash" {
 		t.Errorf("expected name 'bash', got %q", tool.Name())

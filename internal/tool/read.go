@@ -11,11 +11,13 @@ import (
 )
 
 // ReadTool reads files and returns their contents with line numbers.
-type ReadTool struct{}
+type ReadTool struct {
+	skipPermissions bool
+}
 
 // NewReadTool creates a new ReadTool.
-func NewReadTool() *ReadTool {
-	return &ReadTool{}
+func NewReadTool(skipPermissions bool) *ReadTool {
+	return &ReadTool{skipPermissions: skipPermissions}
 }
 
 // Name returns the tool name.
@@ -60,6 +62,17 @@ func (t *ReadTool) Execute(input map[string]any, cwd string) (*ToolResult, error
 	// Resolve relative paths relative to cwd
 	if !filepath.IsAbs(filePath) {
 		filePath = filepath.Join(cwd, filePath)
+	}
+
+	// Create command gate for device path validation
+	gate := NewCommandGate(t.skipPermissions)
+
+	// Check device path before access
+	if err := gate.CheckDevicePath(filePath); err != nil {
+		return &ToolResult{
+			Content: fmt.Sprintf("Access to device path blocked: %v", err),
+			IsError: true,
+		}, nil
 	}
 
 	// Validate path is within working directory (no path traversal)

@@ -17,7 +17,7 @@ func TestReadTool_Execute(t *testing.T) {
 		t.Fatalf("failed to create test file: %v", err)
 	}
 
-	tool := NewReadTool()
+	tool := NewReadTool(false)
 
 	tests := []struct {
 		name    string
@@ -138,7 +138,7 @@ func TestReadTool_PathTraversal(t *testing.T) {
 		t.Fatalf("failed to create test file: %v", err)
 	}
 
-	tool := NewReadTool()
+	tool := NewReadTool(false)
 
 	tests := []struct {
 		name    string
@@ -189,7 +189,7 @@ func TestReadTool_PathTraversal(t *testing.T) {
 }
 
 func TestReadTool_NameAndDescription(t *testing.T) {
-	tool := NewReadTool()
+	tool := NewReadTool(false)
 
 	if tool.Name() != "read" {
 		t.Errorf("expected name 'read', got %q", tool.Name())

@@ -30,8 +30,8 @@ func TestToolUseBlockCollection(t *testing.T) {
 	// This is a unit test for the message building logic
 
 	// Create mock tools
-	bashTool := tool.NewBashTool()
-	readTool := tool.NewReadTool()
+	bashTool := tool.NewBashTool(false)
+	readTool := tool.NewReadTool(false)
 
 	// Verify tools have correct names
 	if bashTool.Name() != "bash" {
@@ -43,8 +43,8 @@ func TestToolUseBlockCollection(t *testing.T) {
 }
 
 func TestFindTool(t *testing.T) {
-	bashTool := tool.NewBashTool()
-	readTool := tool.NewReadTool()
+	bashTool := tool.NewBashTool(false)
+	readTool := tool.NewReadTool(false)
 
 	tools := []tool.Tool{bashTool, readTool}
 
@@ -161,7 +161,7 @@ func TestMaxIterationsBound(t *testing.T) {
 
 func TestToolInputValidation(t *testing.T) {
 	// Test that tools validate their inputs correctly
-	bashTool := tool.NewBashTool()
+	bashTool := tool.NewBashTool(false)
 
 	// Test missing command
 	result, err := bashTool.Execute(map[string]any{}, "/tmp")
@@ -189,7 +189,7 @@ func TestToolInputValidation(t *testing.T) {
 
 func TestReadToolInputValidation(t *testing.T) {
 	// Test that read tool validates inputs correctly
-	readTool := tool.NewReadTool()
+	readTool := tool.NewReadTool(false)
 
 	// Test missing file_path
 	result, err := readTool.Execute(map[string]any{}, "/tmp")

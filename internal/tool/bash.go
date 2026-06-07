@@ -12,11 +12,13 @@ import (
 )
 
 // BashTool executes shell commands.
-type BashTool struct{}
+type BashTool struct {
+	skipPermissions bool
+}
 
 // NewBashTool creates a new BashTool.
-func NewBashTool() *BashTool {
-	return &BashTool{}
+func NewBashTool(skipPermissions bool) *BashTool {
+	return &BashTool{skipPermissions: skipPermissions}
 }
 
 // Name returns the tool name.
@@ -54,10 +56,21 @@ func (t *BashTool) Execute(input map[string]any, cwd string) (*ToolResult, error
 		return nil, fmt.Errorf("command is required and must be a string")
 	}
 
-	// Check if command is read-only
-	if !isReadOnlyCommand(command) {
+	// Create command gate for security validation
+	gate := NewCommandGate(t.skipPermissions)
+
+	// Check command against blocked patterns
+	if err := gate.CheckCommand(command); err != nil {
 		return &ToolResult{
-			Content: fmt.Sprintf("Error: Command '%s' is not allowed. Only read-only commands are permitted.", command),
+			Content: fmt.Sprintf("Security error: %v", err),
+			IsError: true,
+		}, nil
+	}
+
+	// Check pipeline segments for read-only compliance
+	if err := gate.CheckPipelineSegments(command); err != nil {
+		return &ToolResult{
+			Content: fmt.Sprintf("Security error: %v", err),
 			IsError: true,
 		}, nil
 	}
@@ -120,26 +133,6 @@ func (t *BashTool) Execute(input map[string]any, cwd string) (*ToolResult, error
 		Content: output,
 		IsError: false,
 	}, nil
-}
-
-// isReadOnlyCommand checks if a command is read-only (safe to execute without restrictions).
-func isReadOnlyCommand(command string) bool {
-	// Check for redirection operators - these make the command non-read-only
-	if strings.ContainsAny(command, ">|") {
-		return false
-	}
-
-	readOnlyCommands := []string{
-		"ls", "pwd", "whoami", "cat", "head", "tail", "grep", "find", "wc",
-		"echo", "date", "which", "type", "file", "stat", "diff", "sleep",
-	}
-	cmd := strings.TrimSpace(command)
-	for _, prefix := range readOnlyCommands {
-		if strings.HasPrefix(cmd, prefix) {
-			return true
-		}
-	}
-	return false
 }
 
 // isPathWithinCwd checks if a path is within the working directory.
@@ -208,4 +201,25 @@ func validateCommandPaths(command string, cwd string) bool {
 		}
 	}
 	return true
+}
+
+// isReadOnlyCommand checks if a command is read-only (safe to execute without restrictions).
+// This is a simple prefix-based check used for backwards compatibility.
+func isReadOnlyCommand(command string) bool {
+	// Check for redirection operators - these make the command non-read-only
+	if strings.ContainsAny(command, ">|") {
+		return false
+	}
+
+	readOnlyCommands := []string{
+		"ls", "pwd", "whoami", "cat", "head", "tail", "grep", "find", "wc",
+		"echo", "date", "which", "type", "file", "stat", "diff", "sleep",
+	}
+	cmd := strings.TrimSpace(command)
+	for _, prefix := range readOnlyCommands {
+		if strings.HasPrefix(cmd, prefix) {
+			return true
+		}
+	}
+	return false
 }

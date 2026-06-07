@@ -82,9 +82,6 @@ func run() error {
 		historyMessages = agent.RebuildMessages(entries)
 	}
 
-	// Create tools
-	var tools []tool.Tool
-
 	// Load MCP configuration if paths are provided
 	var mcpConfig map[string]mcp.MCPServerDef
 	var mcpTools []tool.Tool
@@ -107,11 +104,13 @@ func run() error {
 		}
 	}
 
-	// Build tool registry
+	// Build tool registry with skipPermissions flag
+	var tools []tool.Tool
 	tools = tool.NewRegistry().
 		WithBaseTools().
 		WithMCPTools(mcpTools).
 		WithDenyRules(flags.DeniedTools).
+		WithSkipPermissions(flags.SkipPermissions).
 		Build()
 
 	// Ensure MCP clients are shut down on exit

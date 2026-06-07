@@ -3,10 +3,12 @@ package tool
 
 // Registry builds a filtered, ordered list of tools.
 type Registry struct {
-	baseTools []Tool
-	mcpTools  []Tool
-	denyRules map[string]bool
-	enabled   map[string]bool
+	baseTools       []Tool
+	mcpTools        []Tool
+	denyRules       map[string]bool
+	enabled         map[string]bool
+	skipPermissions bool
+	hasBaseTools    bool
 }
 
 // NewRegistry creates a new Registry.
@@ -19,12 +21,7 @@ func NewRegistry() *Registry {
 
 // WithBaseTools registers the canonical base tools (Read, Bash, Glob, Grep).
 func (r *Registry) WithBaseTools() *Registry {
-	r.baseTools = []Tool{
-		NewReadTool(),
-		NewBashTool(),
-		NewGlobTool(),
-		NewGrepTool(),
-	}
+	r.hasBaseTools = true
 	return r
 }
 
@@ -48,12 +45,28 @@ func (r *Registry) WithEnabled(name string, enabled bool) *Registry {
 	return r
 }
 
+// WithSkipPermissions sets the skipPermissions flag for all tools.
+func (r *Registry) WithSkipPermissions(skip bool) *Registry {
+	r.skipPermissions = skip
+	return r
+}
+
 // Build returns the final ordered tool list.
 // Built-in tools appear first, then MCP tools. Deny rules and enabled flags
 // filter the output. On name collision, the built-in tool wins.
 func (r *Registry) Build() []Tool {
 	seen := make(map[string]int) // name -> index
 	var result []Tool
+
+	// Create base tools with skipPermissions if hasBaseTools is set
+	if r.hasBaseTools {
+		r.baseTools = []Tool{
+			NewReadTool(r.skipPermissions),
+			NewBashTool(r.skipPermissions),
+			NewGlobTool(),
+			NewGrepTool(),
+		}
+	}
 
 	// Add base tools first
 	for _, t := range r.baseTools {
