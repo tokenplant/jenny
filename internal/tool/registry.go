@@ -84,7 +84,7 @@ func (r *Registry) Build() []Tool {
 		}
 		// Add WriteTool and EditTool if readCache is configured
 		if r.readCache != nil {
-			r.baseTools = append(r.baseTools, NewWriteTool(r.readCache), NewEditTool(r.readCache))
+			r.baseTools = append(r.baseTools, NewWriteTool(r.readCache), NewEditTool(r.readCache), NewNotebookEditTool(r.readCache))
 		}
 
 		// Wire sandbox to BashTool and GrepTool if configured
