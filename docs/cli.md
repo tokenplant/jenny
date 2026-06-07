@@ -8,6 +8,7 @@ code: partial
 package: internal/cli
 gaps:
   - --continue, --fork-session, --no-session-persistence missing
+defer_to: P3
 depends_on:
   []
 ---

@@ -12,6 +12,7 @@ gaps:
   - Queue-only filtering missing
   - Compaction boundaries missing
   - --continue/--fork-session not implemented
+defer_to: P3
 depends_on:
   - session-persistence
   - cli

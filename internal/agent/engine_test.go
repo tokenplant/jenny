@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/ipy/jenny/internal/session"
+	"github.com/ipy/jenny/internal/tool"
 )
 
 // testSseLine formats a line as SSE format for testing.
@@ -634,5 +635,36 @@ func TestAC5_TurnCounterIsAccurate(t *testing.T) {
 		t.Errorf("AC5 FAIL: expected TurnCount()=1 after second SubmitMessage, got %d", tc)
 	} else {
 		t.Log("AC5 PASS: turn counter resets to 0 on each SubmitMessage")
+	}
+}
+
+// TestAC4_ReadFileCacheWired verifies that when StreamConfig has a ReadFileCache,
+// the engine stores and preserves it in e.streamCfg.ReadFileCache.
+func TestAC4_ReadFileCacheWired(t *testing.T) {
+	tmpDir := t.TempDir()
+	sessMgr, err := session.NewManager(tmpDir, false)
+	if err != nil {
+		t.Fatalf("NewManager error: %v", err)
+	}
+
+	// Create a ReadFileCache
+	readCache := tool.NewReadFileCache()
+
+	cfg := StreamConfig{
+		Enabled:        false,
+		SessionManager: sessMgr,
+		SessionID:      "test-session",
+		ReadFileCache:  readCache,
+	}
+
+	engine := NewQueryEngine(cfg, nil, "")
+
+	// AC4: Verify engine stores the ReadFileCache from StreamConfig
+	if engine.streamCfg.ReadFileCache == nil {
+		t.Error("AC4 FAIL: engine.streamCfg.ReadFileCache is nil, expected non-nil")
+	} else if engine.streamCfg.ReadFileCache != readCache {
+		t.Error("AC4 FAIL: engine.streamCfg.ReadFileCache is not the same instance as passed in config")
+	} else {
+		t.Log("AC4 PASS: engine.streamCfg.ReadFileCache is correctly wired")
 	}
 }

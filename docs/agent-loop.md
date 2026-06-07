@@ -12,6 +12,7 @@ gaps:
   - No interrupt synthetic tool_results
   - No tool result spill to disk
   - No compaction/retry caps
+defer_to: P3
 depends_on:
   - anthropic-api-client
 ---

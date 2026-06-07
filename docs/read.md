@@ -12,6 +12,7 @@ gaps:
   - No images/PDF/notebooks
   - No file_unchanged dedup
   - No block device guard
+defer_to: P3
 depends_on:
   - tool-registry
 ---

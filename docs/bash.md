@@ -10,6 +10,7 @@ gaps:
   - Read-only prefix allowlist only
   - No sandbox/classifier/sed simulation
   - No output spill or run_in_background
+defer_to: P3
 depends_on:
   - tool-registry
   - dangerous-command-gate

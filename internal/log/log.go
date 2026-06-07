@@ -2,6 +2,7 @@
 package log
 
 import (
+	"io"
 	"log/slog"
 	"os"
 )
@@ -10,7 +11,7 @@ import (
 var Logger *slog.Logger
 
 // outputWriter controls where log output is sent.
-var outputWriter any = os.Stderr
+var outputWriter io.Writer = os.Stderr
 
 func init() {
 	resetLogger()
@@ -31,19 +32,12 @@ func resetLogger() {
 		w = os.Stderr
 	}
 
-	// w is either io.Writer or *os.File
-	switch v := w.(type) {
-	case *os.File:
-		Logger = slog.New(slog.NewTextHandler(v, opts))
-	default:
-		// Fallback for io.Writer
-		Logger = slog.New(slog.NewTextHandler(os.Stderr, opts))
-	}
+	Logger = slog.New(slog.NewTextHandler(w, opts))
 }
 
 // SetOutput redirects log output to the specified writer.
 // This is used to redirect debug logs to stderr when stream-json mode is active.
-func SetOutput(w any) {
+func SetOutput(w io.Writer) {
 	outputWriter = w
 	resetLogger()
 }
