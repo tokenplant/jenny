@@ -109,11 +109,13 @@ func run() error {
 	}
 
 	// Build tool registry with skipPermissions flag
-	// AC4: ReadFileCache is now wired through StreamConfig -> QueryEngine -> tools
-	// ReadFileCache is passed via StreamConfig below instead of directly to registry
+	// AC4: ReadFileCache is wired through StreamConfig -> QueryEngine -> tools
+	// But Registry.Build() also needs it to create Write/Edit/NotebookEdit tools
+	readFileCache := tool.NewReadFileCache()
 	var tools []tool.Tool
 	tools = tool.NewRegistry().
 		WithBaseTools().
+		WithReadFileCache(readFileCache).
 		WithMCPTools(mcpTools).
 		WithDenyRules(flags.DeniedTools).
 		WithSkipPermissions(flags.SkipPermissions).
@@ -138,7 +140,7 @@ func run() error {
 		HistoryMessages: historyMessages,
 		IsResume:        flags.SessionResume != "", // True when resuming an existing session via -r
 		MCPConfig:       mcpConfig,
-		ReadFileCache:   tool.NewReadFileCache(),
+		ReadFileCache:   readFileCache,
 	}
 
 	// Run agent

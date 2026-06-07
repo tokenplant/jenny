@@ -13,7 +13,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ipy/jenny/internal/log"
 	"github.com/ipy/jenny/internal/session"
 )
 
@@ -701,14 +700,6 @@ func TestAC3_StreamJsonCallsSetOutput(t *testing.T) {
 	// Redirect stdout and stderr to our pipes
 	os.Stdout = stdoutW
 	os.Stderr = stderrW
-
-	// Create a buffer to capture log output during the test
-	logCapture := bytes.NewBuffer(nil)
-
-	// Save original log output and set to our capture buffer
-	originalLogOutput := log.Output()
-	log.SetOutput(logCapture)
-	defer log.SetOutput(originalLogOutput)
 
 	cfg := StreamConfig{
 		Enabled:        true, // Stream-json mode enabled - should trigger log.SetOutput(os.Stderr)
