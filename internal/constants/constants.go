@@ -15,11 +15,12 @@ const Version = "0.1.0"
 // JennyHomeDirFunc is the function that returns the jenny home directory.
 // It can be overridden in tests.
 var JennyHomeDirFunc = func() string {
+	dirName := "." + ProjectName
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
-		return ".jenny"
+		return dirName
 	}
-	return filepath.Join(home, ".jenny")
+	return filepath.Join(home, dirName)
 }
 
 // JennyHomeDir returns the user's jenny home directory (~/.jenny).

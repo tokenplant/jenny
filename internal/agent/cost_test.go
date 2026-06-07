@@ -846,12 +846,12 @@ func TestCNY_AC3_CNYRateCorrectness(t *testing.T) {
 	state := &CostState{Currency: "CNY"}
 
 	// Accumulate exactly 1,000,000 input tokens for deepseek-v4-flash
-	// CNY rate for deepseek-v4-flash input is 0.0000105 per token
-	// So 1M tokens * 0.0000105 = 10.5 CNY
+	// CNY rate for deepseek-v4-flash input is 0.000001 per token (native CNY ¥1/MTok)
+	// So 1M tokens * 0.000001 = 1 CNY
 	usage := api.Usage{InputTokens: 1000000}
 	AccumulateUsage(state, "deepseek-v4-flash", usage)
 
-	expectedCNY := 10.5 // 1M * 0.0000105
+	expectedCNY := 1.0 // 1M * 0.000001 (¥1/MTok native CNY)
 	mu := state.ModelUsage["deepseek-v4-flash"]
 	if mu.CostCNY != expectedCNY {
 		t.Errorf("CNY AC3 FAIL: CostCNY = %f, want %f (1M tokens * CNY rate)", mu.CostCNY, expectedCNY)
@@ -966,6 +966,133 @@ func TestCNY_AC5_BudgetCNYNoLimitWhenMaxBudgetCNYIsZero(t *testing.T) {
 	if total != 100.0 {
 		t.Errorf("CNY AC5 FAIL: returned total = %f, want 100.0", total)
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Pricing Table Verification Tests
+// ---------------------------------------------------------------------------
+
+// TestPricing_AC1_ClaudeCNYRates verifies AC1: Claude CNY rates match reference.
+func TestPricing_AC1_ClaudeCNYRates(t *testing.T) {
+	state := &CostState{Currency: "CNY"}
+
+	// 1M input tokens for claude-sonnet-4-20250514 → ¥21
+	usage := api.Usage{InputTokens: 1000000}
+	AccumulateUsage(state, "claude-sonnet-4-20250514", usage)
+	mu := state.ModelUsage["claude-sonnet-4-20250514"]
+	if mu.CostCNY != 21.0 {
+		t.Errorf("AC1 FAIL: claude-sonnet-4 CNY input1M = %f, want 21.0", mu.CostCNY)
+	}
+
+	// 1M input tokens for claude-opus-4-20250514 → ¥35
+	usage2 := api.Usage{InputTokens: 1000000}
+	AccumulateUsage(state, "claude-opus-4-20250514", usage2)
+	mu2 := state.ModelUsage["claude-opus-4-20250514"]
+	if mu2.CostCNY != 35.0 {
+		t.Errorf("AC1 FAIL: claude-opus-4 CNY input 1M = %f, want 35.0", mu2.CostCNY)
+	}
+
+	// 1M output tokens for claude-sonnet-4-20250514 → ¥105
+	state3 := &CostState{Currency: "CNY"}
+	usage3 := api.Usage{OutputTokens: 1000000}
+	AccumulateUsage(state3, "claude-sonnet-4-20250514", usage3)
+	mu3 := state3.ModelUsage["claude-sonnet-4-20250514"]
+	if mu3.CostCNY != 105.0 {
+		t.Errorf("AC1 FAIL: claude-sonnet-4 CNY output 1M = %f, want 105.0", mu3.CostCNY)
+	}
+
+	t.Log("AC1 PASS: Claude CNY rates correct")
+}
+
+// TestPricing_AC2_ClaudeUSDRates verifies AC2: Claude USD rates match reference.
+func TestPricing_AC2_ClaudeUSDRates(t *testing.T) {
+	state := &CostState{}
+
+	// 1M input tokens for claude-sonnet-4-20250514 → $3
+	usage := api.Usage{InputTokens: 1000000}
+	AccumulateUsage(state, "claude-sonnet-4-20250514", usage)
+	mu := state.ModelUsage["claude-sonnet-4-20250514"]
+	if mu.CostUSD != 3.0 {
+		t.Errorf("AC2 FAIL: claude-sonnet-4 USD input 1M = %f, want 3.0", mu.CostUSD)
+	}
+
+	// 1M input tokens for claude-opus-4-20250514 → $5
+	usage2 := api.Usage{InputTokens: 1000000}
+	AccumulateUsage(state, "claude-opus-4-20250514", usage2)
+	mu2 := state.ModelUsage["claude-opus-4-20250514"]
+	if mu2.CostUSD != 5.0 {
+		t.Errorf("AC2 FAIL: claude-opus-4 USD input 1M = %f, want 5.0", mu2.CostUSD)
+	}
+
+	t.Log("AC2 PASS: Claude USD rates correct")
+}
+
+// TestPricing_AC3_NewModelFamilies verifies AC3: new model families are present.
+func TestPricing_AC3_NewModelFamilies(t *testing.T) {
+	newModels := []string{
+		"deepseek-v4-pro",
+		"gemini-2.5-flash",
+		"gemini-2.1-pro",
+		"minimax-m3",
+		"kimi-k2.6",
+		"qwen-3.7-max",
+		"hunyuan-turbos",
+	}
+
+	for _, model := range newModels {
+		pricing := GetModelPricing(model, "CNY")
+		if pricing.InputUSD <= 0 {
+			t.Errorf("AC3 FAIL: %s CNY InputUSD = %f, want > 0", model, pricing.InputUSD)
+		}
+	}
+
+	t.Log("AC3 PASS: new model families present")
+}
+
+// TestPricing_AC4_NativeCNYModels verifies AC4: native CNY models have correct rates.
+func TestPricing_AC4_NativeCNYModels(t *testing.T) {
+	state := &CostState{Currency: "CNY"}
+
+	// 1M input tokens for deepseek-v4-flash → ¥1
+	usage := api.Usage{InputTokens: 1000000}
+	AccumulateUsage(state, "deepseek-v4-flash", usage)
+	mu := state.ModelUsage["deepseek-v4-flash"]
+	if mu.CostCNY != 1.0 {
+		t.Errorf("AC4 FAIL: deepseek-v4-flash CNY input 1M = %f, want 1.0", mu.CostCNY)
+	}
+
+	// 1M output tokens for minimax-m3 → ¥16.8
+	state2 := &CostState{Currency: "CNY"}
+	usage2 := api.Usage{OutputTokens: 1000000}
+	AccumulateUsage(state2, "minimax-m3", usage2)
+	mu2 := state2.ModelUsage["minimax-m3"]
+	// Use tolerance-based comparison for floating point
+	if mu2.CostCNY < 16.7999 || mu2.CostCNY > 16.8001 {
+		t.Errorf("AC4 FAIL: minimax-m3 CNY output 1M = %f, want ~16.8", mu2.CostCNY)
+	}
+
+	t.Log("AC4 PASS: native CNY model rates correct")
+}
+
+// TestPricing_AC5_UnknownModelFallback verifies AC5: unknown model returns conservative defaults.
+func TestPricing_AC5_UnknownModelFallback(t *testing.T) {
+	pricingUSD := GetModelPricing("nonexistent-model", "USD")
+	if !pricingUSD.UnknownModel {
+		t.Error("AC5 FAIL: USD unknown model UnknownModel = false, want true")
+	}
+	if pricingUSD.InputUSD <= 0 || pricingUSD.OutputUSD <= 0 {
+		t.Error("AC5 FAIL: USD unknown model has zero rates")
+	}
+
+	pricingCNY := GetModelPricing("nonexistent-model", "CNY")
+	if !pricingCNY.UnknownModel {
+		t.Error("AC5 FAIL: CNY unknown model UnknownModel = false, want true")
+	}
+	if pricingCNY.InputUSD <= 0 || pricingCNY.OutputUSD <= 0 {
+		t.Error("AC5 FAIL: CNY unknown model has zero rates")
+	}
+
+	t.Log("AC5 PASS: unknown model fallback correct")
 }
 
 // ---------------------------------------------------------------------------

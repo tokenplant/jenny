@@ -36,10 +36,16 @@ var DefaultPricing = map[string]ModelPricing{
 		CacheCreationUSD: 0.00001875, // $18.75/1M cache creation
 	},
 	"claude-opus-4-20250514": {
-		InputUSD:         0.000015,   // $15.00/1M input
-		OutputUSD:        0.000075,   // $75.00/1M output
-		CacheReadUSD:     0.000015,   // Same as input
+		InputUSD:         0.000005,   // $5.00/1M input
+		OutputUSD:        0.000025,   // $25.00/1M output
+		CacheReadUSD:     0.0000005,  // $0.50/1M cache read
 		CacheCreationUSD: 0.00001875, // $18.75/1M cache creation
+	},
+	"claude-haiku-4-20250514": {
+		InputUSD:         0.000001,    // $1.00/1M input
+		OutputUSD:        0.000005,    // $5.00/1M output
+		CacheReadUSD:     0.0000001,   // $0.10/1M cache read
+		CacheCreationUSD: 0.000000875, // $0.875/1M cache creation
 	},
 	"claude-3-5-sonnet-latest": {
 		InputUSD:         0.000003,   // $3.00/1M input
@@ -64,6 +70,114 @@ var DefaultPricing = map[string]ModelPricing{
 		OutputUSD:        0.000075,   // $75.00/1M output
 		CacheReadUSD:     0.000015,   // Same as input
 		CacheCreationUSD: 0.00001875, // $18.75/1M cache creation
+	},
+	// Google Gemini models (USD rates from reference, CNY = USD × 7)
+	"gemini-2.5-flash": {
+		InputUSD:         0.0000015,  // $1.50/1M input
+		OutputUSD:        0.000009,   // $9.00/1M output
+		CacheReadUSD:     0.00000015, // $0.15/1M cache read
+		CacheCreationUSD: 0,          // Not published
+	},
+	"gemini-2.1-pro": {
+		InputUSD:         0.000002,  // $2.00/1M input
+		OutputUSD:        0.000012,  // $12.00/1M output
+		CacheReadUSD:     0.0000002, // $0.20/1M cache read
+		CacheCreationUSD: 0,         // Not published
+	},
+	// DeepSeek models (native CNY, USD derived: CNY ÷ 7)
+	"deepseek-v4-pro": {
+		InputUSD:         0.000000428571, // ¥3/MTok ÷ 7
+		OutputUSD:        0.000000857142, // ¥6/MTok ÷ 7
+		CacheReadUSD:     0.000000003571, // ¥0.025/MTok ÷ 7
+		CacheCreationUSD: 0,              // Not published
+	},
+	// MiniMax models (native CNY, USD derived: CNY ÷ 7)
+	"minimax-m3": {
+		InputUSD:         0.0000006,  // ¥4.2/MTok ÷ 7
+		OutputUSD:        0.0000024,  // ¥16.8/MTok ÷ 7
+		CacheReadUSD:     0.00000012, // ¥0.84/MTok ÷ 7
+		CacheCreationUSD: 0,          // N/A
+	},
+	"minimax-m2.7": {
+		InputUSD:         0.0000003,   // ¥2.1/MTok ÷ 7
+		OutputUSD:        0.0000012,   // ¥8.4/MTok ÷ 7
+		CacheReadUSD:     0.00000006,  // ¥0.42/MTok ÷ 7
+		CacheCreationUSD: 0.000000375, // ¥2.625/MTok ÷ 7
+	},
+	"minimax-m2.7-highspeed": {
+		InputUSD:         0.0000006,   // ¥4.2/MTok ÷ 7
+		OutputUSD:        0.0000024,   // ¥16.8/MTok ÷ 7
+		CacheReadUSD:     0.00000006,  // ¥0.42/MTok ÷ 7
+		CacheCreationUSD: 0.000000375, // ¥2.625/MTok ÷ 7
+	},
+	"minimax-m2.5": {
+		InputUSD:         0.0000003,   // ¥2.1/MTok ÷ 7
+		OutputUSD:        0.0000012,   // ¥8.4/MTok ÷ 7
+		CacheReadUSD:     0.00000003,  // ¥0.21/MTok ÷ 7
+		CacheCreationUSD: 0.000000375, // ¥2.625/MTok ÷ 7
+	},
+	// Kimi/Moonshot models (native CNY, USD derived: CNY ÷ 7)
+	"kimi-k2.6": {
+		InputUSD:         0.000000928571, // ¥6.5/MTok ÷ 7
+		OutputUSD:        0.000003857142, // ¥27/MTok ÷ 7
+		CacheReadUSD:     0.000000157142, // ¥1.1/MTok ÷ 7
+		CacheCreationUSD: 0,              // Not published
+	},
+	"kimi-k2.5": {
+		InputUSD:         0.000000571428, // ¥4/MTok ÷ 7
+		OutputUSD:        0.000003,       // ¥21/MTok ÷ 7
+		CacheReadUSD:     0.0000001,      // ¥0.7/MTok ÷ 7
+		CacheCreationUSD: 0,              // Not published
+	},
+	// Qwen/Alibaba models (native CNY, USD derived: CNY ÷ 7)
+	"qwen-3.7-max": {
+		InputUSD:         0.000000857142, // ¥6/MTok ÷ 7
+		OutputUSD:        0.000002571428, // ¥18/MTok ÷ 7
+		CacheReadUSD:     0.000000085714, // ¥0.6/MTok ÷ 7
+		CacheCreationUSD: 0,              // Not published
+	},
+	"qwen-3.5-flash": {
+		InputUSD:         0.000000107,    // ¥0.749/MTok ÷ 7
+		OutputUSD:        0.000000428,    // ¥2.998/MTok ÷ 7
+		CacheReadUSD:     0.000000021428, // ¥0.15/MTok ÷ 7
+		CacheCreationUSD: 0,              // Not published
+	},
+	"qwen-turbo": {
+		InputUSD:         0.000000042857, // ¥0.3/MTok ÷ 7
+		OutputUSD:        0.000000085714, // ¥0.6/MTok ÷ 7
+		CacheReadUSD:     0,              // Not published
+		CacheCreationUSD: 0,              // Not published
+	},
+	// Tencent Hunyuan models (native CNY, USD derived: CNY ÷ 7)
+	"hunyuan-turbos": {
+		InputUSD:         0.000000114285, // ¥0.8/MTok ÷ 7
+		OutputUSD:        0.000000285714, // ¥2/MTok ÷ 7
+		CacheReadUSD:     0,              // Not published
+		CacheCreationUSD: 0,              // Not published
+	},
+	"hunyuan-t1": {
+		InputUSD:         0.000000142857, // ¥1/MTok ÷ 7
+		OutputUSD:        0.000000571428, // ¥4/MTok ÷ 7
+		CacheReadUSD:     0,              // Not published
+		CacheCreationUSD: 0,              // Not published
+	},
+	"hunyuan-hy-2.0-instruct": {
+		InputUSD:         0.000000454285, // ¥3.18/MTok ÷ 7
+		OutputUSD:        0.000001135714, // ¥7.95/MTok ÷ 7
+		CacheReadUSD:     0,              // Not published
+		CacheCreationUSD: 0,              // Not published
+	},
+	"hunyuan-hy-2.0-think": {
+		InputUSD:         0.000000567857, // ¥3.975/MTok ÷ 7
+		OutputUSD:        0.000002271428, // ¥15.9/MTok ÷ 7
+		CacheReadUSD:     0,              // Not published
+		CacheCreationUSD: 0,              // Not published
+	},
+	"hunyuan-a13b": {
+		InputUSD:         0.000000071428, // ¥0.5/MTok ÷ 7
+		OutputUSD:        0.000000285714, // ¥2/MTok ÷ 7
+		CacheReadUSD:     0,              // Not published
+		CacheCreationUSD: 0,              // Not published
 	},
 }
 
@@ -71,22 +185,28 @@ var DefaultPricing = map[string]ModelPricing{
 // Rates are per-token in CNY (approximately USD × 7.0).
 var DefaultPricingCNY = map[string]ModelPricing{
 	"deepseek-v4-flash": {
-		InputUSD:         0.0000105,  // ¥10.50/1M input
-		OutputUSD:        0.000056,   // ¥56.00/1M output
-		CacheReadUSD:     0.00000105, // ¥1.05/1M cache read
-		CacheCreationUSD: 0.000028,   // ¥28.00/1M cache creation
+		InputUSD:         0.000001,   // ¥1.00/1M input
+		OutputUSD:        0.000002,   // ¥2.00/1M output
+		CacheReadUSD:     0.00000002, // ¥0.02/1M cache read
+		CacheCreationUSD: 0,          // Not published
 	},
 	"claude-sonnet-4-20250514": {
 		InputUSD:         0.000021,   // ¥21.00/1M input
 		OutputUSD:        0.000105,   // ¥105.00/1M output
 		CacheReadUSD:     0.000021,   // Same as input (cache hit)
-		CacheCreationUSD: 0.00013125, // ¥131.25/1M cache creation
+		CacheCreationUSD: 0.00002625, // ¥26.25/1M cache creation
 	},
 	"claude-opus-4-20250514": {
-		InputUSD:         0.000105,   // ¥105.00/1M input
-		OutputUSD:        0.000525,   // ¥525.00/1M output
-		CacheReadUSD:     0.000105,   // Same as input
-		CacheCreationUSD: 0.00013125, // ¥131.25/1M cache creation
+		InputUSD:         0.000035,   // ¥35.00/1M input
+		OutputUSD:        0.000175,   // ¥175.00/1M output
+		CacheReadUSD:     0.0000035,  // ¥3.50/1M cache read
+		CacheCreationUSD: 0.00004375, // ¥43.75/1M cache creation
+	},
+	"claude-haiku-4-20250514": {
+		InputUSD:         0.000007,   // ¥7.00/1M input
+		OutputUSD:        0.000035,   // ¥35.00/1M output
+		CacheReadUSD:     0.0000007,  // ¥0.70/1M cache read
+		CacheCreationUSD: 0.00000875, // ¥8.75/1M cache creation
 	},
 	"claude-3-5-sonnet-latest": {
 		InputUSD:         0.000021,   // ¥21.00/1M input
@@ -111,6 +231,114 @@ var DefaultPricingCNY = map[string]ModelPricing{
 		OutputUSD:        0.000525,   // ¥525.00/1M output
 		CacheReadUSD:     0.000105,   // Same as input
 		CacheCreationUSD: 0.00013125, // ¥131.25/1M cache creation
+	},
+	// Google Gemini models (CNY = USD × 7)
+	"gemini-2.5-flash": {
+		InputUSD:         0.0000105,  // ¥10.50/1M input
+		OutputUSD:        0.000063,   // ¥63.00/1M output
+		CacheReadUSD:     0.00000105, // ¥1.05/1M cache read
+		CacheCreationUSD: 0,          // Not published
+	},
+	"gemini-2.1-pro": {
+		InputUSD:         0.000014,  // ¥14.00/1M input
+		OutputUSD:        0.000084,  // ¥84.00/1M output
+		CacheReadUSD:     0.0000014, // ¥1.40/1M cache read
+		CacheCreationUSD: 0,         // Not published
+	},
+	// DeepSeek models (native CNY)
+	"deepseek-v4-pro": {
+		InputUSD:         0.000003,    // ¥3.00/1M input
+		OutputUSD:        0.000006,    // ¥6.00/1M output
+		CacheReadUSD:     0.000000025, // ¥0.025/1M cache read
+		CacheCreationUSD: 0,           // Not published
+	},
+	// MiniMax models (native CNY)
+	"minimax-m3": {
+		InputUSD:         0.0000042,  // ¥4.20/1M input
+		OutputUSD:        0.0000168,  // ¥16.80/1M output
+		CacheReadUSD:     0.00000084, // ¥0.84/1M cache read
+		CacheCreationUSD: 0,          // N/A
+	},
+	"minimax-m2.7": {
+		InputUSD:         0.0000021,   // ¥2.10/1M input
+		OutputUSD:        0.0000084,   // ¥8.40/1M output
+		CacheReadUSD:     0.00000042,  // ¥0.42/1M cache read
+		CacheCreationUSD: 0.000002625, // ¥2.625/1M cache creation
+	},
+	"minimax-m2.7-highspeed": {
+		InputUSD:         0.0000042,   // ¥4.20/1M input
+		OutputUSD:        0.0000168,   // ¥16.80/1M output
+		CacheReadUSD:     0.00000042,  // ¥0.42/1M cache read
+		CacheCreationUSD: 0.000002625, // ¥2.625/1M cache creation
+	},
+	"minimax-m2.5": {
+		InputUSD:         0.0000021,   // ¥2.10/1M input
+		OutputUSD:        0.0000084,   // ¥8.40/1M output
+		CacheReadUSD:     0.00000021,  // ¥0.21/1M cache read
+		CacheCreationUSD: 0.000002625, // ¥2.625/1M cache creation
+	},
+	// Kimi/Moonshot models (native CNY)
+	"kimi-k2.6": {
+		InputUSD:         0.0000065, // ¥6.50/1M input
+		OutputUSD:        0.000027,  // ¥27.00/1M output
+		CacheReadUSD:     0.0000011, // ¥1.10/1M cache read
+		CacheCreationUSD: 0,         // Not published
+	},
+	"kimi-k2.5": {
+		InputUSD:         0.000004,  // ¥4.00/1M input
+		OutputUSD:        0.000021,  // ¥21.00/1M output
+		CacheReadUSD:     0.0000007, // ¥0.70/1M cache read
+		CacheCreationUSD: 0,         // Not published
+	},
+	// Qwen/Alibaba models (native CNY)
+	"qwen-3.7-max": {
+		InputUSD:         0.000006,  // ¥6.00/1M input
+		OutputUSD:        0.000018,  // ¥18.00/1M output
+		CacheReadUSD:     0.0000006, // ¥0.60/1M cache read
+		CacheCreationUSD: 0,         // Not published
+	},
+	"qwen-3.5-flash": {
+		InputUSD:         0.000000749, // ¥0.749/1M input
+		OutputUSD:        0.000002998, // ¥2.998/1M output
+		CacheReadUSD:     0.00000015,  // ¥0.15/1M cache read
+		CacheCreationUSD: 0,           // Not published
+	},
+	"qwen-turbo": {
+		InputUSD:         0.0000003, // ¥0.30/1M input
+		OutputUSD:        0.0000006, // ¥0.60/1M output
+		CacheReadUSD:     0,         // Not published
+		CacheCreationUSD: 0,         // Not published
+	},
+	// Tencent Hunyuan models (native CNY)
+	"hunyuan-turbos": {
+		InputUSD:         0.0000008, // ¥0.80/1M input
+		OutputUSD:        0.000002,  // ¥2.00/1M output
+		CacheReadUSD:     0,         // Not published
+		CacheCreationUSD: 0,         // Not published
+	},
+	"hunyuan-t1": {
+		InputUSD:         0.000001, // ¥1.00/1M input
+		OutputUSD:        0.000004, // ¥4.00/1M output
+		CacheReadUSD:     0,        // Not published
+		CacheCreationUSD: 0,        // Not published
+	},
+	"hunyuan-hy-2.0-instruct": {
+		InputUSD:         0.00000318, // ¥3.18/1M input
+		OutputUSD:        0.00000795, // ¥7.95/1M output
+		CacheReadUSD:     0,          // Not published
+		CacheCreationUSD: 0,          // Not published
+	},
+	"hunyuan-hy-2.0-think": {
+		InputUSD:         0.000003975, // ¥3.975/1M input
+		OutputUSD:        0.0000159,   // ¥15.90/1M output
+		CacheReadUSD:     0,           // Not published
+		CacheCreationUSD: 0,           // Not published
+	},
+	"hunyuan-a13b": {
+		InputUSD:         0.0000005, // ¥0.50/1M input
+		OutputUSD:        0.000002,  // ¥2.00/1M output
+		CacheReadUSD:     0,         // Not published
+		CacheCreationUSD: 0,         // Not published
 	},
 }
 
