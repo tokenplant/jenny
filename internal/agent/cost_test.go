@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/ipy/jenny/internal/api"
+	"github.com/ipy/jenny/internal/constants"
 	"github.com/ipy/jenny/internal/session"
 )
 
@@ -121,6 +122,15 @@ func TestAC2_SaveCostStatePersistsToDotJennyConfig(t *testing.T) {
 	origDir, _ := os.Getwd()
 	os.Chdir(tmpDir)
 	defer os.Chdir(origDir)
+
+	// Override JennyHomeDir to use temp dir/.jenny for testing
+	originalFunc := constants.JennyHomeDirFunc
+	constants.JennyHomeDirFunc = func() string {
+		return filepath.Join(tmpDir, ".jenny")
+	}
+	defer func() {
+		constants.JennyHomeDirFunc = originalFunc
+	}()
 
 	state := &CostState{
 		LastSessionID: "sess_test_ac2",
@@ -233,6 +243,15 @@ func TestAC2_PersistsEndTurnPath(t *testing.T) {
 	origWd, _ := os.Getwd()
 	os.Chdir(tmpDir)
 	defer os.Chdir(origWd)
+
+	// Override JennyHomeDir to use temp dir/.jenny for testing
+	originalFunc := constants.JennyHomeDirFunc
+	constants.JennyHomeDirFunc = func() string {
+		return filepath.Join(tmpDir, ".jenny")
+	}
+	defer func() {
+		constants.JennyHomeDirFunc = originalFunc
+	}()
 
 	sessMgr, err := session.NewManager(filepath.Join(tmpDir, "transcripts"), false)
 	if err != nil {
@@ -603,6 +622,15 @@ func TestAC5_BudgetStopInRunStream(t *testing.T) {
 	origWd, _ := os.Getwd()
 	os.Chdir(tmpDir)
 	defer os.Chdir(origWd)
+
+	// Override JennyHomeDir to use temp dir/.jenny for testing
+	originalFunc := constants.JennyHomeDirFunc
+	constants.JennyHomeDirFunc = func() string {
+		return filepath.Join(tmpDir, ".jenny")
+	}
+	defer func() {
+		constants.JennyHomeDirFunc = originalFunc
+	}()
 
 	// Pre-seed .jenny/config with cost that already exceeds the budget.
 	// This simulates a resumed session where the restored cost exceeds MaxBudgetUSD,

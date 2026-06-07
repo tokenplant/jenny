@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/ipy/jenny/internal/api"
+	"github.com/ipy/jenny/internal/constants"
 )
 
 // ModelPricing defines per-token USD rates for a model.
@@ -156,7 +157,7 @@ type CostState struct {
 
 // costConfigPath returns the path to the cost config file.
 func costConfigPath() string {
-	return filepath.Join(".jenny", "config")
+	return filepath.Join(constants.JennyHomeDir(), "config")
 }
 
 // SaveCostState saves the cost state to .jenny/config as JSON.
@@ -167,7 +168,7 @@ func SaveCostState(state *CostState) error {
 		return fmt.Errorf("marshaling cost state: %w", err)
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		return fmt.Errorf("creating .jenny directory: %w", err)
+		return fmt.Errorf("creating jenny home directory: %w", err)
 	}
 	if err := os.WriteFile(path, data, 0644); err != nil {
 		return fmt.Errorf("writing cost config: %w", err)

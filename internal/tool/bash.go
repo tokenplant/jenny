@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ipy/jenny/internal/constants"
 	"github.com/ipy/jenny/internal/sandbox"
 )
 
@@ -246,7 +247,18 @@ func (t *BashTool) handleOutput(output string) (*ToolResult, error) {
 
 // writeSpillFile writes output to a temp file and returns the path
 func (t *BashTool) writeSpillFile(output string) (string, error) {
-	// Try to use session directory or .jenny directory first
+	// Try jenny home directory first, then project root .jenny, then temp
+	if jennyHome := constants.JennyHomeDir(); dirExists(jennyHome) || mkdirAll(jennyHome, 0755) == nil {
+		spillDir := jennyHome
+		f, err := os.CreateTemp(spillDir, "jenny-spill-*")
+		if err == nil {
+			defer f.Close()
+			if _, err := f.WriteString(output); err == nil {
+				return f.Name(), nil
+			}
+		}
+	}
+
 	spillDir := t.projectRoot
 	if jennyDir := filepath.Join(t.projectRoot, ".jenny"); dirExists(jennyDir) {
 		spillDir = jennyDir

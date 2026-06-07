@@ -873,6 +873,12 @@ func TestAC1_MemdirCreatedAtPromptBuild(t *testing.T) {
 	os.Setenv("HOME", tmpHome)
 	defer os.Setenv("HOME", origHome)
 
+	// Also isolate XDG_CONFIG_HOME on Linux/Unix systems so UserConfigDir()
+	// points to the isolated HOME instead of a pre-existing XDG path.
+	origXdg := os.Getenv("XDG_CONFIG_HOME")
+	os.Unsetenv("XDG_CONFIG_HOME")
+	defer os.Setenv("XDG_CONFIG_HOME", origXdg)
+
 	// Set git identity so initTestGitRepo can create the initial commit.
 	// On cleanup, use Unsetenv when the original was empty so we don't
 	// leave GIT_AUTHOR_EMAIL="" set (git treats empty as malformed).

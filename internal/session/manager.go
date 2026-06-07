@@ -55,7 +55,7 @@ var progressTypes = map[string]bool{
 // If disabled is true, no files are created, appended, or modified.
 func NewManager(transcriptDir string, disabled bool) (*Manager, error) {
 	if transcriptDir == "" {
-		transcriptDir = ".jenny/transcripts"
+		transcriptDir = constants.DefaultTranscriptDir()
 	}
 	if disabled {
 		return &Manager{transcriptDir: transcriptDir, Disabled: true}, nil

@@ -11,6 +11,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/ipy/jenny/internal/constants"
 	"github.com/ipy/jenny/internal/mcp"
 )
 
@@ -279,6 +280,16 @@ func TestReadMcpResourceTool_AC3_BlobPersist(t *testing.T) {
 	defer server.close()
 
 	cwd := t.TempDir()
+
+	// Override JennyHomeDir to use temp dir/.jenny for testing
+	originalFunc := constants.JennyHomeDirFunc
+	constants.JennyHomeDirFunc = func() string {
+		return filepath.Join(cwd, ".jenny")
+	}
+	defer func() {
+		constants.JennyHomeDirFunc = originalFunc
+	}()
+
 	tool := NewReadMcpResourceTool()
 	result, err := tool.Execute(context.Background(), map[string]any{
 		"server": "blob-server",
@@ -319,7 +330,7 @@ func TestReadMcpResourceTool_AC3_BlobPersist(t *testing.T) {
 		t.Errorf("expected file content 'Hello', got %q", string(data))
 	}
 
-	// Verify file is in the correct directory
+	// Verify file is in the correct directory (under JennyHomeDir/mcp-resources)
 	expectedDir := filepath.Join(cwd, ".jenny", "mcp-resources")
 	if filepath.Dir(output.Contents[0].BlobSavedTo) != expectedDir {
 		t.Errorf("expected file in %s, got %s", expectedDir, filepath.Dir(output.Contents[0].BlobSavedTo))
@@ -331,13 +342,20 @@ func TestReadMcpResourceTool_AC4_PersistFailure(t *testing.T) {
 	server := startFakeServer(t, "fail-server")
 	defer server.close()
 
-	// Use a path that cannot be written to
-	cwd := "/nonexistent/path/that/cannot/be/created"
+	// Override JennyHomeDir to return a path that cannot be created
+	originalFunc := constants.JennyHomeDirFunc
+	constants.JennyHomeDirFunc = func() string {
+		return "/nonexistent/path/that/cannot/be/created"
+	}
+	defer func() {
+		constants.JennyHomeDirFunc = originalFunc
+	}()
+
 	tool := NewReadMcpResourceTool()
 	result, err := tool.Execute(context.Background(), map[string]any{
 		"server": "fail-server",
 		"uri":    "file:///image.png",
-	}, cwd)
+	}, t.TempDir())
 	if err != nil {
 		t.Fatalf("Execute returned unexpected error: %v", err)
 	}

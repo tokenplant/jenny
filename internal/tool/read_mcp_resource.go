@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/ipy/jenny/internal/constants"
 	"github.com/ipy/jenny/internal/mcp"
 )
 
@@ -104,7 +105,7 @@ func (t *ReadMcpResourceTool) Execute(ctx context.Context, input map[string]any,
 			item["text"] = c.Text
 		} else if c.Type == "blob" {
 			// AC3: Binary content persisted to disk
-			savedPath, err := t.persistBlob(c.Blob, cwd)
+			savedPath, err := t.persistBlob(c.Blob)
 			if err != nil {
 				// AC4: Persist failure does not inline base64
 				return &ToolResult{
@@ -131,8 +132,8 @@ func (t *ReadMcpResourceTool) Execute(ctx context.Context, input map[string]any,
 	}, nil
 }
 
-// persistBlob decodes base64 data and writes it to a unique file in .jenny/mcp-resources/.
-func (t *ReadMcpResourceTool) persistBlob(data []byte, cwd string) (string, error) {
+// persistBlob decodes base64 data and writes it to a unique file in ~/.jenny/mcp-resources/.
+func (t *ReadMcpResourceTool) persistBlob(data []byte) (string, error) {
 	// Decode base64 if needed (data may already be decoded from []byte)
 	var decoded []byte
 	if len(data) > 0 {
@@ -158,7 +159,7 @@ func (t *ReadMcpResourceTool) persistBlob(data []byte, cwd string) (string, erro
 	filename := fmt.Sprintf("%d-%016x.bin", timestamp, randSuffix)
 
 	// Create persist directory
-	persistDir := filepath.Join(cwd, ".jenny", "mcp-resources")
+	persistDir := filepath.Join(constants.JennyHomeDir(), "mcp-resources")
 	if err := os.MkdirAll(persistDir, 0755); err != nil {
 		return "", fmt.Errorf("creating persist directory: %w", err)
 	}
