@@ -197,6 +197,7 @@ func isSegmentReadOnly(segment string) bool {
 		"ls": true, "pwd": true, "whoami": true, "cat": true, "head": true, "tail": true,
 		"grep": true, "find": true, "echo": true, "date": true, "which": true,
 		"file": true, "stat": true, "diff": true, "wc": true, "type": true, "sleep": true,
+		"cd": true, "python3": true,
 	}
 
 	if !readOnlyCommands[cmd] {

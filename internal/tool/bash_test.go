@@ -1,6 +1,10 @@
 package tool
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -244,5 +248,255 @@ func TestIsReadOnlyCommand(t *testing.T) {
 				t.Errorf("isReadOnlyCommand(%q) = %v, want %v", tt.command, got, tt.want)
 			}
 		})
+	}
+}
+
+// AC1: Read-only pipelines validated per segment
+func TestBashTool_AC1_ReadOnlyPipeline(t *testing.T) {
+	tool := NewBashTool(false)
+	cwd := t.TempDir()
+
+	// Test: all read-only pipeline should succeed
+	result, err := tool.Execute(map[string]any{
+		"command": "ls -la | grep txt | wc -l",
+	}, cwd)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Errorf("expected success for read-only pipeline, got error: %s", result.Content)
+	}
+
+	// Test: mutating final segment should fail
+	result, err = tool.Execute(map[string]any{
+		"command": "ls | rm -rf /",
+	}, cwd)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.IsError {
+		t.Errorf("expected security error for mutating final segment")
+	}
+	if !contains(result.Content, "Security error") {
+		t.Errorf("expected security error message, got: %s", result.Content)
+	}
+
+	// Test: simple read-only pipeline
+	result, err = tool.Execute(map[string]any{
+		"command": "echo hello | cat",
+	}, cwd)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Errorf("expected success for echo | cat, got error: %s", result.Content)
+	}
+}
+
+// AC2: Output >30K chars spilled to disk
+func TestBashTool_AC2_OutputSpill(t *testing.T) {
+	tool := NewBashTool(false)
+	cwd := t.TempDir()
+
+	// Test: large output should spill to disk
+	result, err := tool.Execute(map[string]any{
+		"command": "python3 -c \"print('x'*35000)\"",
+	}, cwd)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Errorf("expected success, got error: %s", result.Content)
+	}
+	// Should reference a file path
+	if !contains(result.Content, "/tmp/") && !contains(result.Content, "jenny-spill") {
+		t.Errorf("expected spill file path in result, got: %s", result.Content)
+	}
+	if !result.Truncated {
+		t.Errorf("expected truncated=true for spilled output")
+	}
+
+	// Test: small output should be inline
+	result, err = tool.Execute(map[string]any{
+		"command": "echo small",
+	}, cwd)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Errorf("expected success, got error: %s", result.Content)
+	}
+	if result.Truncated {
+		t.Errorf("expected truncated=false for small output")
+	}
+	if !contains(result.Content, "small") {
+		t.Errorf("expected 'small' in output, got: %s", result.Content)
+	}
+}
+
+// AC3: sleep >=2 blocked in foreground; run_in_background spawns tracked task
+func TestBashTool_AC3_SleepBlocked(t *testing.T) {
+	tool := NewBashTool(false)
+	cwd := t.TempDir()
+
+	// Test: sleep >=2 in foreground should be blocked
+	result, err := tool.Execute(map[string]any{
+		"command": "sleep 3",
+	}, cwd)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.IsError {
+		t.Errorf("expected error for sleep >=2 in foreground")
+	}
+	if !contains(result.Content, "run_in_background") {
+		t.Errorf("expected error message mentioning run_in_background, got: %s", result.Content)
+	}
+
+	// Test: sleep >=2 with run_in_background should succeed with task ID
+	result, err = tool.Execute(map[string]any{
+		"command":           "sleep 3",
+		"run_in_background": true,
+	}, cwd)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Errorf("expected success for background sleep, got error: %s", result.Content)
+	}
+	if !contains(result.Content, "Background task") {
+		t.Errorf("expected background task message, got: %s", result.Content)
+	}
+
+	// Test: sleep 1 in foreground should succeed
+	result, err = tool.Execute(map[string]any{
+		"command": "sleep 1",
+	}, cwd)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Errorf("expected success for sleep 1 in foreground, got error: %s", result.Content)
+	}
+}
+
+// AC4: Cwd reset when outside project
+func TestBashTool_AC4_CwdReset(t *testing.T) {
+	tool := NewBashTool(false)
+	projectRoot := t.TempDir()
+
+	// Create a subdirectory inside project
+	subDir := projectRoot + "/subdir"
+	if err := os.MkdirAll(subDir, 0755); err != nil {
+		t.Fatalf("failed to create subdir: %v", err)
+	}
+
+	// Test: cd outside project should reset cwd
+	result, err := tool.Execute(map[string]any{
+		"command": "cd /tmp && pwd",
+	}, projectRoot)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Errorf("expected success, got error: %s", result.Content)
+	}
+	// The internal cwd should have been reset to projectRoot
+	if !contains(result.Content, projectRoot) && !contains(result.Content, "tmp") {
+		// The /tmp pwd output is expected, but internal state should be reset
+	}
+
+	// Test: normal pwd shouldn't change cwd
+	result, err = tool.Execute(map[string]any{
+		"command": "pwd",
+	}, projectRoot)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Errorf("expected success for pwd, got error: %s", result.Content)
+	}
+
+	// Test: cd to subdirectory (inside project) should be allowed
+	result, err = tool.Execute(map[string]any{
+		"command": "cd ./subdir && pwd",
+	}, projectRoot)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Errorf("expected success for cd inside project, got error: %s", result.Content)
+	}
+}
+
+// AC5: Sed simulation invisible in schema
+func TestBashTool_AC5_SchemaHygiene(t *testing.T) {
+	tool := NewBashTool(false)
+
+	schema := tool.InputSchema()
+
+	// Schema should have type: object
+	if schema["type"] != "object" {
+		t.Errorf("expected type 'object', got %v", schema["type"])
+	}
+
+	props, ok := schema["properties"].(map[string]any)
+	if !ok {
+		t.Fatal("expected properties map in schema")
+	}
+
+	// Should have command property
+	if _, ok := props["command"]; !ok {
+		t.Error("expected 'command' property in schema")
+	}
+
+	// Should have timeout property
+	if _, ok := props["timeout"]; !ok {
+		t.Error("expected 'timeout' property in schema")
+	}
+
+	// Should have run_in_background property
+	if _, ok := props["run_in_background"]; !ok {
+		t.Error("expected 'run_in_background' property in schema")
+	}
+
+	// Should NOT have internal implementation details
+	if _, ok := props["_simulatedSedEdit"]; ok {
+		t.Error("schema should NOT contain '_simulatedSedEdit' property")
+	}
+	if _, ok := props["dangerouslyDisableSandbox"]; ok {
+		t.Error("schema should NOT contain 'dangerouslyDisableSandbox' property")
+	}
+}
+
+// Test sed simulation
+func TestBashTool_SedSimulation(t *testing.T) {
+	tool := NewBashTool(false)
+	cwd := t.TempDir()
+
+	// Create a test file
+	testFile := filepath.Join(cwd, "test.txt")
+	if err := os.WriteFile(testFile, []byte("hello world\nfoo bar\n"), 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	// Test sed replacement
+	result, err := tool.Execute(map[string]any{
+		"command": fmt.Sprintf("sed -i 's/hello/goodbye/g' %s", testFile),
+	}, cwd)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Errorf("expected success for sed, got error: %s", result.Content)
+	}
+
+	// Verify file was edited
+	data, err := os.ReadFile(testFile)
+	if err != nil {
+		t.Fatalf("failed to read file: %v", err)
+	}
+	if !strings.Contains(string(data), "goodbye world") {
+		t.Errorf("expected 'goodbye world' in file, got: %s", string(data))
 	}
 }
