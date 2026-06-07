@@ -103,6 +103,27 @@ type toolsListResult struct {
 	Tools []toolInfo `json:"tools"`
 }
 
+// resourceEntry represents a resource entry from the resources/list response.
+type resourceEntry struct {
+	URI         string `json:"uri"`
+	Name        string `json:"name"`
+	MimeType    string `json:"mimeType,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
+// resourcesListResult represents the result of a resources/list call.
+type resourcesListResult struct {
+	Resources []resourceEntry `json:"resources"`
+}
+
+// MCPResource represents a resource exposed by an MCP server.
+type MCPResource struct {
+	URI         string
+	Name        string
+	MimeType    string
+	Description string
+}
+
 // toolsCallResult represents the result of a tools/call call.
 type toolsCallResult struct {
 	Content []contentPart `json:"content"`
@@ -354,6 +375,49 @@ func (c *Client) ListTools(ctx context.Context) ([]MCPTool, error) {
 	}
 
 	return tools, nil
+}
+
+// ListResources discovers resources from the MCP server.
+func (c *Client) ListResources(ctx context.Context) ([]MCPResource, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.proc == nil {
+		return nil, fmt.Errorf("not connected")
+	}
+
+	req := jsonRPCRequest{
+		JSONRPC: "2.0",
+		ID:      nextJSONID(),
+		Method:  "resources/list",
+	}
+
+	resp, err := c.sendRequest(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("resources/list request failed: %w", err)
+	}
+
+	if resp.Error != nil {
+		return nil, fmt.Errorf("resources/list error: %s (code %d)", resp.Error.Message, resp.Error.Code)
+	}
+
+	var listResult resourcesListResult
+	if err := json.Unmarshal(resp.Result, &listResult); err != nil {
+		return nil, fmt.Errorf("parsing resources/list result: %w", err)
+	}
+
+	resources := make([]MCPResource, 0, len(listResult.Resources))
+	for _, r := range listResult.Resources {
+		resources = append(resources, MCPResource{
+			URI:         r.URI,
+			Name:        r.Name,
+			MimeType:    r.MimeType,
+			Description: r.Description,
+		})
+		log.Debug("discovered MCP resource", "server", c.Name, "resource", r.Name, "uri", r.URI)
+	}
+
+	return resources, nil
 }
 
 // CallTool calls a tool on the MCP server.

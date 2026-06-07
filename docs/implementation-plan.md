@@ -172,7 +172,7 @@ Implement in this order:
 
 1. - [x] Message normalization — [`message-normalization.md`](./message-normalization.md) — AC1-AC5 implemented
 2. - [x] Context compaction — [`context-compaction.md`](./context-compaction.md)
-3. - [ ] Sandbox abstraction — [`sandbox.md`](./sandbox.md)
+3. - [x] Sandbox abstraction — [`sandbox.md`](./sandbox.md)
 4. _(Git helpers — shipped in P1)_
 
 #### Tools

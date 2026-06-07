@@ -85,6 +85,10 @@ func run() error {
 	// Load MCP configuration if paths are provided
 	var mcpConfig map[string]mcp.MCPServerDef
 	var mcpTools []tool.Tool
+
+	// Always add ListMcpResourcesTool - it handles the case of no MCP servers connected
+	mcpTools = append(mcpTools, mcp.NewListMcpResourcesTool())
+
 	if len(flags.MCPConfig) > 0 {
 		mcpConfig, err = mcp.LoadConfig(flags.MCPConfig, flags.StrictMCP)
 		if err != nil {
