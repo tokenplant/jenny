@@ -34,6 +34,9 @@ type QueryEngine struct {
 	// Compaction state
 	compactConfig    CompactConfig
 	compactFailCount int
+
+	// Session memory
+	sessionMemory *SessionMemory
 }
 
 // NewQueryEngine creates a new QueryEngine with the given configuration.
@@ -101,6 +104,9 @@ func NewQueryEngine(cfg StreamConfig, tools []tool.Tool, model string) *QueryEng
 
 	// Wire ReadFileCache from StreamConfig into tools that support it
 	engine.WireReadFileCache()
+
+	// Initialize session memory
+	engine.sessionMemory = NewSessionMemory(sessionID, client, engine.compactConfig, "")
 
 	return engine
 }
@@ -534,6 +540,25 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 				}
 				data, _ := json.Marshal(msg)
 				fmt.Fprintln(os.Stdout, string(data))
+			}
+		}
+
+		// Check session memory threshold after each turn
+		if e.sessionMemory != nil {
+			turnTokens := resp.Usage.InputTokens + resp.Usage.OutputTokens +
+				resp.Usage.CacheReadInputTokens + resp.Usage.CacheCreationInputTokens
+			toolCallCount := len(toolUseBlocks)
+			shouldAct, action := e.sessionMemory.CheckThreshold(turnTokens, toolCallCount)
+			if shouldAct {
+				if action == "init" {
+					if err := e.sessionMemory.Init(); err != nil {
+						log.Warn("Session memory init failed", "error", err)
+					}
+				} else if action == "update" {
+					if err := e.sessionMemory.Update(ctx); err != nil {
+						log.Warn("Session memory update failed", "error", err)
+					}
+				}
 			}
 		}
 

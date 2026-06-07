@@ -12,12 +12,20 @@ import (
 
 // EditTool performs exact string replacement in files.
 type EditTool struct {
-	readCache *ReadFileCache
+	readCache    *ReadFileCache
+	allowedPaths []string // If set, edits are restricted to these paths only
 }
 
 // NewEditTool creates a new EditTool.
 func NewEditTool(readCache *ReadFileCache) *EditTool {
 	return &EditTool{readCache: readCache}
+}
+
+// SetAllowedPaths restricts Edit to only these paths.
+// If nil or empty, no restriction is applied.
+func (t *EditTool) SetAllowedPaths(paths []string) *EditTool {
+	t.allowedPaths = paths
+	return t
 }
 
 // Name returns the tool name.
@@ -100,6 +108,17 @@ func (t *EditTool) Execute(ctx context.Context, input map[string]any, cwd string
 			Content: pathErr.Error(),
 			IsError: true,
 		}, nil
+	}
+
+	// Check allowedPaths restriction
+	if len(t.allowedPaths) > 0 {
+		allowed := slices.Contains(t.allowedPaths, filePath)
+		if !allowed {
+			return &ToolResult{
+				Content: fmt.Sprintf("Edit is restricted to specific paths only"),
+				IsError: true,
+			}, nil
+		}
 	}
 
 	// AC5: Check .ipynb extension
