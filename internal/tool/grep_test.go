@@ -1,6 +1,7 @@
 package tool
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -153,7 +154,7 @@ func TestGrepTool_Execute(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := tool.Execute(tt.input, tt.cwd)
+			result, err := tool.Execute(context.Background(), tt.input, tt.cwd)
 			if err != nil {
 				if !tt.wantErr {
 					t.Errorf("unexpected error: %v", err)
@@ -189,7 +190,7 @@ func TestGrepTool_AC1_HeadLimit(t *testing.T) {
 	tool := NewGrepTool()
 
 	// Test default head_limit (250)
-	result, err := tool.Execute(map[string]any{
+	result, err := tool.Execute(context.Background(), map[string]any{
 		"pattern": "match",
 	}, tmpDir)
 	if err != nil {
@@ -202,7 +203,7 @@ func TestGrepTool_AC1_HeadLimit(t *testing.T) {
 
 	// Note: ripgrep with -l just returns file paths, so multiple matches in same file
 	// are only counted once. With 300 files and default head_limit=250,
-	// we should get250 files
+	// we should get 250 files
 	if count != defaultHeadLimit {
 		t.Errorf("expected 250 results with default head_limit, got %d", count)
 	}
@@ -211,7 +212,7 @@ func TestGrepTool_AC1_HeadLimit(t *testing.T) {
 	}
 
 	// Test head_limit=0 (unlimited)
-	result, err = tool.Execute(map[string]any{
+	result, err = tool.Execute(context.Background(), map[string]any{
 		"pattern":    "match",
 		"head_limit": 0,
 	}, tmpDir)
@@ -249,7 +250,7 @@ func TestGrepTool_AC2_DashPattern(t *testing.T) {
 	tool := NewGrepTool()
 
 	// Pattern "-foo" should find the file with literal "-foo"
-	result, err := tool.Execute(map[string]any{
+	result, err := tool.Execute(context.Background(), map[string]any{
 		"pattern":     "-foo",
 		"output_mode": "content",
 	}, tmpDir)
@@ -279,7 +280,7 @@ func TestGrepTool_AC3_Timeout(t *testing.T) {
 	tool := NewGrepTool()
 
 	// Very short timeout should result in error
-	result, err := tool.Execute(map[string]any{
+	result, err := tool.Execute(context.Background(), map[string]any{
 		"pattern": "test",
 		"timeout": 0, // 0 seconds = immediate timeout
 	}, tmpDir)
@@ -319,7 +320,7 @@ func TestGrepTool_AC4_OutputCap(t *testing.T) {
 
 	tool := NewGrepTool()
 
-	result, err := tool.Execute(map[string]any{
+	result, err := tool.Execute(context.Background(), map[string]any{
 		"pattern":     "very",
 		"output_mode": "content",
 	}, tmpDir)
@@ -375,7 +376,7 @@ func TestGrepTool_AC5_VCSExcluded(t *testing.T) {
 	tool := NewGrepTool()
 
 	// Search for content unique to both .git and work file
-	result, err := tool.Execute(map[string]any{
+	result, err := tool.Execute(context.Background(), map[string]any{
 		"pattern": "unique-match-content",
 	}, tmpDir)
 	if err != nil {
@@ -391,7 +392,7 @@ func TestGrepTool_AC5_VCSExcluded(t *testing.T) {
 	}
 
 	// Search for svn content
-	result, err = tool.Execute(map[string]any{
+	result, err = tool.Execute(context.Background(), map[string]any{
 		"pattern": "unique-svn-content",
 	}, tmpDir)
 	if err != nil {
@@ -447,7 +448,7 @@ func TestGrepTool_ConcurrencySafe(t *testing.T) {
 	done := make(chan bool)
 	for i := 0; i < 10; i++ {
 		go func() {
-			result, err := tool.Execute(map[string]any{
+			result, err := tool.Execute(context.Background(), map[string]any{
 				"pattern": "content",
 			}, tmpDir)
 			if err != nil {

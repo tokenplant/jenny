@@ -2,6 +2,7 @@
 package tool_test
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -25,7 +26,7 @@ func TestBlackBox_AC1_HeadLimit(t *testing.T) {
 	tools := tool.NewGrepTool()
 
 	// Verify default head_limit is 250
-	result, err := tools.Execute(map[string]any{
+	result, err := tools.Execute(context.Background(), map[string]any{
 		"pattern": "match",
 	}, tmpDir)
 	if err != nil {
@@ -44,7 +45,7 @@ func TestBlackBox_AC1_HeadLimit(t *testing.T) {
 	}
 
 	// Verify head_limit=0 returns all matches
-	result, err = tools.Execute(map[string]any{
+	result, err = tools.Execute(context.Background(), map[string]any{
 		"pattern":    "match",
 		"head_limit": 0,
 	}, tmpDir)
@@ -76,7 +77,7 @@ func TestBlackBox_AC2_DashPattern(t *testing.T) {
 	tools := tool.NewGrepTool()
 
 	// Search for "-foo"
-	result, err := tools.Execute(map[string]any{
+	result, err := tools.Execute(context.Background(), map[string]any{
 		"pattern":     "-foo",
 		"output_mode": "content",
 	}, tmpDir)
@@ -115,7 +116,7 @@ func TestBlackBox_AC3_Timeout(t *testing.T) {
 		}
 	}
 
-	result, err := tools.Execute(map[string]any{
+	result, err := tools.Execute(context.Background(), map[string]any{
 		"pattern": "content",
 		"timeout": float64(0), // must be float64 (JSON schema "number" type)
 	}, tmpDir)
@@ -146,7 +147,7 @@ func TestBlackBox_AC4_OutputCap(t *testing.T) {
 
 	tools := tool.NewGrepTool()
 
-	result, err := tools.Execute(map[string]any{
+	result, err := tools.Execute(context.Background(), map[string]any{
 		"pattern":     "very",
 		"output_mode": "content",
 		"head_limit":  0,
@@ -195,7 +196,7 @@ func TestBlackBox_AC5_VCSExcluded(t *testing.T) {
 
 	tools := tool.NewGrepTool()
 
-	result, err := tools.Execute(map[string]any{
+	result, err := tools.Execute(context.Background(), map[string]any{
 		"pattern": "secret-data",
 	}, tmpDir)
 	if err != nil {

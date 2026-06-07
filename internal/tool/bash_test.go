@@ -1,6 +1,7 @@
 package tool
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -89,7 +90,7 @@ func TestBashTool_Execute(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := tool.Execute(tt.input, cwd)
+			result, err := tool.Execute(context.Background(), tt.input, cwd)
 			if err != nil {
 				if !tt.wantErr {
 					t.Errorf("unexpected error: %v", err)
@@ -130,7 +131,7 @@ func TestBashTool_ReadOnlyEnforcement(t *testing.T) {
 
 	for _, cmd := range allowedCommands {
 		t.Run("allowed/"+cmd, func(t *testing.T) {
-			result, err := tool.Execute(map[string]any{"command": cmd}, cwd)
+			result, err := tool.Execute(context.Background(), map[string]any{"command": cmd}, cwd)
 			if err != nil {
 				t.Errorf("unexpected error for %q: %v", cmd, err)
 				return
@@ -163,7 +164,7 @@ func TestBashTool_ReadOnlyEnforcement(t *testing.T) {
 
 	for _, cmd := range blockedCommands {
 		t.Run("blocked/"+cmd, func(t *testing.T) {
-			result, err := tool.Execute(map[string]any{"command": cmd}, cwd)
+			result, err := tool.Execute(context.Background(), map[string]any{"command": cmd}, cwd)
 			if err != nil {
 				t.Errorf("unexpected error for %q: %v", cmd, err)
 				return
@@ -182,7 +183,7 @@ func TestBashTool_Timeout(t *testing.T) {
 	// Use sleep 1 with timeout 0.5 seconds to ensure context deadline fires
 	// before sleep completes (~500ms deadline vs 1000ms sleep).
 	// sleep 1 is allowed in foreground (AC3 exempts sleep < 2).
-	result, err := tool.Execute(map[string]any{
+	result, err := tool.Execute(context.Background(), map[string]any{
 		"command": "sleep 1",
 		"timeout": float64(0.5),
 	}, cwd)
@@ -260,7 +261,7 @@ func TestBashTool_AC1_ReadOnlyPipeline(t *testing.T) {
 	cwd := t.TempDir()
 
 	// Test: all read-only pipeline should succeed
-	result, err := tool.Execute(map[string]any{
+	result, err := tool.Execute(context.Background(), map[string]any{
 		"command": "ls -la | grep txt | wc -l",
 	}, cwd)
 	if err != nil {
@@ -271,7 +272,7 @@ func TestBashTool_AC1_ReadOnlyPipeline(t *testing.T) {
 	}
 
 	// Test: mutating final segment should fail
-	result, err = tool.Execute(map[string]any{
+	result, err = tool.Execute(context.Background(), map[string]any{
 		"command": "ls | rm -rf /",
 	}, cwd)
 	if err != nil {
@@ -285,7 +286,7 @@ func TestBashTool_AC1_ReadOnlyPipeline(t *testing.T) {
 	}
 
 	// Test: simple read-only pipeline
-	result, err = tool.Execute(map[string]any{
+	result, err = tool.Execute(context.Background(), map[string]any{
 		"command": "echo hello | cat",
 	}, cwd)
 	if err != nil {
@@ -302,7 +303,7 @@ func TestBashTool_AC2_OutputSpill(t *testing.T) {
 	cwd := t.TempDir()
 
 	// Test: large output should spill to disk
-	result, err := tool.Execute(map[string]any{
+	result, err := tool.Execute(context.Background(), map[string]any{
 		"command": "python3 -c \"print('x'*35000)\"",
 	}, cwd)
 	if err != nil {
@@ -320,7 +321,7 @@ func TestBashTool_AC2_OutputSpill(t *testing.T) {
 	}
 
 	// Test: small output should be inline
-	result, err = tool.Execute(map[string]any{
+	result, err = tool.Execute(context.Background(), map[string]any{
 		"command": "echo small",
 	}, cwd)
 	if err != nil {
@@ -343,7 +344,7 @@ func TestBashTool_AC3_SleepBlocked(t *testing.T) {
 	cwd := t.TempDir()
 
 	// Test: sleep >=2 in foreground should be blocked
-	result, err := tool.Execute(map[string]any{
+	result, err := tool.Execute(context.Background(), map[string]any{
 		"command": "sleep 3",
 	}, cwd)
 	if err != nil {
@@ -357,7 +358,7 @@ func TestBashTool_AC3_SleepBlocked(t *testing.T) {
 	}
 
 	// Test: sleep >=2 with run_in_background should succeed with task ID
-	result, err = tool.Execute(map[string]any{
+	result, err = tool.Execute(context.Background(), map[string]any{
 		"command":           "sleep 3",
 		"run_in_background": true,
 	}, cwd)
@@ -372,7 +373,7 @@ func TestBashTool_AC3_SleepBlocked(t *testing.T) {
 	}
 
 	// Test: sleep 1 in foreground should succeed
-	result, err = tool.Execute(map[string]any{
+	result, err = tool.Execute(context.Background(), map[string]any{
 		"command": "sleep 1",
 	}, cwd)
 	if err != nil {
@@ -395,7 +396,7 @@ func TestBashTool_AC4_CwdReset(t *testing.T) {
 	}
 
 	// Test: cd outside project should reset cwd
-	result, err := tool.Execute(map[string]any{
+	result, err := tool.Execute(context.Background(), map[string]any{
 		"command": "cd /tmp && pwd",
 	}, projectRoot)
 	if err != nil {
@@ -410,7 +411,7 @@ func TestBashTool_AC4_CwdReset(t *testing.T) {
 	}
 
 	// Test: normal pwd shouldn't change cwd
-	result, err = tool.Execute(map[string]any{
+	result, err = tool.Execute(context.Background(), map[string]any{
 		"command": "pwd",
 	}, projectRoot)
 	if err != nil {
@@ -421,7 +422,7 @@ func TestBashTool_AC4_CwdReset(t *testing.T) {
 	}
 
 	// Test: cd to subdirectory (inside project) should be allowed
-	result, err = tool.Execute(map[string]any{
+	result, err = tool.Execute(context.Background(), map[string]any{
 		"command": "cd ./subdir && pwd",
 	}, projectRoot)
 	if err != nil {
@@ -484,7 +485,7 @@ func TestBashTool_SedSimulation(t *testing.T) {
 	}
 
 	// Test sed replacement
-	result, err := tool.Execute(map[string]any{
+	result, err := tool.Execute(context.Background(), map[string]any{
 		"command": fmt.Sprintf("sed -i 's/hello/goodbye/g' %s", testFile),
 	}, cwd)
 	if err != nil {

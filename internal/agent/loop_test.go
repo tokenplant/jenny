@@ -21,7 +21,7 @@ type MockTool struct {
 func (t *MockTool) Name() string                { return t.name }
 func (t *MockTool) Description() string         { return t.description }
 func (t *MockTool) InputSchema() map[string]any { return t.inputSchema }
-func (t *MockTool) Execute(input map[string]any, cwd string) (*tool.ToolResult, error) {
+func (t *MockTool) Execute(ctx context.Context, input map[string]any, cwd string) (*tool.ToolResult, error) {
 	return t.executeFn(input, cwd)
 }
 
@@ -164,7 +164,7 @@ func TestToolInputValidation(t *testing.T) {
 	bashTool := tool.NewBashTool(false)
 
 	// Test missing command
-	result, err := bashTool.Execute(map[string]any{}, "/tmp")
+	result, err := bashTool.Execute(context.Background(), map[string]any{}, "/tmp")
 	if err == nil {
 		// Error is returned in content, not as error
 		if result == nil {
@@ -176,7 +176,7 @@ func TestToolInputValidation(t *testing.T) {
 	}
 
 	// Test empty command
-	result, err = bashTool.Execute(map[string]any{"command": ""}, "/tmp")
+	result, err = bashTool.Execute(context.Background(), map[string]any{"command": ""}, "/tmp")
 	if err == nil {
 		if result == nil {
 			t.Error("expected result")
@@ -192,7 +192,7 @@ func TestReadToolInputValidation(t *testing.T) {
 	readTool := tool.NewReadTool(false, nil)
 
 	// Test missing file_path
-	result, err := readTool.Execute(map[string]any{}, "/tmp")
+	result, err := readTool.Execute(context.Background(), map[string]any{}, "/tmp")
 	if err == nil {
 		if result == nil {
 			t.Error("expected result")
@@ -203,7 +203,7 @@ func TestReadToolInputValidation(t *testing.T) {
 	}
 
 	// Test empty file_path
-	result, err = readTool.Execute(map[string]any{"file_path": ""}, "/tmp")
+	result, err = readTool.Execute(context.Background(), map[string]any{"file_path": ""}, "/tmp")
 	if err == nil {
 		if result == nil {
 			t.Error("expected result")

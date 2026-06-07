@@ -68,8 +68,9 @@ func (t *BashTool) InputSchema() map[string]any {
 	}
 }
 
-// Execute runs the bash command.
-func (t *BashTool) Execute(input map[string]any, cwd string) (*ToolResult, error) {
+// Execute runs the bash command with context support for cancellation.
+// If the context is cancelled (e.g., by sibling abort), the command will be interrupted.
+func (t *BashTool) Execute(ctx context.Context, input map[string]any, cwd string) (*ToolResult, error) {
 	command, ok := input["command"].(string)
 	if !ok || command == "" {
 		return nil, fmt.Errorf("command is required and must be a string")
@@ -140,10 +141,18 @@ func (t *BashTool) Execute(input map[string]any, cwd string) (*ToolResult, error
 		timeout = int(timeoutVal)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
-	defer cancel()
+	// First derive a context that inherits cancellation from the passed context.
+	// This is critical: when the executor cancels the parent context (sibling abort),
+	// we need the command to be interrupted.
+	derivedCtx, derivedCancel := context.WithCancel(ctx)
+	defer derivedCancel()
 
-	cmd := exec.CommandContext(ctx, "sh", "-c", command)
+	// Then apply timeout on top of the cancellation-inheriting context.
+	// This ensures: (1) sibling abort works via parent cancellation, (2) timeout works.
+	cmdCtx, cmdCancel := context.WithTimeout(derivedCtx, time.Duration(timeout)*time.Second)
+	defer cmdCancel()
+
+	cmd := exec.CommandContext(cmdCtx, "sh", "-c", command)
 	cmd.Dir = t.commandCwd
 
 	var stdout, stderr bytes.Buffer
@@ -162,7 +171,7 @@ func (t *BashTool) Execute(input map[string]any, cwd string) (*ToolResult, error
 	// Handle cwd reset (AC4) - check if command changed directory outside project
 	t.resetCwdIfOutsideProject(command)
 
-	if ctx.Err() == context.DeadlineExceeded {
+	if cmdCtx.Err() == context.DeadlineExceeded {
 		return &ToolResult{
 			Content: fmt.Sprintf("Command timed out after %d seconds", timeout),
 			IsError: true,
@@ -658,131 +667,4 @@ func isReadOnlyCommand(command string) bool {
 	return false
 }
 
-// ExecuteWithContext runs the bash command with context support for cancellation.
-// If the context is cancelled (e.g., by sibling abort), the command will be interrupted.
-func (t *BashTool) ExecuteWithContext(ctx context.Context, input map[string]any, cwd string) (*ToolResult, error) {
-	command, ok := input["command"].(string)
-	if !ok || command == "" {
-		return nil, fmt.Errorf("command is required and must be a string")
-	}
 
-	t.mu.Lock()
-	// Set project root from cwd
-	if t.projectRoot == "" {
-		t.projectRoot = cwd
-	}
-
-	// Set initial command cwd if not set
-	if t.commandCwd == "" {
-		t.commandCwd = cwd
-	}
-	t.mu.Unlock()
-
-	// Handle sed simulation (AC5) - before any security checks
-	if isSedInPlace(command) {
-		return t.executeSed(command, t.commandCwd)
-	}
-
-	// Check for sleep >= 2 in foreground (AC3)
-	if !isBackgroundExecution(input) {
-		if sleepSeconds := getSleepSeconds(command); sleepSeconds >= 2 {
-			return &ToolResult{
-				Content: "sleep >=2 seconds is not allowed in foreground; use run_in_background: true",
-				IsError: true,
-			}, nil
-		}
-	}
-
-	// Handle background execution (AC3)
-	if isBackgroundExecution(input) {
-		return t.executeBackground(command, t.commandCwd, input)
-	}
-
-	// Create command gate for security validation
-	gate := NewCommandGate(t.skipPermissions)
-
-	// Check command against blocked patterns
-	if err := gate.CheckCommand(command); err != nil {
-		return &ToolResult{
-			Content: fmt.Sprintf("Security error: %v", err),
-			IsError: true,
-		}, nil
-	}
-
-	// Check pipeline segments for read-only compliance (AC1)
-	if err := gate.CheckPipelineSegments(command); err != nil {
-		return &ToolResult{
-			Content: fmt.Sprintf("Security error: %v", err),
-			IsError: true,
-		}, nil
-	}
-
-	// Check if all paths in the command are within the working directory
-	// Skip validation for cd commands since they change directory state, not file content
-	if !isCdCommand(command) && !validateCommandPaths(command, t.commandCwd) {
-		return &ToolResult{
-			Content: fmt.Sprintf("Error: Command '%s' is not allowed. Access outside working directory is prohibited.", command),
-			IsError: true,
-		}, nil
-	}
-
-	timeout := 30
-	if timeoutVal, ok := input["timeout"].(float64); ok {
-		timeout = int(timeoutVal)
-	}
-
-	// First derive a context that inherits cancellation from the passed context.
-	// This is critical: when the executor cancels the parent context (sibling abort),
-	// we need the command to be interrupted.
-	derivedCtx, derivedCancel := context.WithCancel(ctx)
-	defer derivedCancel()
-
-	// Then apply timeout on top of the cancellation-inheriting context.
-	// This ensures: (1) sibling abort works via parent cancellation, (2) timeout works.
-	cmdCtx, cmdCancel := context.WithTimeout(derivedCtx, time.Duration(timeout)*time.Second)
-	defer cmdCancel()
-
-	cmd := exec.CommandContext(cmdCtx, "sh", "-c", command)
-	cmd.Dir = t.commandCwd
-
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	err := cmd.Run()
-	output := stdout.String()
-	if stderr.Len() > 0 {
-		if output != "" {
-			output += "\n"
-		}
-		output += "stderr: " + stderr.String()
-	}
-
-	// Handle cwd reset (AC4) - check if command changed directory outside project
-	t.resetCwdIfOutsideProject(command)
-
-	if cmdCtx.Err() == context.DeadlineExceeded {
-		return &ToolResult{
-			Content: fmt.Sprintf("Command timed out after %d seconds", timeout),
-			IsError: true,
-		}, nil
-	}
-
-	if err != nil {
-		exitErr, ok := err.(*exec.ExitError)
-		if ok {
-			exitCode := exitErr.ExitCode()
-			return &ToolResult{
-				Content: fmt.Sprintf("%s\n(exit code: %d)", output, exitCode),
-				IsError: true,
-			}, nil
-		}
-		return &ToolResult{
-			Content: fmt.Sprintf("Error executing command: %v\n%s", err, output),
-			IsError: true,
-		}, nil
-	}
-
-	// Handle output spill (AC2)
-	return t.handleOutput(output)
-}

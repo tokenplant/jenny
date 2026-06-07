@@ -2,6 +2,7 @@
 package tool
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,7 +24,7 @@ func TestEditTool_AC1_NoPriorRead(t *testing.T) {
 	}
 
 	// Try to edit without reading first
-	result, err := editTool.Execute(map[string]any{
+	result, err := editTool.Execute(context.Background(), map[string]any{
 		"file_path":  testFile,
 		"old_string": "hello",
 		"new_string": "hi",
@@ -55,7 +56,7 @@ func TestEditTool_AC1_ReadThenEditWorks(t *testing.T) {
 	}
 
 	// Read the file first
-	_, err = readTool.Execute(map[string]any{
+	_, err = readTool.Execute(context.Background(), map[string]any{
 		"file_path": testFile,
 	}, tmpDir)
 	if err != nil {
@@ -63,7 +64,7 @@ func TestEditTool_AC1_ReadThenEditWorks(t *testing.T) {
 	}
 
 	// Edit should succeed
-	result, err := editTool.Execute(map[string]any{
+	result, err := editTool.Execute(context.Background(), map[string]any{
 		"file_path":  testFile,
 		"old_string": "hello",
 		"new_string": "hi",
@@ -100,7 +101,7 @@ func TestEditTool_AC1_PartialReadRejected(t *testing.T) {
 	}
 
 	// Read with offset/limit (partial read)
-	_, err = readTool.Execute(map[string]any{
+	_, err = readTool.Execute(context.Background(), map[string]any{
 		"file_path": testFile,
 		"offset":    float64(2),
 		"limit":     float64(2),
@@ -110,7 +111,7 @@ func TestEditTool_AC1_PartialReadRejected(t *testing.T) {
 	}
 
 	// Try to edit - should fail due to partial read
-	result, err := editTool.Execute(map[string]any{
+	result, err := editTool.Execute(context.Background(), map[string]any{
 		"file_path":  testFile,
 		"old_string": "line 1",
 		"new_string": "new line 1",
@@ -141,7 +142,7 @@ func TestEditTool_AC2_StaleMtime(t *testing.T) {
 	}
 
 	// Read the file
-	_, err = readTool.Execute(map[string]any{
+	_, err = readTool.Execute(context.Background(), map[string]any{
 		"file_path": testFile,
 	}, tmpDir)
 	if err != nil {
@@ -156,7 +157,7 @@ func TestEditTool_AC2_StaleMtime(t *testing.T) {
 	}
 
 	// Try to edit - should fail due to staleness
-	result, err := editTool.Execute(map[string]any{
+	result, err := editTool.Execute(context.Background(), map[string]any{
 		"file_path":  testFile,
 		"old_string": "original",
 		"new_string": "new",
@@ -187,7 +188,7 @@ func TestEditTool_AC3_OldEqualsNew(t *testing.T) {
 	}
 
 	// Read the file first
-	_, err = readTool.Execute(map[string]any{
+	_, err = readTool.Execute(context.Background(), map[string]any{
 		"file_path": testFile,
 	}, tmpDir)
 	if err != nil {
@@ -195,7 +196,7 @@ func TestEditTool_AC3_OldEqualsNew(t *testing.T) {
 	}
 
 	// Try to edit with old_string == new_string
-	result, err := editTool.Execute(map[string]any{
+	result, err := editTool.Execute(context.Background(), map[string]any{
 		"file_path":  testFile,
 		"old_string": "hello",
 		"new_string": "hello",
@@ -227,7 +228,7 @@ func TestEditTool_AC4_MultipleMatches(t *testing.T) {
 	}
 
 	// Read the file first
-	_, err = readTool.Execute(map[string]any{
+	_, err = readTool.Execute(context.Background(), map[string]any{
 		"file_path": testFile,
 	}, tmpDir)
 	if err != nil {
@@ -235,7 +236,7 @@ func TestEditTool_AC4_MultipleMatches(t *testing.T) {
 	}
 
 	// Try to edit without replace_all - should fail
-	result, err := editTool.Execute(map[string]any{
+	result, err := editTool.Execute(context.Background(), map[string]any{
 		"file_path":  testFile,
 		"old_string": "foo",
 		"new_string": "bar",
@@ -251,7 +252,7 @@ func TestEditTool_AC4_MultipleMatches(t *testing.T) {
 	}
 
 	// Now edit with replace_all=true - should succeed
-	result, err = editTool.Execute(map[string]any{
+	result, err = editTool.Execute(context.Background(), map[string]any{
 		"file_path":   testFile,
 		"old_string":  "foo",
 		"new_string":  "bar",
@@ -289,7 +290,7 @@ func TestEditTool_AC5_IpynbRedirect(t *testing.T) {
 	}
 
 	// Read the file first
-	_, err = readTool.Execute(map[string]any{
+	_, err = readTool.Execute(context.Background(), map[string]any{
 		"file_path": ipynbFile,
 	}, tmpDir)
 	if err != nil {
@@ -297,7 +298,7 @@ func TestEditTool_AC5_IpynbRedirect(t *testing.T) {
 	}
 
 	// Try to edit - should be redirected to NotebookEdit
-	result, err := editTool.Execute(map[string]any{
+	result, err := editTool.Execute(context.Background(), map[string]any{
 		"file_path":  ipynbFile,
 		"old_string": "foo",
 		"new_string": "bar",
@@ -320,7 +321,7 @@ func TestEditTool_AC5_IpynbRedirect(t *testing.T) {
 	}
 
 	// Read the .py file
-	_, err = readTool.Execute(map[string]any{
+	_, err = readTool.Execute(context.Background(), map[string]any{
 		"file_path": pyFile,
 	}, tmpDir)
 	if err != nil {
@@ -328,7 +329,7 @@ func TestEditTool_AC5_IpynbRedirect(t *testing.T) {
 	}
 
 	// Edit should work (not redirected)
-	result, err = editTool.Execute(map[string]any{
+	result, err = editTool.Execute(context.Background(), map[string]any{
 		"file_path":  pyFile,
 		"old_string": "foo",
 		"new_string": "bar",
@@ -356,7 +357,7 @@ func TestEditTool_ZeroMatches(t *testing.T) {
 	}
 
 	// Read the file first
-	_, err = readTool.Execute(map[string]any{
+	_, err = readTool.Execute(context.Background(), map[string]any{
 		"file_path": testFile,
 	}, tmpDir)
 	if err != nil {
@@ -364,7 +365,7 @@ func TestEditTool_ZeroMatches(t *testing.T) {
 	}
 
 	// Try to edit with a string that doesn't exist
-	result, err := editTool.Execute(map[string]any{
+	result, err := editTool.Execute(context.Background(), map[string]any{
 		"file_path":  testFile,
 		"old_string": "notfound",
 		"new_string": "new",
@@ -398,7 +399,7 @@ func TestEditTool_AC4_SingleMatchNoReplaceAll(t *testing.T) {
 	}
 
 	// Read the file first
-	_, err = readTool.Execute(map[string]any{
+	_, err = readTool.Execute(context.Background(), map[string]any{
 		"file_path": testFile,
 	}, tmpDir)
 	if err != nil {
@@ -406,7 +407,7 @@ func TestEditTool_AC4_SingleMatchNoReplaceAll(t *testing.T) {
 	}
 
 	// Edit with single match - should succeed without replace_all
-	result, err := editTool.Execute(map[string]any{
+	result, err := editTool.Execute(context.Background(), map[string]any{
 		"file_path":  testFile,
 		"old_string": "hello",
 		"new_string": "hi",
@@ -442,7 +443,7 @@ func TestEditTool_DiffOutput(t *testing.T) {
 		t.Fatalf("failed to create test file: %v", err)
 	}
 
-	_, err = readTool.Execute(map[string]any{
+	_, err = readTool.Execute(context.Background(), map[string]any{
 		"file_path": testFile,
 	}, tmpDir)
 	if err != nil {
@@ -450,7 +451,7 @@ func TestEditTool_DiffOutput(t *testing.T) {
 	}
 
 	// Edit content
-	result, err := editTool.Execute(map[string]any{
+	result, err := editTool.Execute(context.Background(), map[string]any{
 		"file_path":  testFile,
 		"old_string": "line 2",
 		"new_string": "line 2 modified",
@@ -488,7 +489,7 @@ func TestEditTool_CacheUpdated(t *testing.T) {
 		t.Fatalf("failed to create test file: %v", err)
 	}
 
-	_, err = readTool.Execute(map[string]any{
+	_, err = readTool.Execute(context.Background(), map[string]any{
 		"file_path": testFile,
 	}, tmpDir)
 	if err != nil {
@@ -496,7 +497,7 @@ func TestEditTool_CacheUpdated(t *testing.T) {
 	}
 
 	// First edit
-	result1, err := editTool.Execute(map[string]any{
+	result1, err := editTool.Execute(context.Background(), map[string]any{
 		"file_path":  testFile,
 		"old_string": "hello",
 		"new_string": "hi",
@@ -509,7 +510,7 @@ func TestEditTool_CacheUpdated(t *testing.T) {
 	}
 
 	// Second edit (no intervening read) - should succeed because cache was updated
-	result2, err := editTool.Execute(map[string]any{
+	result2, err := editTool.Execute(context.Background(), map[string]any{
 		"file_path":  testFile,
 		"old_string": "world",
 		"new_string": "universe",
@@ -546,7 +547,7 @@ func TestEditTool_LineEndingNormalization(t *testing.T) {
 	}
 
 	// Read the file first
-	_, err = readTool.Execute(map[string]any{
+	_, err = readTool.Execute(context.Background(), map[string]any{
 		"file_path": testFile,
 	}, tmpDir)
 	if err != nil {
@@ -554,7 +555,7 @@ func TestEditTool_LineEndingNormalization(t *testing.T) {
 	}
 
 	// Edit should work with LF matching (normalized from CRLF)
-	result, err := editTool.Execute(map[string]any{
+	result, err := editTool.Execute(context.Background(), map[string]any{
 		"file_path":  testFile,
 		"old_string": "line2",
 		"new_string": "line2-modified",
@@ -594,7 +595,7 @@ func TestEditTool_OverlappingMatches(t *testing.T) {
 	}
 
 	// Read the file first
-	_, err = readTool.Execute(map[string]any{
+	_, err = readTool.Execute(context.Background(), map[string]any{
 		"file_path": testFile,
 	}, tmpDir)
 	if err != nil {
@@ -602,7 +603,7 @@ func TestEditTool_OverlappingMatches(t *testing.T) {
 	}
 
 	// Replace "aaa" with "b" - should replace non-overlapping occurrences
-	result, err := editTool.Execute(map[string]any{
+	result, err := editTool.Execute(context.Background(), map[string]any{
 		"file_path":   testFile,
 		"old_string":  "aaa",
 		"new_string":  "b",

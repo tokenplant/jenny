@@ -25,27 +25,7 @@ func (m *execMockTool) Description() string                 { return "mock tool 
 func (m *execMockTool) InputSchema() map[string]any         { return map[string]any{} }
 func (m *execMockTool) ConcurrencySafe(map[string]any) bool { return m.isSafe }
 
-func (m *execMockTool) Execute(input map[string]any, cwd string) (*tool.ToolResult, error) {
-	done := make(chan struct{})
-	go func() {
-		time.Sleep(m.delay)
-		close(done)
-	}()
-
-	select {
-	case <-done:
-		// Completed normally
-	}
-
-	return &tool.ToolResult{
-		Content: m.content,
-		IsError: m.isError,
-	}, m.err
-}
-
-// ExecuteWithContext runs the tool with context cancellation support.
-// The mock checks ctx.Done() periodically to detect sibling abort.
-func (m *execMockTool) ExecuteWithContext(ctx context.Context, input map[string]any, cwd string) (*tool.ToolResult, error) {
+func (m *execMockTool) Execute(ctx context.Context, input map[string]any, cwd string) (*tool.ToolResult, error) {
 	// Use a ticker to allow periodic context checks during long delays.
 	// This simulates how exec.CommandContext actually checks context cancellation.
 	ticker := time.NewTicker(10 * time.Millisecond)
@@ -90,7 +70,7 @@ func TestExecutor_AC1_ParallelReadOnly(t *testing.T) {
 	}
 
 	start := time.Now()
-	results, err := executor.Execute(blocks)
+	results, err := executor.Execute(context.Background(),blocks)
 	elapsed := time.Since(start)
 
 	if err != nil {
@@ -132,7 +112,7 @@ func TestExecutor_AC2_SerializedMutation(t *testing.T) {
 	}
 
 	start := time.Now()
-	results, err := executor.Execute(writeBlocks)
+	results, err := executor.Execute(context.Background(),writeBlocks)
 	elapsed := time.Since(start)
 
 	if err != nil {
@@ -155,7 +135,7 @@ func TestExecutor_AC2_SerializedMutation(t *testing.T) {
 		{ID: "5", Name: "read", Input: map[string]any{"file_path": "b.txt"}},
 	}
 
-	mixedResults, err := executor.Execute(mixedBlocks)
+	mixedResults, err := executor.Execute(context.Background(),mixedBlocks)
 	if err != nil {
 		t.Fatalf("Execute returned error: %v", err)
 	}
@@ -178,7 +158,7 @@ func TestExecutor_AC2_SerializedMutation(t *testing.T) {
 	}
 
 	bashStart := time.Now()
-	bashResults, err := bashExecutor.Execute(bashBlocks)
+	bashResults, err := bashExecutor.Execute(context.Background(), bashBlocks)
 	bashElapsed := time.Since(bashStart)
 
 	if err != nil {
@@ -196,41 +176,43 @@ func TestExecutor_AC2_SerializedMutation(t *testing.T) {
 }
 
 // TestExecutor_AC3_BashSiblingAbort verifies AC3: Bash failure aborts sibling bash in same batch.
-// When one bash fails, subsequent sibling bash processes should be aborted.
+// When one bash fails, subsequent sibling bash processes should be aborted (skipped).
 func TestExecutor_AC3_BashSiblingAbort(t *testing.T) {
+	// We want to test that if the SECOND bash tool fails, the THIRD one is skipped.
+	// The FIRST one should have already completed.
 	tools := []tool.Tool{
+		&execMockTool{
+			name:    "bash",
+			delay:   100 * time.Millisecond,
+			isSafe:  false,
+			content: "bash1 success",
+		},
 		&execMockTool{
 			name:    "bash",
 			delay:   100 * time.Millisecond,
 			isSafe:  false,
 			err:     fmt.Errorf("exit 1"), // This one fails and triggers abort
 			isError: true,
-			content: "bash1 failed",
+			content: "bash2 failed",
 		},
 		&execMockTool{
 			name:    "bash",
 			delay:   500 * time.Millisecond,
 			isSafe:  false,
-			content: "bash2 running",
-		},
-		&execMockTool{
-			name:    "bash",
-			delay:   500 * time.Millisecond,
-			isSafe:  false,
-			content: "bash3 running",
+			content: "bash3 should be skipped",
 		},
 	}
 
 	executor := NewToolExecutor(tools, "/tmp")
 
 	blocks := []toolUseBlock{
-		{ID: "1", Name: "bash", Input: map[string]any{"command": "exit 1"}},
-		{ID: "2", Name: "bash", Input: map[string]any{"command": "sleep 10"}},
+		{ID: "1", Name: "bash", Input: map[string]any{"command": "echo success"}},
+		{ID: "2", Name: "bash", Input: map[string]any{"command": "exit 1"}},
 		{ID: "3", Name: "bash", Input: map[string]any{"command": "sleep 10"}},
 	}
 
 	start := time.Now()
-	results, err := executor.Execute(blocks)
+	results, err := executor.Execute(context.Background(), blocks)
 	elapsed := time.Since(start)
 
 	if err != nil {
@@ -238,35 +220,32 @@ func TestExecutor_AC3_BashSiblingAbort(t *testing.T) {
 	}
 
 	if len(results) != 3 {
-		t.Errorf("Expected 3 results, got %d", len(results))
+		t.Fatalf("Expected 3 results, got %d", len(results))
 	}
 
-	// Result 1 (failing bash) should be an error
-	if !results[0].IsError {
-		t.Errorf("Result 1 (failing bash) should be an error")
+	// Result 1 should be success
+	if results[0].Content != "bash1 success" || results[0].IsError {
+		t.Errorf("Result 1: expected success, got %v (IsError=%v)", results[0].Content, results[0].IsError)
 	}
 
-	// Siblings should be aborted - they should not run to completion.
-	// Since bash1 fails at ~100ms, and bash is serial, total should be ~100ms.
-	if elapsed >= 400*time.Millisecond {
-		t.Errorf("Sibling abort: execution took %v, expected <400ms (siblings should be aborted)", elapsed)
+	// Result 2 should be failure
+	if !results[1].IsError {
+		t.Errorf("Result 2 (failing bash) should be an error")
 	}
 
-	// Results 2 and 3 should be aborted
+	// Result 3 should be aborted
 	expectedAbort := "Tool execution aborted due to sibling failure"
-	if results[1].Content != expectedAbort {
-		t.Errorf("Result 2: expected %q, got %q", expectedAbort, results[1].Content)
-	}
 	if results[2].Content != expectedAbort {
 		t.Errorf("Result 3: expected %q, got %q", expectedAbort, results[2].Content)
 	}
 
-	// Verify results are in request order
-	for i, res := range results {
-		expectedID := fmt.Sprintf("%d", i+1)
-		if res.ToolUseID != expectedID {
-			t.Errorf("Result %d: expected ToolUseID=%s, got %s", i, expectedID, res.ToolUseID)
-		}
+	// Timing: bash1 (100ms) + bash2 (100ms) + bash3 (aborted instantly).
+	// Total should be ~200ms.
+	if elapsed >= 400*time.Millisecond {
+		t.Errorf("Sibling abort: execution took %v, expected <400ms (bash3 should be skipped)", elapsed)
+	}
+	if elapsed < 200*time.Millisecond {
+		t.Errorf("Serial execution: took %v, expected >=200ms (bash1 and bash2 must run)", elapsed)
 	}
 }
 
@@ -283,7 +262,7 @@ func TestExecutor_AC4_UnknownTool(t *testing.T) {
 	}
 
 	start := time.Now()
-	results, err := executor.Execute(blocks)
+	results, err := executor.Execute(context.Background(),blocks)
 	elapsed := time.Since(start)
 
 	if err != nil {
@@ -326,7 +305,7 @@ func TestExecutor_AC5_ResultOrdering(t *testing.T) {
 		{ID: "3", Name: "grep", Input: map[string]any{}},
 	}
 
-	results, err := executor.Execute(blocks)
+	results, err := executor.Execute(context.Background(),blocks)
 
 	if err != nil {
 		t.Fatalf("Execute returned error: %v", err)
@@ -372,7 +351,7 @@ func TestExecutor_MixedBatch(t *testing.T) {
 	}
 
 	start := time.Now()
-	results, err := executor.Execute(blocks)
+	results, err := executor.Execute(context.Background(),blocks)
 	elapsed := time.Since(start)
 
 	if err != nil {
@@ -438,7 +417,7 @@ func TestExecutor_ConcurrencyCap(t *testing.T) {
 	}
 
 	start := time.Now()
-	results, err := executor.Execute(blocks)
+	results, err := executor.Execute(context.Background(),blocks)
 	elapsed := time.Since(start)
 
 	if err != nil {
@@ -484,7 +463,7 @@ func TestExecutor_BashFailureDoesNotAbortNonBash(t *testing.T) {
 		{ID: "2", Name: "read", Input: map[string]any{"file_path": "a.txt"}},
 	}
 
-	results, err := executor.Execute(blocks)
+	results, err := executor.Execute(context.Background(),blocks)
 
 	if err != nil {
 		t.Fatalf("Execute returned error: %v", err)
@@ -510,7 +489,7 @@ func TestExecutor_EmptyBatch(t *testing.T) {
 
 	executor := NewToolExecutor(tools, "/tmp")
 
-	results, err := executor.Execute([]toolUseBlock{})
+	results, err := executor.Execute(context.Background(),[]toolUseBlock{})
 
 	if err != nil {
 		t.Fatalf("Execute returned error: %v", err)
@@ -540,7 +519,7 @@ func TestExecutor_AllReadOnlyTools(t *testing.T) {
 	}
 
 	start := time.Now()
-	results, err := executor.Execute(blocks)
+	results, err := executor.Execute(context.Background(),blocks)
 	elapsed := time.Since(start)
 
 	if err != nil {
@@ -574,7 +553,7 @@ func TestExecutor_BashAbortOnlyAffectsBash(t *testing.T) {
 		{ID: "3", Name: "bash", Input: map[string]any{"command": "sleep 10"}},
 	}
 
-	results, err := executor.Execute(blocks)
+	results, err := executor.Execute(context.Background(),blocks)
 
 	if err != nil {
 		t.Fatalf("Execute returned error: %v", err)

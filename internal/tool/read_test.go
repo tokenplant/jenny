@@ -1,6 +1,7 @@
 package tool
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -101,7 +102,7 @@ func TestReadTool_Execute(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := tool.Execute(tt.input, tt.cwd)
+			result, err := tool.Execute(context.Background(), tt.input, tt.cwd)
 			if err != nil {
 				if !tt.wantErr {
 					t.Errorf("unexpected error: %v", err)
@@ -174,7 +175,7 @@ func TestReadTool_PathTraversal(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := tool.Execute(tt.input, tt.cwd)
+			result, err := tool.Execute(context.Background(), tt.input, tt.cwd)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}

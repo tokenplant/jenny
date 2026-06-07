@@ -18,12 +18,8 @@ type mockTool struct {
 func (t *mockTool) Name() string                { return t.name }
 func (t *mockTool) Description() string         { return t.description }
 func (t *mockTool) InputSchema() map[string]any { return t.inputSchema }
-func (t *mockTool) Execute(input map[string]any, cwd string) (*tool.ToolResult, error) {
+func (t *mockTool) Execute(ctx context.Context, input map[string]any, cwd string) (*tool.ToolResult, error) {
 	return &tool.ToolResult{Content: "mock result"}, nil
-}
-
-func (t *mockTool) ExecuteWithContext(ctx context.Context, input map[string]any, cwd string) (*tool.ToolResult, error) {
-	return t.Execute(input, cwd)
 }
 
 func TestAssembleSystemPrompt_CustomReplacesDefaults(t *testing.T) {

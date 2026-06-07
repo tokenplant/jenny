@@ -351,7 +351,7 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 
 		// Execute all tools using the parallel executor
 		executor := NewToolExecutor(e.tools, cwd)
-		execResults, err := executor.Execute(execBlocks)
+		execResults, err := executor.Execute(ctx, execBlocks)
 		if err != nil {
 			return "", fmt.Errorf("executing tools: %w", err)
 		}

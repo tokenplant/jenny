@@ -138,7 +138,7 @@ func (t *MCPTool) InputSchema() map[string]any {
 }
 
 // Execute runs the tool with the given input and returns the result.
-func (t *MCPTool) Execute(input map[string]any, cwd string) (*tool.ToolResult, error) {
+func (t *MCPTool) Execute(ctx context.Context, input map[string]any, cwd string) (*tool.ToolResult, error) {
 	client := GetClient(t.serverName)
 	if client == nil {
 		return &tool.ToolResult{
@@ -159,13 +159,6 @@ func (t *MCPTool) Execute(input map[string]any, cwd string) (*tool.ToolResult, e
 		Content: result,
 		IsError: false,
 	}, nil
-}
-
-// ExecuteWithContext runs the tool with context support.
-// MCP tool calls are typically fast and don't need context cancellation,
-// so this delegates to Execute.
-func (t *MCPTool) ExecuteWithContext(ctx context.Context, input map[string]any, cwd string) (*tool.ToolResult, error) {
-	return t.Execute(input, cwd)
 }
 
 // NormalizeName normalizes a name for use in tool naming.

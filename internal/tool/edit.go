@@ -56,7 +56,7 @@ func (t *EditTool) InputSchema() map[string]any {
 }
 
 // Execute replaces exact string in a file after validating the read-before-write contract.
-func (t *EditTool) Execute(input map[string]any, cwd string) (*ToolResult, error) {
+func (t *EditTool) Execute(ctx context.Context, input map[string]any, cwd string) (*ToolResult, error) {
 	filePath, ok := input["file_path"].(string)
 	if !ok || filePath == "" {
 		return &ToolResult{
@@ -289,9 +289,4 @@ func isBinary(content string) bool {
 	return false
 }
 
-// ExecuteWithContext runs the tool with context support. Edit operations are fast
-// and typically complete before context cancellation is relevant, so this delegates
-// to Execute.
-func (t *EditTool) ExecuteWithContext(ctx context.Context, input map[string]any, cwd string) (*ToolResult, error) {
-	return t.Execute(input, cwd)
-}
+

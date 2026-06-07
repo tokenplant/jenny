@@ -48,7 +48,7 @@ func (t *WriteTool) InputSchema() map[string]any {
 }
 
 // Execute writes content to a file after validating the read-before-write contract.
-func (t *WriteTool) Execute(input map[string]any, cwd string) (*ToolResult, error) {
+func (t *WriteTool) Execute(ctx context.Context, input map[string]any, cwd string) (*ToolResult, error) {
 	filePath, ok := input["file_path"].(string)
 	if !ok || filePath == "" {
 		return &ToolResult{
@@ -172,9 +172,4 @@ func PathInWorkingDir(filePath, cwd string) (string, error) {
 	return absFilePath, nil
 }
 
-// ExecuteWithContext runs the tool with context support. Write operations are fast
-// and typically complete before context cancellation is relevant, so this delegates
-// to Execute.
-func (t *WriteTool) ExecuteWithContext(ctx context.Context, input map[string]any, cwd string) (*ToolResult, error) {
-	return t.Execute(input, cwd)
-}
+

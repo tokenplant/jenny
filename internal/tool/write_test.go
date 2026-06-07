@@ -1,6 +1,7 @@
 package tool
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,7 +17,7 @@ func TestWriteTool_AC1_NoPriorRead(t *testing.T) {
 
 	// Try to write without reading first
 	newFile := filepath.Join(tmpDir, "newfile.txt")
-	result, err := writeTool.Execute(map[string]any{
+	result, err := writeTool.Execute(context.Background(), map[string]any{
 		"file_path": newFile,
 		"content":   "hello world",
 	}, tmpDir)
@@ -47,7 +48,7 @@ func TestWriteTool_AC1_ReadThenWriteWorks(t *testing.T) {
 	}
 
 	// Read the file first
-	readResult, err := readTool.Execute(map[string]any{
+	readResult, err := readTool.Execute(context.Background(), map[string]any{
 		"file_path": newFile,
 	}, tmpDir)
 	if err != nil {
@@ -58,7 +59,7 @@ func TestWriteTool_AC1_ReadThenWriteWorks(t *testing.T) {
 	}
 
 	// Now write should succeed
-	writeResult, err := writeTool.Execute(map[string]any{
+	writeResult, err := writeTool.Execute(context.Background(), map[string]any{
 		"file_path": newFile,
 		"content":   "new content",
 	}, tmpDir)
@@ -85,7 +86,7 @@ func TestWriteTool_AC2_StaleMtime(t *testing.T) {
 	}
 
 	// Read the file
-	_, err = readTool.Execute(map[string]any{
+	_, err = readTool.Execute(context.Background(), map[string]any{
 		"file_path": testFile,
 	}, tmpDir)
 	if err != nil {
@@ -100,7 +101,7 @@ func TestWriteTool_AC2_StaleMtime(t *testing.T) {
 	}
 
 	// Try to write - should fail due to staleness
-	result, err := writeTool.Execute(map[string]any{
+	result, err := writeTool.Execute(context.Background(), map[string]any{
 		"file_path": testFile,
 		"content":   "new content",
 	}, tmpDir)
@@ -142,7 +143,7 @@ func TestWriteTool_AC3_ParentDirs(t *testing.T) {
 	}
 
 	// Read the file first
-	_, err = readTool.Execute(map[string]any{
+	_, err = readTool.Execute(context.Background(), map[string]any{
 		"file_path": testFile,
 	}, tmpDir)
 	if err != nil {
@@ -156,7 +157,7 @@ func TestWriteTool_AC3_ParentDirs(t *testing.T) {
 	}
 
 	// Write to the deep path - WriteTool should create parent dirs automatically
-	writeResult, err := writeTool.Execute(map[string]any{
+	writeResult, err := writeTool.Execute(context.Background(), map[string]any{
 		"file_path": testFile,
 		"content":   "new content",
 	}, tmpDir)
@@ -191,7 +192,7 @@ func TestWriteTool_AC4_PatchDiff(t *testing.T) {
 		t.Fatalf("failed to create test file: %v", err)
 	}
 
-	_, err = readTool.Execute(map[string]any{
+	_, err = readTool.Execute(context.Background(), map[string]any{
 		"file_path": testFile,
 	}, tmpDir)
 	if err != nil {
@@ -199,7 +200,7 @@ func TestWriteTool_AC4_PatchDiff(t *testing.T) {
 	}
 
 	// Write new content
-	result, err := writeTool.Execute(map[string]any{
+	result, err := writeTool.Execute(context.Background(), map[string]any{
 		"file_path": testFile,
 		"content":   "line 1\nline 2 modified\nline 3\n",
 	}, tmpDir)
@@ -236,7 +237,7 @@ func TestWriteTool_AC5_CacheUpdated(t *testing.T) {
 		t.Fatalf("failed to create test file: %v", err)
 	}
 
-	_, err = readTool.Execute(map[string]any{
+	_, err = readTool.Execute(context.Background(), map[string]any{
 		"file_path": testFile,
 	}, tmpDir)
 	if err != nil {
@@ -244,7 +245,7 @@ func TestWriteTool_AC5_CacheUpdated(t *testing.T) {
 	}
 
 	// First write
-	result1, err := writeTool.Execute(map[string]any{
+	result1, err := writeTool.Execute(context.Background(), map[string]any{
 		"file_path": testFile,
 		"content":   "first write\n",
 	}, tmpDir)
@@ -256,7 +257,7 @@ func TestWriteTool_AC5_CacheUpdated(t *testing.T) {
 	}
 
 	// Second write (no intervening read) - should succeed because cache was updated
-	result2, err := writeTool.Execute(map[string]any{
+	result2, err := writeTool.Execute(context.Background(), map[string]any{
 		"file_path": testFile,
 		"content":   "second write\n",
 	}, tmpDir)
@@ -292,7 +293,7 @@ func TestReadWriteTool_ReadBeforeWrite(t *testing.T) {
 	}
 
 	// Read the file
-	readResult, err := readTool.Execute(map[string]any{
+	readResult, err := readTool.Execute(context.Background(), map[string]any{
 		"file_path": testFile,
 	}, tmpDir)
 	if err != nil {
@@ -306,7 +307,7 @@ func TestReadWriteTool_ReadBeforeWrite(t *testing.T) {
 	}
 
 	// Write modified content
-	writeResult, err := writeTool.Execute(map[string]any{
+	writeResult, err := writeTool.Execute(context.Background(), map[string]any{
 		"file_path": testFile,
 		"content":   "hello universe\n",
 	}, tmpDir)
@@ -347,7 +348,7 @@ func TestWriteTool_PartialReadFails(t *testing.T) {
 	}
 
 	// Read with offset/limit (partial read)
-	_, err = readTool.Execute(map[string]any{
+	_, err = readTool.Execute(context.Background(), map[string]any{
 		"file_path": testFile,
 		"offset":    float64(2),
 		"limit":     float64(2),
@@ -357,7 +358,7 @@ func TestWriteTool_PartialReadFails(t *testing.T) {
 	}
 
 	// Try to write - should fail due to partial read
-	result, err := writeTool.Execute(map[string]any{
+	result, err := writeTool.Execute(context.Background(), map[string]any{
 		"file_path": testFile,
 		"content":   "new content\n",
 	}, tmpDir)
@@ -387,7 +388,7 @@ func TestWriteTool_UnchangedContent(t *testing.T) {
 		t.Fatalf("failed to create test file: %v", err)
 	}
 
-	_, err = readTool.Execute(map[string]any{
+	_, err = readTool.Execute(context.Background(), map[string]any{
 		"file_path": testFile,
 	}, tmpDir)
 	if err != nil {
@@ -395,7 +396,7 @@ func TestWriteTool_UnchangedContent(t *testing.T) {
 	}
 
 	// Write same content
-	result, err := writeTool.Execute(map[string]any{
+	result, err := writeTool.Execute(context.Background(), map[string]any{
 		"file_path": testFile,
 		"content":   content,
 	}, tmpDir)

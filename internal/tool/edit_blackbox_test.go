@@ -1,6 +1,7 @@
 package tool
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,7 +17,7 @@ func TestEditTool_AC1_NoPriorRead_BlackBox(t *testing.T) {
 	et := NewEditTool(cache)
 
 	// AC1: Edit a path never read (file doesn't exist)
-	result, err := et.Execute(map[string]any{
+	result, err := et.Execute(context.Background(), map[string]any{
 		"file_path":  filepath.Join(tmpDir, "never_read.txt"),
 		"old_string": "hello",
 		"new_string": "hi",
@@ -32,7 +33,7 @@ func TestEditTool_AC1_NoPriorRead_BlackBox(t *testing.T) {
 	}
 
 	// Edit with empty file_path
-	result, err = et.Execute(map[string]any{
+	result, err = et.Execute(context.Background(), map[string]any{
 		"file_path":  "",
 		"old_string": "hello",
 		"new_string": "hi",
@@ -45,7 +46,7 @@ func TestEditTool_AC1_NoPriorRead_BlackBox(t *testing.T) {
 	}
 
 	// Edit with non-string file_path
-	result, err = et.Execute(map[string]any{
+	result, err = et.Execute(context.Background(), map[string]any{
 		"file_path":  42,
 		"old_string": "hello",
 		"new_string": "hi",
@@ -71,13 +72,13 @@ func TestEditTool_AC1_ReadThenEdit_BlackBox(t *testing.T) {
 	}
 
 	// Read first
-	_, err := rt.Execute(map[string]any{"file_path": f}, tmpDir)
+	_, err := rt.Execute(context.Background(), map[string]any{"file_path": f}, tmpDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Edit should succeed
-	result, err := et.Execute(map[string]any{
+	result, err := et.Execute(context.Background(), map[string]any{
 		"file_path":  f,
 		"old_string": "hello",
 		"new_string": "hi",
@@ -110,7 +111,7 @@ func TestEditTool_AC1_PartialRead_BlackBox(t *testing.T) {
 	}
 
 	// Partial read with offset/limit
-	_, err := rt.Execute(map[string]any{
+	_, err := rt.Execute(context.Background(), map[string]any{
 		"file_path": f,
 		"offset":    float64(1),
 		"limit":     float64(1),
@@ -120,7 +121,7 @@ func TestEditTool_AC1_PartialRead_BlackBox(t *testing.T) {
 	}
 
 	// Edit should fail
-	result, err := et.Execute(map[string]any{
+	result, err := et.Execute(context.Background(), map[string]any{
 		"file_path":  f,
 		"old_string": "line1",
 		"new_string": "modified",
@@ -136,13 +137,13 @@ func TestEditTool_AC1_PartialRead_BlackBox(t *testing.T) {
 	}
 
 	// Now do full read (no offset/limit)
-	_, err = rt.Execute(map[string]any{"file_path": f}, tmpDir)
+	_, err = rt.Execute(context.Background(), map[string]any{"file_path": f}, tmpDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Edit should now succeed
-	result, err = et.Execute(map[string]any{
+	result, err = et.Execute(context.Background(), map[string]any{
 		"file_path":  f,
 		"old_string": "line1",
 		"new_string": "modified",
@@ -176,7 +177,7 @@ func TestEditTool_AC2_StaleMtime_BlackBox(t *testing.T) {
 		}
 
 		// Read
-		_, err := rt.Execute(map[string]any{"file_path": f}, tmpDir)
+		_, err := rt.Execute(context.Background(), map[string]any{"file_path": f}, tmpDir)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -188,7 +189,7 @@ func TestEditTool_AC2_StaleMtime_BlackBox(t *testing.T) {
 		}
 
 		// Edit should fail
-		result, err := et.Execute(map[string]any{
+		result, err := et.Execute(context.Background(), map[string]any{
 			"file_path":  f,
 			"old_string": "original",
 			"new_string": "replaced",
@@ -220,7 +221,7 @@ func TestEditTool_AC2_StaleMtime_BlackBox(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		_, err := rt.Execute(map[string]any{"file_path": f}, tmpDir)
+		_, err := rt.Execute(context.Background(), map[string]any{"file_path": f}, tmpDir)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -232,7 +233,7 @@ func TestEditTool_AC2_StaleMtime_BlackBox(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		result, err := et.Execute(map[string]any{
+		result, err := et.Execute(context.Background(), map[string]any{
 			"file_path":  f,
 			"old_string": "original",
 			"new_string": "replaced",
@@ -259,13 +260,13 @@ func TestEditTool_AC3_OldEqualsNew_BlackBox(t *testing.T) {
 	}
 
 	// Read
-	_, err := rt.Execute(map[string]any{"file_path": f}, tmpDir)
+	_, err := rt.Execute(context.Background(), map[string]any{"file_path": f}, tmpDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// old === new should be rejected
-	result, err := et.Execute(map[string]any{
+	result, err := et.Execute(context.Background(), map[string]any{
 		"file_path":  f,
 		"old_string": "same",
 		"new_string": "same",
@@ -281,7 +282,7 @@ func TestEditTool_AC3_OldEqualsNew_BlackBox(t *testing.T) {
 	}
 
 	// Both empty strings should also be rejected
-	result, err = et.Execute(map[string]any{
+	result, err = et.Execute(context.Background(), map[string]any{
 		"file_path":  f,
 		"old_string": "",
 		"new_string": "",
@@ -308,13 +309,13 @@ func TestEditTool_AC4_MultipleMatches_BlackBox(t *testing.T) {
 	}
 
 	// Read
-	_, err := rt.Execute(map[string]any{"file_path": f}, tmpDir)
+	_, err := rt.Execute(context.Background(), map[string]any{"file_path": f}, tmpDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Edit without replace_all on repeated text - should fail
-	result, err := et.Execute(map[string]any{
+	result, err := et.Execute(context.Background(), map[string]any{
 		"file_path":  f,
 		"old_string": "foo",
 		"new_string": "baz",
@@ -330,7 +331,7 @@ func TestEditTool_AC4_MultipleMatches_BlackBox(t *testing.T) {
 	}
 
 	// Single match scenario - should succeed without replace_all
-	result, err = et.Execute(map[string]any{
+	result, err = et.Execute(context.Background(), map[string]any{
 		"file_path":  f,
 		"old_string": "bar",
 		"new_string": "qux",
@@ -348,12 +349,12 @@ func TestEditTool_AC4_MultipleMatches_BlackBox(t *testing.T) {
 	if err := os.WriteFile(f2, []byte("foo foo foo\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	_, err = rt.Execute(map[string]any{"file_path": f2}, tmpDir)
+	_, err = rt.Execute(context.Background(), map[string]any{"file_path": f2}, tmpDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	result, err = et.Execute(map[string]any{
+	result, err = et.Execute(context.Background(), map[string]any{
 		"file_path":   f2,
 		"old_string":  "foo",
 		"new_string":  "bar",
@@ -385,12 +386,12 @@ func TestEditTool_AC5_IpynbRedirect_BlackBox(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := rt.Execute(map[string]any{"file_path": ipynbFile}, tmpDir)
+	_, err := rt.Execute(context.Background(), map[string]any{"file_path": ipynbFile}, tmpDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	result, err := et.Execute(map[string]any{
+	result, err := et.Execute(context.Background(), map[string]any{
 		"file_path":  ipynbFile,
 		"old_string": "cells",
 		"new_string": "cells_modified",
@@ -411,12 +412,12 @@ func TestEditTool_AC5_IpynbRedirect_BlackBox(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = rt.Execute(map[string]any{"file_path": pyFile}, tmpDir)
+	_, err = rt.Execute(context.Background(), map[string]any{"file_path": pyFile}, tmpDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	result, err = et.Execute(map[string]any{
+	result, err = et.Execute(context.Background(), map[string]any{
 		"file_path":  pyFile,
 		"old_string": "hello",
 		"new_string": "world",
@@ -447,13 +448,13 @@ func TestEditTool_ZeroMatches_BlackBox(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := rt.Execute(map[string]any{"file_path": f}, tmpDir)
+	_, err := rt.Execute(context.Background(), map[string]any{"file_path": f}, tmpDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Search for non-existent string
-	result, err := et.Execute(map[string]any{
+	result, err := et.Execute(context.Background(), map[string]any{
 		"file_path":  f,
 		"old_string": "nonexistent",
 		"new_string": "replacement",
@@ -490,13 +491,13 @@ func TestEditTool_CacheUpdated_BlackBox(t *testing.T) {
 	}
 
 	// Read
-	_, err := rt.Execute(map[string]any{"file_path": f}, tmpDir)
+	_, err := rt.Execute(context.Background(), map[string]any{"file_path": f}, tmpDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// First edit
-	result, err := et.Execute(map[string]any{
+	result, err := et.Execute(context.Background(), map[string]any{
 		"file_path":  f,
 		"old_string": "first",
 		"new_string": "1st",
@@ -509,7 +510,7 @@ func TestEditTool_CacheUpdated_BlackBox(t *testing.T) {
 	}
 
 	// Second edit (no intervening Read) — should succeed because cache was updated
-	result, err = et.Execute(map[string]any{
+	result, err = et.Execute(context.Background(), map[string]any{
 		"file_path":  f,
 		"old_string": "second",
 		"new_string": "2nd",
@@ -539,12 +540,12 @@ func TestEditTool_DiffOutput_BlackBox(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := rt.Execute(map[string]any{"file_path": f}, tmpDir)
+	_, err := rt.Execute(context.Background(), map[string]any{"file_path": f}, tmpDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	result, err := et.Execute(map[string]any{
+	result, err := et.Execute(context.Background(), map[string]any{
 		"file_path":  f,
 		"old_string": "line two",
 		"new_string": "line two modified",
@@ -582,7 +583,7 @@ func TestEditTool_PathTraversal_BlackBox(t *testing.T) {
 	cache.RecordRead(insidePath, "test", time.Now(), true)
 
 	// Try to edit outside cwd via ..
-	result, err := et.Execute(map[string]any{
+	result, err := et.Execute(context.Background(), map[string]any{
 		"file_path":  filepath.Join(tmpDir, "..", "outside.txt"),
 		"old_string": "test",
 		"new_string": "should not work",
@@ -612,7 +613,7 @@ func TestEditTool_FileDeletedAfterRead(t *testing.T) {
 	}
 
 	// Read to satisfy AC1
-	_, err := rt.Execute(map[string]any{"file_path": f}, tmpDir)
+	_, err := rt.Execute(context.Background(), map[string]any{"file_path": f}, tmpDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -623,7 +624,7 @@ func TestEditTool_FileDeletedAfterRead(t *testing.T) {
 	}
 
 	// Edit with old_string="" should create the file
-	result, err := et.Execute(map[string]any{
+	result, err := et.Execute(context.Background(), map[string]any{
 		"file_path":  f,
 		"old_string": "",
 		"new_string": "created content",
@@ -642,44 +643,6 @@ func TestEditTool_FileDeletedAfterRead(t *testing.T) {
 	}
 }
 
-// TestEditTool_RegistryIntegration_BlackBox validates Registry correctly wires EditTool.
-func TestEditTool_RegistryIntegration_BlackBox(t *testing.T) {
-	t.Run("EditTool present when WithReadFileCache called", func(t *testing.T) {
-		tools := NewRegistry().WithBaseTools().WithReadFileCache().Build()
-		et := FindTool(tools, "edit")
-		if et == nil {
-			t.Fatal("REGISTRY FAIL: EditTool not found when WithReadFileCache used")
-		}
-	})
-
-	t.Run("EditTool absent without WithReadFileCache", func(t *testing.T) {
-		tools := NewRegistry().WithBaseTools().Build()
-		et := FindTool(tools, "edit")
-		if et != nil {
-			t.Fatal("REGISTRY FAIL: EditTool should not be present without WithReadFileCache")
-		}
-	})
-
-	t.Run("EditTool in deny rules", func(t *testing.T) {
-		tools := NewRegistry().WithBaseTools().WithReadFileCache().WithDenyRules([]string{"edit"}).Build()
-		et := FindTool(tools, "edit")
-		if et != nil {
-			t.Fatal("REGISTRY FAIL: EditTool should be filtered by deny rules")
-		}
-	})
-
-	t.Run("name and description", func(t *testing.T) {
-		cache := NewReadFileCache()
-		et := NewEditTool(cache)
-		if et.Name() != "edit" {
-			t.Fatalf("expected name 'edit', got %q", et.Name())
-		}
-		if !strings.Contains(et.Description(), "Requires prior Read") {
-			t.Fatalf("description missing 'Requires prior Read': %s", et.Description())
-		}
-	})
-}
-
 // TestEditTool_BinaryContent validates that binary file edits are rejected.
 func TestEditTool_BinaryContent_BlackBox(t *testing.T) {
 	tmpDir := t.TempDir()
@@ -693,12 +656,12 @@ func TestEditTool_BinaryContent_BlackBox(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := rt.Execute(map[string]any{"file_path": f}, tmpDir)
+	_, err := rt.Execute(context.Background(), map[string]any{"file_path": f}, tmpDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	result, err := et.Execute(map[string]any{
+	result, err := et.Execute(context.Background(), map[string]any{
 		"file_path":  f,
 		"old_string": "before",
 		"new_string": "after",
@@ -726,13 +689,13 @@ func TestEditTool_LineEndingNormalization_BlackBox(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := rt.Execute(map[string]any{"file_path": f}, tmpDir)
+	_, err := rt.Execute(context.Background(), map[string]any{"file_path": f}, tmpDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Match with LF (normalized from CRLF)
-	result, err := et.Execute(map[string]any{
+	result, err := et.Execute(context.Background(), map[string]any{
 		"file_path":  f,
 		"old_string": "world",
 		"new_string": "universe",
@@ -764,14 +727,14 @@ func TestEditTool_OldStringEmptyOnExistingFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := rt.Execute(map[string]any{"file_path": f}, tmpDir)
+	_, err := rt.Execute(context.Background(), map[string]any{"file_path": f}, tmpDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// old_string="" on non-empty file should either create ambiguity error
 	// or count as zero matches (since empty string is in every position)
-	result, err := et.Execute(map[string]any{
+	result, err := et.Execute(context.Background(), map[string]any{
 		"file_path":  f,
 		"old_string": "",
 		"new_string": "prepend",

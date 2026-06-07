@@ -144,7 +144,7 @@ func matchGlob(pattern, name string) bool {
 }
 
 // Execute finds files matching the glob pattern.
-func (t *GlobTool) Execute(input map[string]any, cwd string) (*ToolResult, error) {
+func (t *GlobTool) Execute(ctx context.Context, input map[string]any, cwd string) (*ToolResult, error) {
 	pattern, ok := input["pattern"].(string)
 	if !ok || pattern == "" {
 		return nil, fmt.Errorf("pattern is required and must be a string")
@@ -237,9 +237,4 @@ func (t *GlobTool) Execute(input map[string]any, cwd string) (*ToolResult, error
 	}, nil
 }
 
-// ExecuteWithContext runs the tool with context support. Glob operations are fast
-// and typically complete before context cancellation is relevant, so this delegates
-// to Execute.
-func (t *GlobTool) ExecuteWithContext(ctx context.Context, input map[string]any, cwd string) (*ToolResult, error) {
-	return t.Execute(input, cwd)
-}
+

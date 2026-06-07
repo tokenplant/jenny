@@ -22,11 +22,8 @@ type Tool interface {
 	// InputSchema returns the JSON schema for tool input.
 	InputSchema() map[string]any
 	// Execute runs the tool with the given input and returns the result.
-	Execute(input map[string]any, cwd string) (*ToolResult, error)
-	// ExecuteWithContext runs the tool with context support for cancellation.
 	// If the context is cancelled, the tool should abort any in-progress work.
-	// The default implementation wraps Execute and ignores the context.
-	ExecuteWithContext(ctx context.Context, input map[string]any, cwd string) (*ToolResult, error)
+	Execute(ctx context.Context, input map[string]any, cwd string) (*ToolResult, error)
 }
 
 // ToolUse represents a tool use request from the model.

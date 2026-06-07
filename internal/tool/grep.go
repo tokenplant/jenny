@@ -105,7 +105,7 @@ func (t *GrepTool) InputSchema() map[string]any {
 }
 
 // Execute searches for the pattern using ripgrep.
-func (t *GrepTool) Execute(input map[string]any, cwd string) (*ToolResult, error) {
+func (t *GrepTool) Execute(ctx context.Context, input map[string]any, cwd string) (*ToolResult, error) {
 	pattern, ok := input["pattern"].(string)
 	if !ok || pattern == "" {
 		return nil, fmt.Errorf("pattern is required and must be a string")
@@ -192,10 +192,15 @@ func (t *GrepTool) Execute(input map[string]any, cwd string) (*ToolResult, error
 		timeout = int(timeoutVal)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
-	defer cancel()
+	// First derive a context that inherits cancellation from the passed context.
+	derivedCtx, derivedCancel := context.WithCancel(ctx)
+	defer derivedCancel()
 
-	cmd := exec.CommandContext(ctx, "rg", args...)
+	// Then apply timeout on top of the cancellation-inheriting context.
+	cmdCtx, cmdCancel := context.WithTimeout(derivedCtx, time.Duration(timeout)*time.Second)
+	defer cmdCancel()
+
+	cmd := exec.CommandContext(cmdCtx, "rg", args...)
 	cmd.Dir = cwd
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -203,9 +208,9 @@ func (t *GrepTool) Execute(input map[string]any, cwd string) (*ToolResult, error
 
 	err := cmd.Run()
 
-	if ctx.Err() == context.DeadlineExceeded {
+	if cmdCtx.Err() == context.DeadlineExceeded {
 		return &ToolResult{
-			Content: fmt.Sprintf("Search timed out after %d seconds", timeout),
+			Content: fmt.Sprintf("Grep timed out after %d seconds", timeout),
 			IsError: true,
 		}, nil
 	}
@@ -290,9 +295,4 @@ func boolVal(input map[string]any, key string) bool {
 	return false
 }
 
-// ExecuteWithContext runs the tool with context support. Grep operations use
-// context for timeout handling, so this delegates to Execute which creates
-// its own timeout context.
-func (t *GrepTool) ExecuteWithContext(ctx context.Context, input map[string]any, cwd string) (*ToolResult, error) {
-	return t.Execute(input, cwd)
-}
+

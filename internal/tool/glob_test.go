@@ -1,6 +1,7 @@
 package tool
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -153,7 +154,7 @@ func TestGlobTool_Execute(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := tool.Execute(tt.input, tt.cwd)
+			result, err := tool.Execute(context.Background(), tt.input, tt.cwd)
 			if err != nil {
 				if !tt.wantErr {
 					t.Errorf("unexpected error: %v", err)
@@ -195,7 +196,7 @@ func TestGlobTool_AC1_Max100Results(t *testing.T) {
 	}
 
 	tool := NewGlobTool()
-	result, err := tool.Execute(map[string]any{
+	result, err := tool.Execute(context.Background(), map[string]any{
 		"pattern": "**/*.txt",
 	}, tmpDir)
 	if err != nil {
@@ -227,7 +228,7 @@ func TestGlobTool_AC2_RelativePaths(t *testing.T) {
 	}
 
 	tool := NewGlobTool()
-	result, err := tool.Execute(map[string]any{
+	result, err := tool.Execute(context.Background(), map[string]any{
 		"pattern": "**/*.go",
 	}, tmpDir)
 	if err != nil {
@@ -248,7 +249,7 @@ func TestGlobTool_AC3_EmptyResult(t *testing.T) {
 	tmpDir := t.TempDir()
 	tool := NewGlobTool()
 
-	result, err := tool.Execute(map[string]any{
+	result, err := tool.Execute(context.Background(), map[string]any{
 		"pattern": "*.nonexistent",
 	}, tmpDir)
 	if err != nil {
@@ -295,7 +296,7 @@ func TestGlobTool_AC4_NonDirectoryPathError(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := tool.Execute(map[string]any{
+			result, err := tool.Execute(context.Background(), map[string]any{
 				"pattern": "*.txt",
 				"path":    tt.path,
 			}, tmpDir)
@@ -332,7 +333,7 @@ func TestGlobTool_AC5_ConcurrencySafe(t *testing.T) {
 	done := make(chan bool)
 	for i := 0; i < 10; i++ {
 		go func() {
-			result, err := tool.Execute(map[string]any{
+			result, err := tool.Execute(context.Background(), map[string]any{
 				"pattern": "*.txt",
 			}, tmpDir)
 			if err != nil {
@@ -392,7 +393,7 @@ func TestGlobTool_SortedByMtime(t *testing.T) {
 	os.Chtimes(fileA, time.Now().Add(-1*time.Hour), time.Now().Add(-1*time.Hour))
 
 	tool := NewGlobTool()
-	result, err := tool.Execute(map[string]any{
+	result, err := tool.Execute(context.Background(), map[string]any{
 		"pattern": "*.txt",
 	}, tmpDir)
 	if err != nil {

@@ -2,9 +2,9 @@
 title: Parallel Tool Execution
 slug: parallel-tool-execution
 priority: P1
-status: not_started
+status: complete
 spec: complete
-code: not_started
+code: complete
 package: internal/agent
 gaps:
   []

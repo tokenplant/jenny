@@ -55,7 +55,7 @@ func (t *ReadTool) InputSchema() map[string]any {
 }
 
 // Execute reads the file and returns its contents with line numbers.
-func (t *ReadTool) Execute(input map[string]any, cwd string) (*ToolResult, error) {
+func (t *ReadTool) Execute(ctx context.Context, input map[string]any, cwd string) (*ToolResult, error) {
 	filePath, ok := input["file_path"].(string)
 	if !ok || filePath == "" {
 		return nil, fmt.Errorf("file_path is required and must be a string")
@@ -222,9 +222,4 @@ func (t *ReadTool) Execute(input map[string]any, cwd string) (*ToolResult, error
 	return result, nil
 }
 
-// ExecuteWithContext runs the tool with context support. Read operations are fast
-// and typically complete before context cancellation is relevant, so this delegates
-// to Execute.
-func (t *ReadTool) ExecuteWithContext(ctx context.Context, input map[string]any, cwd string) (*ToolResult, error) {
-	return t.Execute(input, cwd)
-}
+

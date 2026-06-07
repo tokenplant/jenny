@@ -54,7 +54,7 @@ func NewToolExecutor(tools []tool.Tool, cwd string) *ToolExecutor {
 // Execute runs all tool use blocks according to concurrency rules.
 // It partitions tools into parallel batches (for concurrency-safe tools) and
 // serial execution (for Write/Edit/Bash), collects results in request order.
-func (e *ToolExecutor) Execute(toolUseBlocks []toolUseBlock) ([]toolResult, error) {
+func (e *ToolExecutor) Execute(ctx context.Context, toolUseBlocks []toolUseBlock) ([]toolResult, error) {
 	// Partition into groups
 	groups := e.partitionGroups(toolUseBlocks)
 
@@ -65,9 +65,9 @@ func (e *ToolExecutor) Execute(toolUseBlocks []toolUseBlock) ([]toolResult, erro
 	// Execute each group
 	for _, group := range groups {
 		if group.serial {
-			e.executeSerial(group.tools, results)
+			e.executeSerial(ctx, group.tools, results)
 		} else {
-			e.executeParallel(group.tools, results)
+			e.executeParallel(ctx, group.tools, results)
 		}
 	}
 
@@ -160,12 +160,12 @@ func (e *ToolExecutor) partitionGroups(toolUseBlocks []toolUseBlock) []toolGroup
 }
 
 // executeParallel runs a batch of concurrency-safe tools in parallel.
-func (e *ToolExecutor) executeParallel(batch []toolUseWithIndex, results []toolResult) {
+func (e *ToolExecutor) executeParallel(parentCtx context.Context, batch []toolUseWithIndex, results []toolResult) {
 	if len(batch) == 0 {
 		return
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(parentCtx)
 	defer cancel()
 
 	var wg sync.WaitGroup
@@ -197,7 +197,7 @@ func (e *ToolExecutor) executeParallel(batch []toolUseWithIndex, results []toolR
 			}
 			defer func() { <-sem }()
 
-			execResult, err := tw.tool.ExecuteWithContext(ctx, tw.block.Input, e.cwd)
+			execResult, err := tw.tool.Execute(ctx, tw.block.Input, e.cwd)
 
 			if ctx.Err() != nil {
 				results[tw.index] = toolResult{
@@ -229,8 +229,8 @@ func (e *ToolExecutor) executeParallel(batch []toolUseWithIndex, results []toolR
 
 // executeSerial runs tools one at a time in request order.
 // For bash batches, failure of one tool aborts subsequent bash tools in the same batch (AC3).
-func (e *ToolExecutor) executeSerial(batch []toolUseWithIndex, results []toolResult) {
-	ctx, cancel := context.WithCancel(context.Background())
+func (e *ToolExecutor) executeSerial(parentCtx context.Context, batch []toolUseWithIndex, results []toolResult) {
+	ctx, cancel := context.WithCancel(parentCtx)
 	defer cancel()
 
 	for _, tw := range batch {
@@ -252,7 +252,7 @@ func (e *ToolExecutor) executeSerial(batch []toolUseWithIndex, results []toolRes
 			continue
 		}
 
-		execResult, err := tw.tool.ExecuteWithContext(ctx, tw.block.Input, e.cwd)
+		execResult, err := tw.tool.Execute(ctx, tw.block.Input, e.cwd)
 
 		if err != nil {
 			results[tw.index] = toolResult{

@@ -215,7 +215,7 @@ func Run(ctx context.Context, prompt string, tools []tool.Tool, cwd string) (str
 				}
 
 				// Execute tool
-				result, err := t.Execute(block.ToolInput, cwd)
+				result, err := t.Execute(context.Background(), block.ToolInput, cwd)
 				if err != nil {
 					toolResults = append(toolResults, api.ToolResult{
 						ToolUseID: block.ToolID,

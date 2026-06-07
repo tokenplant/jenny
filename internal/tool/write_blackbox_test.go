@@ -1,6 +1,7 @@
 package tool
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,7 +17,7 @@ func TestWriteTool_AC1_NoPriorRead_BlackBox(t *testing.T) {
 	wt := NewWriteTool(cache)
 
 	// AC1: Write to a path never read
-	result, err := wt.Execute(map[string]any{
+	result, err := wt.Execute(context.Background(), map[string]any{
 		"file_path": filepath.Join(tmpDir, "never_read.txt"),
 		"content":   "should fail",
 	}, tmpDir)
@@ -31,7 +32,7 @@ func TestWriteTool_AC1_NoPriorRead_BlackBox(t *testing.T) {
 	}
 
 	// Write with empty file_path
-	result, err = wt.Execute(map[string]any{
+	result, err = wt.Execute(context.Background(), map[string]any{
 		"file_path": "",
 		"content":   "should fail",
 	}, tmpDir)
@@ -43,7 +44,7 @@ func TestWriteTool_AC1_NoPriorRead_BlackBox(t *testing.T) {
 	}
 
 	// Write with non-string file_path
-	result, err = wt.Execute(map[string]any{
+	result, err = wt.Execute(context.Background(), map[string]any{
 		"file_path": 42,
 		"content":   "should fail",
 	}, tmpDir)
@@ -70,7 +71,7 @@ func TestWriteTool_AC2_StaleMtime_BlackBox(t *testing.T) {
 		}
 
 		// Read
-		_, err := rt.Execute(map[string]any{"file_path": f}, tmpDir)
+		_, err := rt.Execute(context.Background(), map[string]any{"file_path": f}, tmpDir)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -82,7 +83,7 @@ func TestWriteTool_AC2_StaleMtime_BlackBox(t *testing.T) {
 		}
 
 		// Write should fail
-		result, err := wt.Execute(map[string]any{
+		result, err := wt.Execute(context.Background(), map[string]any{
 			"file_path": f,
 			"content":   "my content",
 		}, tmpDir)
@@ -113,7 +114,7 @@ func TestWriteTool_AC2_StaleMtime_BlackBox(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		_, err := rt.Execute(map[string]any{"file_path": f}, tmpDir)
+		_, err := rt.Execute(context.Background(), map[string]any{"file_path": f}, tmpDir)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -125,7 +126,7 @@ func TestWriteTool_AC2_StaleMtime_BlackBox(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		result, err := wt.Execute(map[string]any{
+		result, err := wt.Execute(context.Background(), map[string]any{
 			"file_path": f,
 			"content":   "my content",
 		}, tmpDir)
@@ -156,7 +157,7 @@ func TestWriteTool_AC3_ParentDirs_BlackBox(t *testing.T) {
 	}
 
 	// Read to satisfy AC1
-	_, err := rt.Execute(map[string]any{"file_path": deepPath}, tmpDir)
+	_, err := rt.Execute(context.Background(), map[string]any{"file_path": deepPath}, tmpDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +168,7 @@ func TestWriteTool_AC3_ParentDirs_BlackBox(t *testing.T) {
 	}
 
 	// Write — should recreate parent dirs and file
-	result, err := wt.Execute(map[string]any{
+	result, err := wt.Execute(context.Background(), map[string]any{
 		"file_path": deepPath,
 		"content":   "new content here",
 	}, tmpDir)
@@ -206,12 +207,12 @@ func TestWriteTool_AC4_PatchDiff_BlackBox(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		_, err := rt.Execute(map[string]any{"file_path": f}, tmpDir)
+		_, err := rt.Execute(context.Background(), map[string]any{"file_path": f}, tmpDir)
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		result, err := wt.Execute(map[string]any{
+		result, err := wt.Execute(context.Background(), map[string]any{
 			"file_path": f,
 			"content":   "line one\nline two modified\nline three\nline four\n",
 		}, tmpDir)
@@ -256,12 +257,12 @@ func TestWriteTool_AC4_PatchDiff_BlackBox(t *testing.T) {
 		}
 
 		// Read empty file to satisfy AC1
-		_, err := rt.Execute(map[string]any{"file_path": f}, tmpDir)
+		_, err := rt.Execute(context.Background(), map[string]any{"file_path": f}, tmpDir)
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		result, err := wt.Execute(map[string]any{
+		result, err := wt.Execute(context.Background(), map[string]any{
 			"file_path": f,
 			"content":   "brand new\ncontent\n",
 		}, tmpDir)
@@ -299,13 +300,13 @@ func TestWriteTool_AC5_CacheUpdated_BlackBox(t *testing.T) {
 	}
 
 	// Read
-	_, err := rt.Execute(map[string]any{"file_path": f}, tmpDir)
+	_, err := rt.Execute(context.Background(), map[string]any{"file_path": f}, tmpDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// First write (updates cache)
-	result, err := wt.Execute(map[string]any{
+	result, err := wt.Execute(context.Background(), map[string]any{
 		"file_path": f,
 		"content":   "version 2\n",
 	}, tmpDir)
@@ -321,7 +322,7 @@ func TestWriteTool_AC5_CacheUpdated_BlackBox(t *testing.T) {
 	time.Sleep(time.Millisecond * 10)
 
 	// Second write — no intervening Read, should succeed
-	result, err = wt.Execute(map[string]any{
+	result, err = wt.Execute(context.Background(), map[string]any{
 		"file_path": f,
 		"content":   "version 3\n",
 	}, tmpDir)
@@ -350,7 +351,7 @@ func TestWriteTool_PathTraversal_BlackBox(t *testing.T) {
 	cache.RecordRead(insidePath, "test", time.Now(), true)
 
 	// Try to write outside cwd via ..
-	result, err := wt.Execute(map[string]any{
+	result, err := wt.Execute(context.Background(), map[string]any{
 		"file_path": filepath.Join(tmpDir, "..", "outside.txt"),
 		"content":   "should not work",
 	}, tmpDir)
@@ -379,7 +380,7 @@ func TestWriteTool_FileDeletedAfterRead(t *testing.T) {
 	}
 
 	// Read to satisfy AC1
-	_, err := rt.Execute(map[string]any{"file_path": f}, tmpDir)
+	_, err := rt.Execute(context.Background(), map[string]any{"file_path": f}, tmpDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -391,7 +392,7 @@ func TestWriteTool_FileDeletedAfterRead(t *testing.T) {
 
 	// Write should succeed (file doesn't exist, but cache has entry)
 	// os.Stat will fail, so staleness check is skipped, and we proceed
-	result, err := wt.Execute(map[string]any{
+	result, err := wt.Execute(context.Background(), map[string]any{
 		"file_path": f,
 		"content":   "new content",
 	}, tmpDir)
@@ -422,13 +423,13 @@ func TestWriteTool_EmptyContent(t *testing.T) {
 	}
 
 	// Read
-	_, err := rt.Execute(map[string]any{"file_path": f}, tmpDir)
+	_, err := rt.Execute(context.Background(), map[string]any{"file_path": f}, tmpDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Write empty content
-	result, err := wt.Execute(map[string]any{
+	result, err := wt.Execute(context.Background(), map[string]any{
 		"file_path": f,
 		"content":   "",
 	}, tmpDir)
