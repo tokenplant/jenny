@@ -5,7 +5,7 @@
 Every behavior change MUST follow this sequence — **never skip or reorder**:
 
 1. **Documentation** — update or add spec under `docs/` (source of truth)
-2. **Tests** — unit tests (`vitest`) and/or e2e (`playwright`) that encode acceptance criteria
+2. **Tests** — unit and integration tests (`*_test.go`) that encode acceptance criteria
 3. **Code** — implementation that matches the spec and tests
 
 If requirements are ambiguous, update the doc first; do not guess in code.

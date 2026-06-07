@@ -82,8 +82,7 @@ func computeBackoff(attempt int, cfg RetryConfig, retryAfter *time.Duration) tim
 func isRetryable(statusCode int, err error) bool {
 	// Connection errors and context cancellation are retryable
 	if err != nil {
-		var netErr net.Error
-		if errors.As(err, &netErr) {
+		if _, ok := errors.AsType[net.Error](err); ok {
 			return true
 		}
 		// Context cancellation is retryable
