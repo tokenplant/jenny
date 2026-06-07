@@ -63,7 +63,7 @@ func TestAC1_CheckCompactThreshold(t *testing.T) {
 				ModelMaxOutputTokens: tt.modelMaxOutputTokens,
 				DisableAutoCompact:   tt.disableAutoCompact,
 			}
-			got := cfg.checkCompactThreshold(tt.estimatedTokens)
+			got := cfg.checkCompactThreshold(tt.estimatedTokens, "user")
 			if got != tt.want {
 				t.Errorf("AC1 FAIL: checkCompactThreshold(%d) = %v, want %v", tt.estimatedTokens, got, tt.want)
 			}

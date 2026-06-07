@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -82,7 +83,12 @@ func (c CompactConfig) blockingLimit() int {
 
 // checkCompactThreshold returns true if estimated tokens exceed the auto-compact
 // threshold and auto-compact should trigger.
-func (c CompactConfig) checkCompactThreshold(estimatedTokens int) bool {
+// querySource is checked to skip auto-compact for 'compact' and 'session_memory' sources.
+func (c CompactConfig) checkCompactThreshold(estimatedTokens int, querySource string) bool {
+	// AC1: Skip auto-compact when querySource is 'compact' or 'session_memory'
+	if querySource == "compact" || querySource == "session_memory" {
+		return false
+	}
 	if c.DisableCompact || c.DisableAutoCompact {
 		return false
 	}
@@ -302,10 +308,37 @@ func prepareSummaryMessages(messages []api.Message) []api.Message {
 }
 
 // stripMediaMarkers replaces image/document content with markers.
+// This prevents large media from being sent to the summary agent.
 func stripMediaMarkers(content string) string {
-	// This is a simplified version - in a real implementation, this would
-	// detect and replace actual image/document references
-	// For now, we assume content is text-only for summaries
+	if content == "" {
+		return content
+	}
+
+	// Replace base64 image data URLs with [image] marker
+	// Pattern: data:image/[type];base64,[data...]
+	base64ImageRe := regexp.MustCompile(`data:image/[^;]+;base64,[A-Za-z0-9+/=]{100,}`)
+	content = base64ImageRe.ReplaceAllString(content, "[image]")
+
+	// Replace base64 PDF/document data URLs with [document] marker
+	base64PdfRe := regexp.MustCompile(`data:application/pdf[^,;]*,[A-Za-z0-9+/=]{100,}`)
+	content = base64PdfRe.ReplaceAllString(content, "[document]")
+
+	// Replace markdown image syntax: ![alt](url)
+	markdownImageRe := regexp.MustCompile(`!\[([^\]]*)\]\([^)]+\)`)
+	content = markdownImageRe.ReplaceAllString(content, "[image]")
+
+	// Replace common image URL patterns (http/https URLs ending in image extensions)
+	imageExtensions := []string{".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".svg"}
+	for _, ext := range imageExtensions {
+		pattern := `https?://[^)\s"']+\.` + ext + `(\?[^)\s"']*)?`
+		re := regexp.MustCompile(pattern)
+		content = re.ReplaceAllString(content, "[image]")
+	}
+
+	// Replace PDF URLs
+	pdfUrlRe := regexp.MustCompile(`https?://[^)\s"']+\.pdf(\?[^)\s"']*)?`)
+	content = pdfUrlRe.ReplaceAllString(content, "[document]")
+
 	return content
 }
 
@@ -384,11 +417,14 @@ func normalizeCompactedChain(messages []api.Message) []api.Message {
 	// Step 2: Strip trailing thinking from last assistant
 	messages = stripTrailingThinking(messages)
 
-	// Step 3: Ensure tool result pairing
-	messages = ensureToolResultPairing(messages)
-
-	// Step 4: Filter whitespace-only assistant messages
+	// Step 3: Filter whitespace-only assistant messages
 	messages = filterWhitespaceOnly(messages)
+
+	// Step 4: Ensure non-empty assistant (insert placeholder if stripped content left empty)
+	messages = ensureNonEmptyAssistant(messages)
+
+	// Step 5: Ensure tool result pairing
+	messages = ensureToolResultPairing(messages)
 
 	return messages
 }
@@ -400,4 +436,28 @@ func EmitCompactWarning(estimatedTokens int, threshold int) {
 		"estimatedTokens", estimatedTokens,
 		"threshold", threshold,
 		"buffer", threshold-estimatedTokens)
+}
+
+// isUserAbortError checks if an error message indicates a user-initiated abort.
+// User aborts include context cancellation, Esc key, SIGINT, etc.
+func isUserAbortError(errMsg string) bool {
+	if errMsg == "" {
+		return false
+	}
+	lowerMsg := strings.ToLower(errMsg)
+	// Check for context cancellation patterns
+	if strings.Contains(lowerMsg, "context canceled") ||
+		strings.Contains(lowerMsg, "context cancelled") ||
+		strings.Contains(lowerMsg, "canceled") ||
+		strings.Contains(lowerMsg, "cancelled") {
+		return true
+	}
+	// Check for user interrupt patterns (Esc, SIGINT, etc.)
+	if strings.Contains(lowerMsg, "user interrupt") ||
+		strings.Contains(lowerMsg, "interrupt") ||
+		strings.Contains(lowerMsg, "sigint") ||
+		strings.Contains(lowerMsg, "keyboard interrupt") {
+		return true
+	}
+	return false
 }

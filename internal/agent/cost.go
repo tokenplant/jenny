@@ -90,6 +90,9 @@ type CostState struct {
 	ModelUsage          map[string]ModelUsage
 	TotalCostUSD        float64
 	HasUnknownModelCost bool
+
+	// Compaction state - persisted for session resume
+	CompactFailCount int
 }
 
 // costConfigPath returns the path to the cost config file.

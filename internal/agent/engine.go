@@ -68,10 +68,18 @@ func NewQueryEngine(cfg StreamConfig, tools []tool.Tool, model string) *QueryEng
 	// Initialize cost state (restore from disk if resuming)
 	costState := &CostState{}
 	sessionID := cfg.SessionID
+	compactFailCount := 0
 	if cfg.IsResume && sessionID != "" {
 		if restored, ok, err := RestoreCostState(sessionID); err == nil && ok {
 			costState = restored
 			log.Debug("Cost state restored", "sessionID", sessionID, "totalCostUSD", costState.TotalCostUSD)
+		}
+		// Restore compactFailCount from transcript
+		if cfg.SessionManager != nil {
+			if count, err := cfg.SessionManager.LoadCompactFailCount(sessionID); err == nil {
+				compactFailCount = count
+				log.Debug("Compact fail count restored", "sessionID", sessionID, "count", count)
+			}
 		}
 	}
 
@@ -86,7 +94,7 @@ func NewQueryEngine(cfg StreamConfig, tools []tool.Tool, model string) *QueryEng
 		turnCount:        0,
 		maxTurns:         0, // 0 means unlimited
 		compactConfig:    newCompactConfig(),
-		compactFailCount: 0,
+		compactFailCount: compactFailCount,
 	}
 }
 
@@ -252,7 +260,7 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 		}
 
 		// AC1: Auto-compact if threshold exceeded and circuit breaker not tripped
-		if e.compactConfig.checkCompactThreshold(estimatedTokens) {
+		if e.compactConfig.checkCompactThreshold(estimatedTokens, "user") {
 			e.mu.Lock()
 			circuitBreakerTripped := e.compactFailCount >= MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES
 			e.mu.Unlock()
@@ -350,7 +358,10 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 				continue // Retry with modified messages
 			}
 			// AC2: Non-user-abort error - increment compaction failure counter
-			e.incrementCompactFailCount()
+			// Skip increment for user-initiated aborts (context cancellation, Esc, SIGINT, etc.)
+			if !isUserAbortError(streamResult.Error) {
+				e.incrementCompactFailCount()
+			}
 			return "", fmt.Errorf("streaming error: %v", streamResult.Error)
 		}
 
@@ -575,6 +586,8 @@ func (e *QueryEngine) resetCompactFailCount() {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.compactFailCount = 0
+	// Persist to transcript
+	e.persistCompactFailCount()
 }
 
 // incrementCompactFailCount increments the compaction failure counter.
@@ -583,6 +596,18 @@ func (e *QueryEngine) incrementCompactFailCount() {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.compactFailCount++
+	// Persist to transcript
+	e.persistCompactFailCount()
+}
+
+// persistCompactFailCount saves the current compactFailCount to the transcript.
+func (e *QueryEngine) persistCompactFailCount() {
+	if e.sessionManager != nil && e.streamCfg.SessionID != "" {
+		_ = e.sessionManager.AppendEntry(e.streamCfg.SessionID, session.TranscriptEntry{
+			Type:             "state",
+			CompactFailCount: e.compactFailCount,
+		})
+	}
 }
 
 // CompactFailCount returns the current compaction failure count for diagnostics.

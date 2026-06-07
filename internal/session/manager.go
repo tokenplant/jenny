@@ -24,6 +24,9 @@ type TranscriptEntry struct {
 	ToolUse   []ToolUse `json:"tool_use,omitempty"`
 	ToolID    string    `json:"tool_id,omitempty"`
 	IsError   bool      `json:"is_error,omitempty"`
+
+	// Session state fields - used for session-level state persistence
+	CompactFailCount int `json:"compact_fail_count,omitempty"`
 }
 
 // ToolUse represents a tool call in the transcript.
@@ -217,6 +220,45 @@ func (m *Manager) LoadTranscript(sessionID string) ([]TranscriptEntry, error) {
 	}
 
 	return entries, nil
+}
+
+// LoadCompactFailCount loads the most recent compactFailCount from the transcript.
+// Returns 0 if no state entry is found.
+func (m *Manager) LoadCompactFailCount(sessionID string) (int, error) {
+	if sessionID == "" {
+		return 0, fmt.Errorf("session ID is required")
+	}
+
+	if containsPathTraversal(sessionID) {
+		return 0, fmt.Errorf("invalid session ID: path traversal not allowed")
+	}
+
+	path := m.transcriptPath(sessionID)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil // No transcript yet
+		}
+		return 0, fmt.Errorf("reading transcript file: %w", err)
+	}
+
+	var latestCount int
+	lines := splitLines(string(data))
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+		var entry TranscriptEntry
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			continue
+		}
+		// Only look at state entries with compact_fail_count set
+		if entry.Type == "state" && entry.CompactFailCount > 0 {
+			latestCount = entry.CompactFailCount
+		}
+	}
+
+	return latestCount, nil
 }
 
 // splitLines splits a string into lines (without trailing newlines).
