@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/ipy/jenny/internal/constants"
@@ -319,10 +320,10 @@ func (t *BashTool) executeBackground(command string, cwd string, input map[strin
 		timeout = int(timeoutVal)
 	}
 
-	// Create a background context for timeout (not for TaskStop cancellation)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
+	// Create a background context (NOT for timeout - we handle timeout manually for AC5)
+	ctx := context.Background()
 
-	// Create result channel
+	// Create result channel (buffered to prevent deadlock when outer select is stuck)
 	resultCh := make(chan *ToolResult, 1)
 
 	// Generate string task ID
@@ -361,6 +362,12 @@ func (t *BashTool) executeBackground(command string, cwd string, input map[strin
 	// Track if command completed (for synchronization)
 	var cmdDone int32 = 0
 
+	// Channel to signal command completion
+	done := make(chan struct{})
+
+	// Start time for duration tracking
+	startTime := time.Now()
+
 	// Spawn goroutine
 	go func() {
 		cmd := exec.CommandContext(ctx, "sh", "-c", command)
@@ -372,12 +379,6 @@ func (t *BashTool) executeBackground(command string, cwd string, input map[strin
 
 		// Track output for progress events
 		var output strings.Builder
-
-		// Channel to signal command completion
-		done := make(chan struct{})
-
-		// Start time for duration tracking
-		startTime := time.Now()
 
 		// Inner goroutine runs the command
 		go func() {
@@ -460,35 +461,90 @@ func (t *BashTool) executeBackground(command string, cwd string, input map[strin
 			resultCh <- result
 		}()
 
-		// AC2: Progress timer runs concurrently with command
+		// AC2: Progress timer runs concurrently with command (created BEFORE cmd.Start())
 		progressTimer := time.NewTimer(2 * time.Second)
 		flushTicker := time.NewTicker(5 * time.Second)
 		defer progressTimer.Stop()
 		defer flushTicker.Stop()
 
-		// Wait for either the progress timer, a flush tick, or command completion
-		select {
-		case <-progressTimer.C:
-			// Task ran for more than 2 seconds - emit progress
-			if t.taskManager != nil {
-				EmitTaskProgress(taskID, 2.0, output.String())
-			}
-			// Wait for command completion
-			<-done
-		case <-flushTicker.C:
-			// Periodic flush of partial output (AC1)
-			if t.taskManager != nil {
-				duration := time.Since(startTime).Seconds()
-				_ = t.taskManager.FlushPartialOutput(taskID, output.String(), duration)
-			}
-			// Wait for command completion
-			<-done
-		case <-done:
-			// Command completed before either timer fired - no progress event
-		}
+		// AC5: Manual timeout handling with SIGTERM then SIGKILL (not context timeout)
+		// Context timeout sends SIGKILL directly, but we need SIGTERM first
+		timeoutChan := time.After(time.Duration(timeout) * time.Second)
+		var killSent bool
+		var killMu sync.Mutex
 
-		// Cancel context to clean up timeout resources
-		cancel()
+		// AC1: Loop to allow periodic flushes while waiting for command completion
+	outer:
+		for {
+			select {
+			case <-progressTimer.C:
+				// Task ran for more than 2 seconds - emit progress
+				if t.taskManager != nil {
+					EmitTaskProgress(taskID, 2.0, output.String())
+				}
+				// Continue waiting for command completion (don't exit loop)
+				// Use inner select to allow flush ticker to fire while waiting
+				for {
+					select {
+					case <-flushTicker.C:
+						// Periodic flush of partial output (AC1)
+						if t.taskManager != nil {
+							duration := time.Since(startTime).Seconds()
+							_ = t.taskManager.FlushPartialOutput(taskID, output.String(), duration)
+						}
+					case <-done:
+						break outer
+					case <-timeoutChan:
+						// Timeout - send SIGTERM first (AC5)
+						killMu.Lock()
+						if !killSent {
+							killSent = true
+							if cmd.Process != nil {
+								_ = cmd.Process.Signal(syscall.SIGTERM)
+							}
+							// Schedule SIGKILL after 5s if process doesn't exit
+							go func() {
+								time.Sleep(5 * time.Second)
+								killMu.Lock()
+								defer killMu.Unlock()
+								if cmd.Process != nil {
+									_ = cmd.Process.Signal(syscall.SIGKILL)
+								}
+							}()
+						}
+						killMu.Unlock()
+					}
+				}
+			case <-flushTicker.C:
+				// Periodic flush of partial output (AC1)
+				if t.taskManager != nil {
+					duration := time.Since(startTime).Seconds()
+					_ = t.taskManager.FlushPartialOutput(taskID, output.String(), duration)
+				}
+			case <-done:
+				// Command completed before either timer fired - no progress event
+				break outer
+			case <-timeoutChan:
+				// Timeout - send SIGTERM first (AC5)
+				killMu.Lock()
+				if !killSent {
+					killSent = true
+					if cmd.Process != nil {
+						_ = cmd.Process.Signal(syscall.SIGTERM)
+					}
+					// Schedule SIGKILL after 5s if process doesn't exit
+					go func() {
+						time.Sleep(5 * time.Second)
+						killMu.Lock()
+						defer killMu.Unlock()
+						if cmd.Process != nil {
+							_ = cmd.Process.Signal(syscall.SIGKILL)
+						}
+					}()
+				}
+				killMu.Unlock()
+			}
+		}
 
 		// Wait for inner goroutine to finish sending result before closing
 		for atomic.LoadInt32(&cmdDone) == 0 {
