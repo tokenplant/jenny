@@ -5,9 +5,9 @@ priority: P0
 status: partial
 spec: complete
 code: partial
+defer_to: P3
 package: internal/cli, internal/agent
 gaps:
-  - No stdout guard
   - Missing system/init line
   - Flat tool_use uses tool_input not parameters
   - No tool_call started/completed

@@ -109,9 +109,12 @@ func run() error {
 	}
 
 	// Build tool registry with skipPermissions flag
+	// AC4: Create ReadFileCache and wire it to tools for read-before-write enforcement
+	readFileCache := tool.NewReadFileCache()
 	var tools []tool.Tool
 	tools = tool.NewRegistry().
 		WithBaseTools().
+		WithReadFileCache(readFileCache).
 		WithMCPTools(mcpTools).
 		WithDenyRules(flags.DeniedTools).
 		WithSkipPermissions(flags.SkipPermissions).

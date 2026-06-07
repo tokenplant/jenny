@@ -30,8 +30,13 @@ func (r *Registry) WithBaseTools() *Registry {
 }
 
 // WithReadFileCache enables the read-before-write cache for Read and Write tools.
-func (r *Registry) WithReadFileCache() *Registry {
-	r.readCache = NewReadFileCache()
+// If cache is nil, a new cache is created. The cache is passed through to tools
+// that support read-before-write enforcement (Read, Write, Edit, NotebookEdit).
+func (r *Registry) WithReadFileCache(cache *ReadFileCache) *Registry {
+	if cache == nil {
+		cache = NewReadFileCache()
+	}
+	r.readCache = cache
 	return r
 }
 

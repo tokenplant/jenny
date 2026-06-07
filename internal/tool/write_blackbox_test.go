@@ -455,7 +455,7 @@ func TestWriteTool_EmptyContent(t *testing.T) {
 // WriteTool when WithReadFileCache is used.
 func TestWriteTool_RegistryIntegration(t *testing.T) {
 	t.Run("WriteTool present when WithReadFileCache called", func(t *testing.T) {
-		tools := NewRegistry().WithBaseTools().WithReadFileCache().Build()
+		tools := NewRegistry().WithBaseTools().WithReadFileCache(nil).Build()
 		wt := FindTool(tools, "write")
 		if wt == nil {
 			t.Fatal("REGISTRY FAIL: WriteTool not found when WithReadFileCache used")
@@ -471,7 +471,7 @@ func TestWriteTool_RegistryIntegration(t *testing.T) {
 	})
 
 	t.Run("WriteTool in deny rules", func(t *testing.T) {
-		tools := NewRegistry().WithBaseTools().WithReadFileCache().WithDenyRules([]string{"write"}).Build()
+		tools := NewRegistry().WithBaseTools().WithReadFileCache(nil).WithDenyRules([]string{"write"}).Build()
 		wt := FindTool(tools, "write")
 		if wt != nil {
 			t.Fatal("REGISTRY FAIL: WriteTool should be filtered by deny rules")

@@ -118,6 +118,7 @@ type StreamConfig struct {
 	CustomSystemPrompt   string                      // Custom system prompt; replaces defaults when set
 	AppendSystemPrompt   string                      // Content appended after assembled prompt
 	OverrideSystemPrompt bool                        // When true, suppresses AppendSystemPrompt
+	ReadFileCache        *tool.ReadFileCache         // Cache for read-before-write enforcement
 }
 
 // ToolParam represents a tool parameter for the API.

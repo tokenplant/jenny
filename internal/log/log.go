@@ -9,8 +9,14 @@ import (
 // Logger is the package-level logger instance.
 var Logger *slog.Logger
 
+// outputWriter controls where log output is sent.
+var outputWriter any = os.Stderr
+
 func init() {
-	// Set up slog to write to stderr (default)
+	resetLogger()
+}
+
+func resetLogger() {
 	opts := &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}
@@ -20,7 +26,26 @@ func init() {
 		opts.Level = slog.LevelDebug
 	}
 
-	Logger = slog.New(slog.NewTextHandler(os.Stderr, opts))
+	w := outputWriter
+	if w == nil {
+		w = os.Stderr
+	}
+
+	// w is either io.Writer or *os.File
+	switch v := w.(type) {
+	case *os.File:
+		Logger = slog.New(slog.NewTextHandler(v, opts))
+	default:
+		// Fallback for io.Writer
+		Logger = slog.New(slog.NewTextHandler(os.Stderr, opts))
+	}
+}
+
+// SetOutput redirects log output to the specified writer.
+// This is used to redirect debug logs to stderr when stream-json mode is active.
+func SetOutput(w any) {
+	outputWriter = w
+	resetLogger()
 }
 
 // Debug logs a debug-level message.

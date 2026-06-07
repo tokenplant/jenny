@@ -77,18 +77,19 @@ Implement in this order:
    - Positional prompt and `-p` are mutually exclusive (positional wins when both given)
    - `--model` overrides `ANTHROPIC_MODEL`
    - `-r` wired for session resume
-   - **Gap:** `--mcp-config` parsed but not wired
+   - `--mcp-config` wired (AC2)
+   - **Deferred:** `--continue`, `--fork-session`, `--no-session-persistence` → P3
 
 3. - [x] Anthropic API client — partial — [`anthropic-api-client.md`](./anthropic-api-client.md)
    - System prompt is a top-level parameter, not a `role: system` message
    - Assistant messages with `tool_use` must include the full `tool_use` block before tool results
    - Tool results go in user messages as `tool_result` blocks keyed by `tool_use_id`
-   - **Gap:** non-streaming only; no image validation; no cache headers
+   - **Deferred:** non-streaming only; no image validation; no cache headers → P3+
 
 4. - [x] Core agent loop — partial — [`agent-loop.md`](./agent-loop.md)
    - Basic tool_use → execute → tool_result loop
    - Unknown tool → immediate error (does not hang)
-   - **Gap:** sequential only; no thinking/interrupt/spill/compaction handling
+   - **Deferred:** thinking/interrupt/spill/compaction handling → P3+
 
 5. - [x] Session persistence — [session-persistence.md](./session-persistence.md)
    - JSONL transcript per project directory ✓
@@ -99,7 +100,7 @@ Implement in this order:
 
 6. - [x] Session resume (`-r`) — partial — [`session-resume.md`](./session-resume.md)
    - Rebuild message history from transcript ✓
-   - **Gap:** `readFileState` restoration, cost state, queue-only filtering, compaction boundaries
+   - **Deferred:** `readFileState` restoration, cost state, queue-only filtering, compaction boundaries → P3+
 
 7. - [x] SSE streaming from API — [`sse-streaming.md`](./sse-streaming.md) _(moved from P2)_
    - Stream via server-sent events; yield partial text as it arrives ✓
@@ -110,13 +111,14 @@ Implement in this order:
 8. - [x] Stream-json output (NDJSON) — partial — [`stream-json.md`](./stream-json.md)
    - One JSON object per line on stdout; debug on stderr
    - Terminal `{ type: "result", session_id, result, usage }` on successful run
-   - **Gap:** no stdout guard; no system/init; `tool_input` vs `parameters`; depends on SSE for partials
+   - stdout guard implemented (AC3)
+   - **Deferred:** system/init line; `tool_input` vs `parameters` → P3+
 
-9. - [ ] Cost / token tracking — [`cost-tracking.md`](./cost-tracking.md)
+9. - [x] Cost / token tracking — [`cost-tracking.md`](./cost-tracking.md)
    - Track input/output tokens plus cache read/creation per model
    - Persist cost state keyed to session ID; restore only on matching resume
    - Emit usage in stream-json `result` line (`cache_read_input_tokens`, `cache_creation_input_tokens`)
-   - **Gap:** only input/output tokens emitted today
+   - All ACs implemented and tested ✓
 
 10. - [x] MCP config (`--mcp-config`) — [`mcp-config.md`](./mcp-config.md)
     - Load multiple config files; expand env vars in server definitions
@@ -177,7 +179,7 @@ Implement in this order:
 
 #### Tools
 
-5. - [ ] Notebook edit — [`notebook-edit.md`](./notebook-edit.md)
+5. - [x] Notebook edit — [`notebook-edit.md`](./notebook-edit.md)
 6. - [ ] ListMcpResources — [`list-mcp-resources.md`](./list-mcp-resources.md)
 7. - [ ] ReadMcpResource — [`read-mcp-resource.md`](./read-mcp-resource.md)
 

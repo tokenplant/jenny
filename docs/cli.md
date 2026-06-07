@@ -7,7 +7,6 @@ spec: complete
 code: partial
 package: internal/cli
 gaps:
-  - --mcp-config not wired
   - --continue, --fork-session, --no-session-persistence missing
 depends_on:
   []

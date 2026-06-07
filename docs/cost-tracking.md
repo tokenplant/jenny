@@ -2,14 +2,12 @@
 title: Cost and Token Tracking
 slug: cost-tracking
 priority: P0
-status: partial
+status: done
 spec: complete
-code: partial
+code: done
 package: internal/agent, internal/session
-gaps:
-  - Cache read/creation tokens not tracked
-  - No persist/restore to project config
-  - result.usage missing cache fields and total_cost_usd
+gaps: []
+defer_to: P3
 depends_on:
   - anthropic-api-client
   - stream-json

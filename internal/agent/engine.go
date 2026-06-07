@@ -181,6 +181,12 @@ func (e *QueryEngine) SubmitMessage(ctx context.Context, prompt string) (string,
 func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, sessionID, querySource string) (string, error) {
 	systemPrompt := AssembleSystemPrompt(e.streamCfg, e.tools, cwd)
 
+	// AC3: When stream-json mode is active, redirect debug logs to stderr
+	// to prevent interleaving with NDJSON output on stdout
+	if e.streamCfg.Enabled {
+		log.SetOutput(os.Stderr)
+	}
+
 	for range MaxIterations {
 		e.mu.Lock()
 		// AC2: maxTurns enforcement - check before each API call

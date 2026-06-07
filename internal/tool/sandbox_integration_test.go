@@ -478,7 +478,7 @@ func TestRegistry_WithSandboxWiring(t *testing.T) {
 	// Build registry with sandbox
 	tools := NewRegistry().
 		WithBaseTools().
-		WithReadFileCache().
+		WithReadFileCache(nil).
 		WithSandbox(sb).
 		Build()
 
