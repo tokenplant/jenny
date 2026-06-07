@@ -163,7 +163,7 @@ func (e *QueryEngine) SubmitMessage(ctx context.Context, prompt string) (string,
 	}
 
 	// Run the agent loop
-	result, err := e.runLoop(ctx, messages, cwd, sessionID)
+	result, err := e.runLoop(ctx, messages, cwd, sessionID, "user")
 
 	// AC3: Flush cost state on completion (success, error, or limit exceeded)
 	e.mu.Lock()
@@ -177,7 +177,8 @@ func (e *QueryEngine) SubmitMessage(ctx context.Context, prompt string) (string,
 // runLoop implements the core agent loop. It iterates with the API,
 // executing tools and accumulating cost, until the model signals
 // end_turn or stop_sequence, or a limit is reached.
-func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, sessionID string) (string, error) {
+// querySource indicates the origin of the request ("user", "compact", "session_memory").
+func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, sessionID, querySource string) (string, error) {
 	systemPrompt := AssembleSystemPrompt(e.streamCfg, e.tools, cwd)
 
 	for range MaxIterations {
@@ -255,12 +256,12 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 
 		// Check blocking limit when auto-compact is disabled (AC3)
 		// compact/session_memory sources skip this check (AC5)
-		if err := e.compactConfig.blockIfOverLimit(estimatedTokens, "user"); err != nil {
+		if err := e.compactConfig.blockIfOverLimit(estimatedTokens, querySource); err != nil {
 			return "", err
 		}
 
 		// AC1: Auto-compact if threshold exceeded and circuit breaker not tripped
-		if e.compactConfig.checkCompactThreshold(estimatedTokens, "user") {
+		if e.compactConfig.checkCompactThreshold(estimatedTokens, querySource) {
 			e.mu.Lock()
 			circuitBreakerTripped := e.compactFailCount >= MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES
 			e.mu.Unlock()

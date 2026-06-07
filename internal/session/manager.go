@@ -252,8 +252,9 @@ func (m *Manager) LoadCompactFailCount(sessionID string) (int, error) {
 		if err := json.Unmarshal([]byte(line), &entry); err != nil {
 			continue
 		}
-		// Only look at state entries with compact_fail_count set
-		if entry.Type == "state" && entry.CompactFailCount > 0 {
+		// Track the most recent state entry (regardless of count value)
+		// to properly handle reset-to-zero after successful compaction
+		if entry.Type == "state" {
 			latestCount = entry.CompactFailCount
 		}
 	}

@@ -27,11 +27,12 @@ func normalizeMessages(messages []api.Message) []api.Message {
 	// Step 2: Trailing thinking strip - strip any thinking block at the end of assistant messages
 	messages = stripTrailingThinking(messages)
 
-	// Step 3: Whitespace-only filter - remove messages with only whitespace
-	messages = filterWhitespaceOnly(messages)
-
-	// Step 4: Non-empty assistant guard - insert placeholder if stripping leaves empty assistant
+	// Step 3: Non-empty assistant guard - insert placeholder if stripping leaves empty assistant
+	// (must run BEFORE filterWhitespaceOnly so placeholder is inserted before filtering)
 	messages = ensureNonEmptyAssistant(messages)
+
+	// Step 4: Whitespace-only filter - remove messages with only whitespace
+	messages = filterWhitespaceOnly(messages)
 
 	// Step 5: Tool pairing - enforce tool_use/tool_result pairing
 	messages = ensureToolResultPairing(messages)

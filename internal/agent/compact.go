@@ -417,11 +417,12 @@ func normalizeCompactedChain(messages []api.Message) []api.Message {
 	// Step 2: Strip trailing thinking from last assistant
 	messages = stripTrailingThinking(messages)
 
-	// Step 3: Filter whitespace-only assistant messages
-	messages = filterWhitespaceOnly(messages)
-
-	// Step 4: Ensure non-empty assistant (insert placeholder if stripped content left empty)
+	// Step 3: Ensure non-empty assistant (insert placeholder if stripped content left empty)
+	// (must run BEFORE filterWhitespaceOnly so placeholder is inserted before filtering)
 	messages = ensureNonEmptyAssistant(messages)
+
+	// Step 4: Filter whitespace-only assistant messages
+	messages = filterWhitespaceOnly(messages)
 
 	// Step 5: Ensure tool result pairing
 	messages = ensureToolResultPairing(messages)
