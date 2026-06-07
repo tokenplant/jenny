@@ -572,3 +572,35 @@ func TestExecutor_BashAbortOnlyAffectsBash(t *testing.T) {
 		}
 	}
 }
+
+// TestExecutor_TaskAliasFallback verifies that "task" tool_use blocks dispatch to "agent" tool.
+func TestExecutor_TaskAliasFallback(t *testing.T) {
+	// Create a mock "agent" tool
+	agentTool := &execMockTool{name: "agent", delay: 10 * time.Millisecond, content: "agent responded"}
+	tools := []tool.Tool{agentTool}
+
+	executor := NewToolExecutor(tools, "/tmp")
+
+	// Use "task" as the tool name (alias for "agent")
+	blocks := []toolUseBlock{
+		{ID: "1", Name: "task", Input: map[string]any{"prompt": "test"}},
+	}
+
+	results, err := executor.Execute(context.Background(), blocks)
+
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	if len(results) != 1 {
+		t.Fatalf("Expected 1 result, got %d", len(results))
+	}
+
+	// The "task" tool_use should have been handled by the "agent" tool
+	if results[0].IsError {
+		t.Errorf("Expected successful execution, got error: %s", results[0].Content)
+	}
+	if results[0].Content != "agent responded" {
+		t.Errorf("Expected 'agent responded', got %q", results[0].Content)
+	}
+}

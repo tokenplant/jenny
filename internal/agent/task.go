@@ -68,7 +68,7 @@ func (r *LocalSubagentRunner) RunSubagent(ctx context.Context, params tool.Subag
 	if err != nil {
 		return &tool.SubagentResult{
 			Output: output,
-		}, nil
+		}, err
 	}
 
 	return &tool.SubagentResult{

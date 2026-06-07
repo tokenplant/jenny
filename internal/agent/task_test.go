@@ -8,59 +8,82 @@ import (
 	"github.com/ipy/jenny/internal/tool"
 )
 
-func TestLocalSubagentRunner_AC1_ValidTypeResolve(t *testing.T) {
-	// Create a minimal tool list for testing
-	readTool := tool.NewReadTool(false, nil)
-	bashTool := tool.NewBashTool(false)
-	globTool := tool.NewGlobTool()
-	grepTool := tool.NewGrepTool()
-	tools := []tool.Tool{readTool, bashTool, globTool, grepTool}
-
-	runner := NewLocalSubagentRunner(tools, nil)
-
+func TestSubagentTypeToolAllowlists(t *testing.T) {
 	tests := []struct {
-		typeName      string
-		expectedTools []string
+		name            string
+		typename        string
+		expectedAllowed []string
 	}{
 		{
-			typeName:      "explore",
-			expectedTools: []string{"Read", "Glob", "Grep", "Bash"},
+			name:            "explore",
+			typename:        "explore",
+			expectedAllowed: []string{"Read", "Glob", "Grep", "Bash"},
 		},
 		{
-			typeName:      "plan",
-			expectedTools: []string{"Read", "Glob", "Grep"},
+			name:            "plan",
+			typename:        "plan",
+			expectedAllowed: []string{"Read", "Glob", "Grep"},
 		},
 		{
-			typeName:      "shell",
-			expectedTools: []string{"Bash", "Read", "Glob", "Grep"},
+			name:            "shell",
+			typename:        "shell",
+			expectedAllowed: []string{"Bash", "Read", "Glob", "Grep"},
 		},
 		{
-			typeName:      "general-purpose",
-			expectedTools: []string{"*"},
+			name:            "general-purpose",
+			typename:        "general-purpose",
+			expectedAllowed: []string{"*"},
+		},
+		{
+			name:            "verification",
+			typename:        "verification",
+			expectedAllowed: []string{"Read", "TaskOutput", "TaskStop"},
 		},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.typeName, func(t *testing.T) {
-			params := tool.SubagentParams{
-				Prompt:       "test prompt",
-				SubagentType: tt.typeName,
+		t.Run(tt.name, func(t *testing.T) {
+			st := FindBuiltin(tt.typename)
+			if st == nil {
+				t.Fatalf("expected valid subagent type %q", tt.typename)
 			}
-			result, err := runner.RunSubagent(context.Background(), params)
-			if err != nil {
-				// For explore/plan which are one-shot, we might get an error
-				// but the key is that the type was valid
-				st := FindBuiltin(tt.typeName)
-				if st == nil {
-					t.Errorf("expected valid subagent type %q", tt.typeName)
-				}
+			got := st.AllowedTools()
+			if len(got) != len(tt.expectedAllowed) {
+				t.Errorf("AllowedTools() = %v, want %v", got, tt.expectedAllowed)
 				return
 			}
-			// If no error, the result should have output
-			if result != nil && result.Output == "" {
-				// Empty output is OK for a minimal test
+			for i, want := range tt.expectedAllowed {
+				if got[i] != want {
+					t.Errorf("AllowedTools()[%d] = %q, want %q", i, got[i], want)
+				}
 			}
 		})
+	}
+}
+
+func TestSubagentType_InvalidTypeError(t *testing.T) {
+	st := FindBuiltin("nonexistent")
+	if st != nil {
+		t.Fatal("expected nil for invalid type")
+	}
+	// Verify error message format from RunSubagent for invalid type
+	runner := NewLocalSubagentRunner(nil, nil)
+	params := tool.SubagentParams{
+		Prompt:       "test",
+		SubagentType: "nonexistent",
+	}
+	_, err := runner.RunSubagent(context.Background(), params)
+	if err == nil {
+		t.Fatal("expected error for invalid subagent_type")
+	}
+	errStr := err.Error()
+	// Error should contain the invalid type name
+	if !strings.Contains(errStr, "nonexistent") {
+		t.Errorf("error should contain invalid type name, got: %s", errStr)
+	}
+	// Error should list valid types
+	if !strings.Contains(errStr, "valid types are") {
+		t.Errorf("error should mention valid types, got: %s", errStr)
 	}
 }
 

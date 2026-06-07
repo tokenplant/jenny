@@ -101,6 +101,10 @@ func (e *ToolExecutor) partitionGroups(toolUseBlocks []toolUseBlock) []toolGroup
 		} else {
 			t = tool.FindTool(e.tools, block.Name)
 		}
+		// Fallback: "task" is an alias for "agent"
+		if t == nil && block.Name == "task" {
+			t = tool.FindTool(e.tools, "agent")
+		}
 
 		if t == nil {
 			flushBatch()
