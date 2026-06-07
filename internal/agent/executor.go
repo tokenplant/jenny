@@ -76,7 +76,7 @@ func (e *ToolExecutor) Execute(toolUseBlocks []toolUseBlock) ([]toolResult, erro
 
 // partitionGroups partitions tool use blocks into parallel and serial groups.
 // Consecutive concurrency-safe tools (read, glob, grep) go into parallel batches.
-// Bash tools run in parallel within a batch (with sibling abort on failure).
+// Bash tools are batched together for sibling abort (AC3), with semaphore=1 for AC2 compliance.
 // Write/Edit tools are serialized individually.
 func (e *ToolExecutor) partitionGroups(toolUseBlocks []toolUseBlock) []toolGroup {
 	var groups []toolGroup
@@ -120,9 +120,8 @@ func (e *ToolExecutor) partitionGroups(toolUseBlocks []toolUseBlock) []toolGroup
 				serial: true,
 			})
 		} else if isBashTool(block.Name) {
-			// Bash - batch together for sibling abort (AC3), but use semaphore=1 for serial-like behavior (AC2)
-			// This allows bash sibling abort while ensuring only one bash runs at a time
-			flushBatch()
+			// Bash - accumulate into batch for sibling abort (AC3).
+			// Semaphore in executeParallel ensures serial-like behavior (AC2).
 			currentBatchType = "bash"
 			currentBatch = append(currentBatch, toolUseWithIndex{
 				block: block,
@@ -170,7 +169,14 @@ func (e *ToolExecutor) executeParallel(batch []toolUseWithIndex, results []toolR
 	defer cancel()
 
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, e.maxConcurrency)
+
+	// Use semaphore size 1 for bash batches to enforce AC2 (serial-like behavior).
+	// For other batches, use maxConcurrency.
+	semSize := e.maxConcurrency
+	if isAllBashBatch(batch) {
+		semSize = 1
+	}
+	sem := make(chan struct{}, semSize)
 
 	// Track bash failure for sibling abort
 	var bashFailed bool
@@ -181,11 +187,21 @@ func (e *ToolExecutor) executeParallel(batch []toolUseWithIndex, results []toolR
 		go func(tw toolUseWithIndex) {
 			defer wg.Done()
 
+			// Check if already cancelled before acquiring semaphore
+			if ctx.Err() == context.Canceled {
+				results[tw.index] = toolResult{
+					ToolUseID: tw.block.ID,
+					Content:   "Tool execution aborted due to sibling failure",
+					IsError:   true,
+				}
+				return
+			}
+
 			// Acquire semaphore slot
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			// Check if already cancelled before starting
+			// Check if cancelled after acquiring semaphore (context may have been cancelled while waiting)
 			if ctx.Err() == context.Canceled {
 				results[tw.index] = toolResult{
 					ToolUseID: tw.block.ID,
@@ -236,6 +252,16 @@ func (e *ToolExecutor) executeParallel(batch []toolUseWithIndex, results []toolR
 	}
 
 	wg.Wait()
+}
+
+// isAllBashBatch returns true if all tools in the batch are bash tools.
+func isAllBashBatch(batch []toolUseWithIndex) bool {
+	for _, tw := range batch {
+		if !isBashTool(tw.block.Name) {
+			return false
+		}
+	}
+	return len(batch) > 0
 }
 
 // executeSerial runs tools one at a time in request order.
