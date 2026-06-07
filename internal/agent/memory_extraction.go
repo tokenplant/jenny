@@ -51,7 +51,7 @@ type MemoryExtractor struct {
 	// Coalescing
 	inProgress bool
 	pendingCtx context.Context
-	mu         sync.Mutex
+	mu         sync.RWMutex
 
 	// Timeout for extraction
 	timeout time.Duration
@@ -224,6 +224,9 @@ func (me *MemoryExtractor) advanceCursor(turnCtx TurnContext) {
 		return
 	}
 
+	me.mu.Lock()
+	defer me.mu.Unlock()
+
 	// Store the last message UUID
 	if turnCtx.AssistantMessage.ID != "" {
 		me.lastMemoryMessageUuid = turnCtx.AssistantMessage.ID
@@ -387,10 +390,15 @@ func (me *MemoryExtractor) buildExtractionPrompt(turnCtx TurnContext, manifest s
 
 	// Include recent messages (up to message limit)
 	// AC3: If cursor UUID is missing (after compaction), fall back to counting
+	me.mu.RLock()
+	cursorUuid := me.lastMemoryMessageUuid
+	cursorCount := me.lastMemoryMessageCount
+	me.mu.RUnlock()
+
 	messages := turnCtx.RecentMessages
-	if me.lastMemoryMessageUuid == "" && me.lastMemoryMessageCount > 0 {
-		if me.lastMemoryMessageCount < len(messages) {
-			messages = messages[me.lastMemoryMessageCount:]
+	if cursorUuid == "" && cursorCount > 0 {
+		if cursorCount < len(messages) {
+			messages = messages[cursorCount:]
 		} else {
 			messages = nil
 		}
