@@ -30,7 +30,12 @@ func (m *LinuxSandboxManager) Initialize(ctx context.Context, cfg Config) error 
 	defer m.mu.Unlock()
 
 	m.config = cfg
+	return m.setupLocked(ctx, cfg)
+}
 
+// setupLocked re-validates sandbox dependencies with the given config.
+// Caller must hold m.mu.
+func (m *LinuxSandboxManager) setupLocked(ctx context.Context, cfg Config) error {
 	// Check if bwrap is available
 	if err := exec.CommandContext(ctx, "which", "bwrap").Run(); err != nil {
 		m.available = false
@@ -106,6 +111,7 @@ func (m *LinuxSandboxManager) buildBwrapArgs(cfg Config) []string {
 	if cfg.NetworkPolicy == NetworkPolicyManagedDomainsOnly {
 		// Note: bwrap doesn't have fine-grained network allowlists like sandbox-exec
 		// For managed-domains-only, network is already disabled via --unshare-net above
+		// No additional flags needed; --unshare-net already added above
 	}
 
 	// Filesystem: readonly home and tmp
@@ -137,27 +143,8 @@ func (m *LinuxSandboxManager) RefreshConfig(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// Re-check bwrap availability
-	if err := exec.CommandContext(ctx, "which", "bwrap").Run(); err != nil {
-		m.available = false
-		return nil
-	}
-
-	// Re-validate ripgrep binary if configured
-	if m.config.Ripgrep.Command != "" {
-		if err := exec.CommandContext(ctx, "which", m.config.Ripgrep.Command).Run(); err != nil {
-			m.available = false
-			return &ErrMissingDependency{
-				Backend:     BackendLinux,
-				Dependency:  "ripgrep: " + m.config.Ripgrep.Command,
-				InstallHint: "Install ripgrep or configure correct path in sandbox.ripgrep",
-			}
-		}
-	}
-
-	m.available = true
-	m.active = m.config.Backend == BackendLinux
-	return nil
+	// Re-run setup with current config to re-validate all settings
+	return m.setupLocked(ctx, m.config)
 }
 
 // IsAvailable implements SandboxManager.IsAvailable.

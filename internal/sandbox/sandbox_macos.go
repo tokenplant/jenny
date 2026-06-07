@@ -31,36 +31,7 @@ func (m *MacOSSandboxManager) Initialize(ctx context.Context, cfg Config) error 
 	defer m.mu.Unlock()
 
 	m.config = cfg
-
-	// Check if sandbox-exec is available
-	if err := exec.CommandContext(ctx, "which", "sandbox-exec").Run(); err != nil {
-		m.available = false
-		if cfg.FailIfUnavailable {
-			m.initError = &ErrMissingDependency{
-				Backend:     BackendMacOS,
-				Dependency:  "sandbox-exec",
-				InstallHint: "Install Xcode Command Line Tools or enable Sandbox via System Preferences",
-			}
-			return m.initError
-		}
-		return nil
-	}
-
-	// Validate sandboxed ripgrep binary if configured
-	if cfg.Ripgrep.Command != "" {
-		if err := exec.CommandContext(ctx, "which", cfg.Ripgrep.Command).Run(); err != nil {
-			m.initError = &ErrMissingDependency{
-				Backend:     BackendMacOS,
-				Dependency:  "ripgrep: " + cfg.Ripgrep.Command,
-				InstallHint: "Install ripgrep or configure correct path in sandbox.ripgrep",
-			}
-			return m.initError
-		}
-	}
-
-	m.available = true
-	m.active = cfg.Backend == BackendMacOS
-	return nil
+	return m.setupLocked(ctx, cfg)
 }
 
 // WrapWithSandbox implements SandboxManager.WrapWithSandbox.
@@ -102,8 +73,8 @@ func (m *MacOSSandboxManager) buildSandboxProfile(cfg Config, _ string) (string,
 	// Deny network by default unless allowed
 	if cfg.NetworkPolicy == NetworkPolicyManagedDomainsOnly {
 		builder.WriteString("(deny network*)\n")
-		// Allow specific domains (only cfg.AllowedDomains, not WebFetchAllowedDomains)
-		for _, domain := range cfg.AllowedDomains {
+		// Allow merged domains (AllowedDomains + WebFetchAllowedDomains)
+		for _, domain := range allowedDomains {
 			fmt.Fprintf(&builder, "(allow network (remote %s))\n", domain)
 		}
 	} else if len(allowedDomains) > 0 {
@@ -134,26 +105,41 @@ func (m *MacOSSandboxManager) RefreshConfig(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// Re-check sandbox-exec availability
+	// Re-run setup with current config to re-validate all settings
+	return m.setupLocked(ctx, m.config)
+}
+
+// setupLocked re-validates sandbox dependencies with the given config.
+// Caller must hold m.mu.
+func (m *MacOSSandboxManager) setupLocked(ctx context.Context, cfg Config) error {
+	// Check if sandbox-exec is available
 	if err := exec.CommandContext(ctx, "which", "sandbox-exec").Run(); err != nil {
 		m.available = false
+		if cfg.FailIfUnavailable {
+			m.initError = &ErrMissingDependency{
+				Backend:     BackendMacOS,
+				Dependency:  "sandbox-exec",
+				InstallHint: "Install Xcode Command Line Tools or enable Sandbox via System Preferences",
+			}
+			return m.initError
+		}
 		return nil
 	}
 
-	// Re-validate ripgrep binary if configured
-	if m.config.Ripgrep.Command != "" {
-		if err := exec.CommandContext(ctx, "which", m.config.Ripgrep.Command).Run(); err != nil {
-			m.available = false
-			return &ErrMissingDependency{
+	// Validate sandboxed ripgrep binary if configured
+	if cfg.Ripgrep.Command != "" {
+		if err := exec.CommandContext(ctx, "which", cfg.Ripgrep.Command).Run(); err != nil {
+			m.initError = &ErrMissingDependency{
 				Backend:     BackendMacOS,
-				Dependency:  "ripgrep: " + m.config.Ripgrep.Command,
+				Dependency:  "ripgrep: " + cfg.Ripgrep.Command,
 				InstallHint: "Install ripgrep or configure correct path in sandbox.ripgrep",
 			}
+			return m.initError
 		}
 	}
 
 	m.available = true
-	m.active = m.config.Backend == BackendMacOS
+	m.active = cfg.Backend == BackendMacOS
 	return nil
 }
 
