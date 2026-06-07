@@ -6,9 +6,9 @@ import (
 	"fmt"
 )
 
-// forkChildKey is the context key for checking if we're in a fork child.
-// This is set by the agent loop when spawning subagents.
-const forkChildKey = "agent.forkChild"
+// ForkChildKey is the context key for checking if we're in a fork child.
+// Exported so the agent package can use the same key for consistent context lookups.
+var ForkChildKey = "agent.forkChild"
 
 // SubagentParams holds parameters for running a subagent.
 type SubagentParams struct {
@@ -110,7 +110,7 @@ func (t *AgentTool) InputSchema() map[string]any {
 // isForkChild checks if the current execution context indicates we're in a subagent.
 // This is used to block recursive fork (AC1).
 func isForkChild(ctx context.Context) bool {
-	if v := ctx.Value(forkChildKey); v != nil {
+	if v := ctx.Value(ForkChildKey); v != nil {
 		if b, ok := v.(bool); ok && b {
 			return true
 		}

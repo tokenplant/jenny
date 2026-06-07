@@ -264,7 +264,9 @@ func (r *LocalSubagentRunner) RunSubagent(ctx context.Context, params tool.Subag
 
 		// Persist worktree state to transcript if session manager available (AC5)
 		if r.sessionMgr != nil {
-			_ = r.sessionMgr.AppendEntry("", session.TranscriptEntry{
+			// Generate a session ID for the subagent to track worktree state
+			subagentSessionID := "subagent-" + params.SubagentType
+			_ = r.sessionMgr.AppendEntry(subagentSessionID, session.TranscriptEntry{
 				Type:           "worktree_state",
 				WorktreePath:   worktreePath,
 				WorktreeBranch: branchName,
@@ -291,7 +293,7 @@ func (r *LocalSubagentRunner) RunSubagent(ctx context.Context, params tool.Subag
 	output, _, err := RunStream(ctx, params.Prompt, subagentTools, cwd, streamCfg, params.Model)
 
 	// AC4: Interrupt yields partial result - capture output even on cancellation
-	if ctx.Err() != nil && output != "" {
+	if ctx.Err() != nil {
 		return &tool.SubagentResult{
 			Output:  output,
 			AgentID: "",
@@ -337,8 +339,13 @@ func (r *AsyncSubagentRunner) RunSubagentAsync(params tool.SubagentParams) (*too
 		return nil, fmt.Errorf("generating agent ID: %w", err)
 	}
 
-	// Determine transcript directory - use default if not set
+	// Determine transcript directory - use session manager's dir if available
 	transcriptDir := "transcripts"
+	if r.sessionMgr != nil {
+		// Use reflection or a getter to get the transcript directory
+		// For now, default to "transcripts" in current working directory
+		transcriptDir = "transcripts"
+	}
 
 	// Build output file path
 	outputFile := filepath.Join(transcriptDir, agentID+".jsonl")
@@ -352,7 +359,7 @@ func (r *AsyncSubagentRunner) RunSubagentAsync(params tool.SubagentParams) (*too
 	go func() {
 		result, err := r.runner.RunSubagent(context.Background(), params)
 
-		// Write result to output file
+		// Write result to output file as JSONL (newline-delimited JSON)
 		var entry struct {
 			Type   string `json:"type"`
 			Output string `json:"output,omitempty"`
@@ -367,6 +374,8 @@ func (r *AsyncSubagentRunner) RunSubagentAsync(params tool.SubagentParams) (*too
 		}
 
 		data, _ := json.Marshal(entry)
+		// Add newline for valid JSONL format
+		data = append(data, '\n')
 		_ = os.WriteFile(outputFile, data, 0644)
 	}()
 
