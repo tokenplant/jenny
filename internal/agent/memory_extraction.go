@@ -381,9 +381,9 @@ func (me *MemoryExtractor) buildExtractionPrompt(turnCtx TurnContext, manifest s
 	sb.WriteString("\nRecent conversation:\n")
 
 	// Include recent messages (up to message limit)
-	// AC3: If UUID is missing (after compaction), fall back to counting
+	// AC3: If cursor UUID is missing (after compaction), fall back to counting
 	messages := turnCtx.RecentMessages
-	if turnCtx.AssistantMessage != nil && turnCtx.AssistantMessage.ID == "" && me.lastMemoryMessageCount > 0 {
+	if me.lastMemoryMessageUuid == "" && me.lastMemoryMessageCount > 0 {
 		if me.lastMemoryMessageCount < len(messages) {
 			messages = messages[me.lastMemoryMessageCount:]
 		} else {
@@ -446,14 +446,14 @@ func (me *MemoryExtractor) finalizeExtraction() {
 	me.pendingCancel = nil
 
 	// If there was a stashed context, trigger a trailing extraction
-	// BEFORE releasing the inProgress lock to prevent Drain race
+	// Spawn the goroutine BEFORE releasing the inProgress lock to prevent Drain race
 	if pendingCtx != nil {
 		log.Debug("Memory extraction: running trailing extraction")
 		me.inProgress = true // Keep inProgress true for trailing extraction
 		go func() {
 			defer me.finalizeExtraction()
 
-			me.mu.Unlock() // Unlock after goroutine starts
+			me.mu.Unlock() // Unlock after goroutine is spawned and can run independently
 
 			extractCtx, cancel := context.WithTimeout(context.Background(), me.timeout)
 			defer cancel()
@@ -466,7 +466,7 @@ func (me *MemoryExtractor) finalizeExtraction() {
 				log.Warn("Trailing memory extraction failed", "error", err)
 			}
 		}()
-		return // Goroutine will call finalizeExtraction again
+		return // Goroutine will call finalizeExtraction again when it completes
 	}
 
 	me.inProgress = false

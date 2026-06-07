@@ -100,12 +100,16 @@ func (t *EditTool) Execute(ctx context.Context, input map[string]any, cwd string
 	resolvedPath = filepath.Clean(resolvedPath)
 
 	// Check allowedPaths restriction first - paths in allowedPaths bypass cwd gate
+	// Use prefix matching to allow subdirectories under allowed paths
 	if len(t.allowedPaths) > 0 {
-		allowed := slices.Contains(t.allowedPaths, resolvedPath)
-		if allowed {
-			// Path is in allowlist - skip cwd gate and use resolved path
-			filePath = resolvedPath
-		} else {
+		allowed := false
+		for _, allowedPath := range t.allowedPaths {
+			if resolvedPath == allowedPath || strings.HasPrefix(resolvedPath, allowedPath+string(filepath.Separator)) {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
 			// Path not in allowlist - apply cwd gate
 			var pathErr error
 			filePath, pathErr = PathInWorkingDir(resolvedPath, cwd)
@@ -115,6 +119,9 @@ func (t *EditTool) Execute(ctx context.Context, input map[string]any, cwd string
 					IsError: true,
 				}, nil
 			}
+		} else {
+			// Path is in allowlist - skip cwd gate and use resolved path
+			filePath = resolvedPath
 		}
 	} else {
 		// No allowedPaths restriction - apply cwd gate

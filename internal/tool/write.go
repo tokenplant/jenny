@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 )
 
@@ -86,8 +85,15 @@ func (t *WriteTool) Execute(ctx context.Context, input map[string]any, cwd strin
 	filePath = filepath.Clean(filePath)
 
 	// Check allowedPaths restriction first - paths in allowedPaths bypass cwd gate
+	// Use prefix matching to allow subdirectories under allowed paths
 	if len(t.allowedPaths) > 0 {
-		allowed := slices.Contains(t.allowedPaths, filePath)
+		allowed := false
+		for _, allowedPath := range t.allowedPaths {
+			if filePath == allowedPath || strings.HasPrefix(filePath, allowedPath+string(filepath.Separator)) {
+				allowed = true
+				break
+			}
+		}
 		if !allowed {
 			// Path not in allowlist - apply cwd gate
 			var pathErr error
