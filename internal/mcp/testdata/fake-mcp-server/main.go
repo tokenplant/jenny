@@ -69,6 +69,18 @@ func main() {
 				resp.Result = json.RawMessage(fmt.Sprintf(`{"content":[{"type":"text","text":"result from %s"}]}`, name))
 			}
 
+		case "resources/read":
+			uri, _ := req.Params["uri"].(string)
+			// Return text or blob content based on URI
+			if uri == "file:///text.txt" || uri == "test/text" {
+				resp.Result = json.RawMessage(`{"contents":[{"type":"text","text":"Hello, World!","mimeType":"text/plain"}]}`)
+			} else if uri == "file:///image.png" || uri == "test/blob" {
+				// Return base64-encoded data: "Hello" in base64 is "SGVsbG8="
+				resp.Result = json.RawMessage(`{"contents":[{"type":"blob","blob":"SGVsbG8=","mimeType":"image/png"}]}`)
+			} else {
+				resp.Result = json.RawMessage(`{"contents":[]}`)
+			}
+
 		case "notifications/initialized", "notifications/shutdown":
 			// Notifications have no response
 			continue

@@ -147,7 +147,7 @@ type resourceContent struct {
 
 // resourcesReadResult represents the result of a resources/read call.
 type resourcesReadResult struct {
-	Content []resourceContent `json:"content"`
+	Contents []resourceContent `json:"contents"`
 }
 
 // ResourceContent represents a resource's content returned by ReadResource.
@@ -157,10 +157,6 @@ type ResourceContent struct {
 	MimeType string
 	Blob     []byte
 }
-
-// readResourceHook allows injecting mock behavior for testing ReadResource.
-// If set, this function is called instead of the actual ReadResource RPC.
-var readResourceHook func(ctx context.Context, clientName string, uri string) ([]ResourceContent, error)
 
 // MCPTool implements tool.Tool for an MCP tool.
 type MCPTool struct {
@@ -448,11 +444,6 @@ func (c *Client) ListResources(ctx context.Context) ([]MCPResource, error) {
 
 // ReadResource reads a single resource content by URI.
 func (c *Client) ReadResource(ctx context.Context, uri string) ([]ResourceContent, error) {
-	// Use test hook if set
-	if readResourceHook != nil {
-		return readResourceHook(ctx, c.Name, uri)
-	}
-
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -483,8 +474,8 @@ func (c *Client) ReadResource(ctx context.Context, uri string) ([]ResourceConten
 		return nil, fmt.Errorf("parsing resources/read result: %w", err)
 	}
 
-	contents := make([]ResourceContent, 0, len(readResult.Content))
-	for _, r := range readResult.Content {
+	contents := make([]ResourceContent, 0, len(readResult.Contents))
+	for _, r := range readResult.Contents {
 		var blobData []byte
 		if r.Blob != "" {
 			var err error
@@ -707,17 +698,7 @@ func GetMCPClients() map[string]*Client {
 	return result
 }
 
-// SetReadResourceHook sets the test hook for ReadResource (only for testing).
-func SetReadResourceHook(hook func(ctx context.Context, clientName string, uri string) ([]ResourceContent, error)) {
-	readResourceHook = hook
-}
-
-// ResetReadResourceHook clears the test hook for ReadResource.
-func ResetReadResourceHook() {
-	readResourceHook = nil
-}
-
-// SetTestClient registers a mock client for testing (only for testing).
+// SetTestClient registers a client for testing (only for testing).
 func SetTestClient(name string, client *Client) {
 	clientsMu.Lock()
 	defer clientsMu.Unlock()
@@ -729,9 +710,4 @@ func ResetTestClients() {
 	clientsMu.Lock()
 	defer clientsMu.Unlock()
 	clients = make(map[string]*Client)
-}
-
-// GetClientsMu returns the clients mutex for testing synchronization.
-func GetClientsMu() *sync.RWMutex {
-	return &clientsMu
 }

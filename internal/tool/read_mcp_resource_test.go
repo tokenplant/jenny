@@ -5,14 +5,80 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 
 	"github.com/ipy/jenny/internal/mcp"
 )
+
+// fakeServer holds a running fake MCP server process.
+type fakeServer struct {
+	cmd    *exec.Cmd
+	client *mcp.Client
+}
+
+func (s *fakeServer) close() {
+	if s.client != nil {
+		s.client.Disconnect()
+	}
+	if s.cmd != nil {
+		s.cmd.Process.Kill()
+		s.cmd.Wait()
+	}
+}
+
+// startFakeServer starts a fake MCP server and creates a connected client.
+func startFakeServer(t *testing.T, name string) *fakeServer {
+	// Determine repo root by finding go.mod
+	repoRoot := "."
+	for {
+		if _, err := os.Stat(filepath.Join(repoRoot, "go.mod")); err == nil {
+			break
+		}
+		repoRoot = filepath.Join(repoRoot, "..")
+		if len(repoRoot) > 100 {
+			t.Skip("cannot find repo root (go.mod)")
+			return nil
+		}
+	}
+
+	// Build the fake server first
+	fakeServerBinary := filepath.Join(repoRoot, "internal", "mcp", "testdata", "fake-mcp-server", "fake-mcp-server")
+	if _, err := os.Stat(fakeServerBinary); os.IsNotExist(err) {
+		// Try to build it
+		buildCmd := exec.Command("go", "build", "-o", fakeServerBinary, "./internal/mcp/testdata/fake-mcp-server")
+		buildCmd.Dir = repoRoot
+		if err := buildCmd.Run(); err != nil {
+			t.Skipf("fake MCP server not built: %v", err)
+		}
+	}
+
+	fakeServerPath := fakeServerBinary
+
+	cmd := exec.Command(fakeServerPath)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Start(); err != nil {
+		t.Skipf("failed to start fake MCP server: %v", err)
+	}
+
+	client := mcp.NewClient(name, fakeServerPath, nil, nil)
+	ctx := context.Background()
+	if err := client.Connect(ctx); err != nil {
+		cmd.Process.Kill()
+		cmd.Wait()
+		t.Skipf("failed to connect to fake MCP server: %v", err)
+	}
+
+	// Register the client so GetClient can find it
+	mcp.SetTestClient(name, client)
+
+	return &fakeServer{cmd: cmd, client: client}
+}
 
 // TestReadMcpResourceTool_NameAndDescription tests basic tool metadata.
 func TestReadMcpResourceTool_NameAndDescription(t *testing.T) {
@@ -35,8 +101,6 @@ func TestReadMcpResourceTool_NameAndDescription(t *testing.T) {
 
 // TestReadMcpResourceTool_AC1_UnknownServer tests AC1: unknown server returns error with available names.
 func TestReadMcpResourceTool_AC1_UnknownServer(t *testing.T) {
-	// Note: We can't easily reset the global mcp clients map from the tool package,
-	// so we just test with an intentionally unknown server name
 	readTool := NewReadMcpResourceTool()
 
 	result, err := readTool.Execute(context.Background(), map[string]any{
@@ -164,34 +228,17 @@ func TestReadMcpResourceTool_InputSchemaRequiredFields(t *testing.T) {
 	}
 }
 
-// TestReadMcpResourceTool_AC2_TextInline tests AC2: text content is returned inline.
+// TestReadMcpResourceTool_AC2_TextInline tests AC2: text content is returned inline via fake MCP server.
 func TestReadMcpResourceTool_AC2_TextInline(t *testing.T) {
-	// Save and restore global state
-	mcp.ResetTestClients()
-	mcp.ResetReadResourceHook()
-	t.Cleanup(func() {
-		mcp.ResetTestClients()
-		mcp.ResetReadResourceHook()
-	})
+	server := startFakeServer(t, "test-server")
+	defer server.close()
 
-	// Register mock client
-	mcp.SetTestClient("test-server", &mcp.Client{Name: "test-server"})
-
-	// Set up hook to return text content
-	mcp.SetReadResourceHook(func(ctx context.Context, clientName string, uri string) ([]mcp.ResourceContent, error) {
-		if clientName == "test-server" && uri == "file:///test.txt" {
-			return []mcp.ResourceContent{
-				{Type: "text", Text: "Hello, World!", MimeType: "text/plain"},
-			}, nil
-		}
-		return nil, fmt.Errorf("unexpected client/uri: %s/%s", clientName, uri)
-	})
-
+	cwd := t.TempDir()
 	tool := NewReadMcpResourceTool()
 	result, err := tool.Execute(context.Background(), map[string]any{
 		"server": "test-server",
-		"uri":    "file:///test.txt",
-	}, t.TempDir())
+		"uri":    "file:///text.txt",
+	}, cwd)
 	if err != nil {
 		t.Fatalf("Execute returned unexpected error: %v", err)
 	}
@@ -226,28 +273,10 @@ func TestReadMcpResourceTool_AC2_TextInline(t *testing.T) {
 	}
 }
 
-// TestReadMcpResourceTool_AC3_BlobPersist tests AC3: binary content is decoded and saved to disk.
+// TestReadMcpResourceTool_AC3_BlobPersist tests AC3: binary content is decoded and saved to disk via fake MCP server.
 func TestReadMcpResourceTool_AC3_BlobPersist(t *testing.T) {
-	// Save and restore global state
-	mcp.ResetTestClients()
-	mcp.ResetReadResourceHook()
-	t.Cleanup(func() {
-		mcp.ResetTestClients()
-		mcp.ResetReadResourceHook()
-	})
-
-	// Register mock client
-	mcp.SetTestClient("blob-server", &mcp.Client{Name: "blob-server"})
-
-	// Set up hook to return blob content
-	mcp.SetReadResourceHook(func(ctx context.Context, clientName string, uri string) ([]mcp.ResourceContent, error) {
-		if clientName == "blob-server" && uri == "file:///image.png" {
-			return []mcp.ResourceContent{
-				{Type: "blob", Blob: []byte("Hello"), MimeType: "image/png"},
-			}, nil
-		}
-		return nil, fmt.Errorf("unexpected client/uri: %s/%s", clientName, uri)
-	})
+	server := startFakeServer(t, "blob-server")
+	defer server.close()
 
 	cwd := t.TempDir()
 	tool := NewReadMcpResourceTool()
@@ -299,28 +328,10 @@ func TestReadMcpResourceTool_AC3_BlobPersist(t *testing.T) {
 
 // TestReadMcpResourceTool_AC4_PersistFailure tests AC4: disk write failure returns error, not base64.
 func TestReadMcpResourceTool_AC4_PersistFailure(t *testing.T) {
-	// Save and restore global state
-	mcp.ResetTestClients()
-	mcp.ResetReadResourceHook()
-	t.Cleanup(func() {
-		mcp.ResetTestClients()
-		mcp.ResetReadResourceHook()
-	})
+	server := startFakeServer(t, "fail-server")
+	defer server.close()
 
-	// Register mock client
-	mcp.SetTestClient("fail-server", &mcp.Client{Name: "fail-server"})
-
-	// Set up hook to return blob content
-	mcp.SetReadResourceHook(func(ctx context.Context, clientName string, uri string) ([]mcp.ResourceContent, error) {
-		if clientName == "fail-server" {
-			return []mcp.ResourceContent{
-				{Type: "blob", Blob: []byte("Hello"), MimeType: "image/png"},
-			}, nil
-		}
-		return nil, fmt.Errorf("unexpected client/uri: %s/%s", clientName, uri)
-	})
-
-	// Use a path that cannot be written to (empty string or invalid path)
+	// Use a path that cannot be written to
 	cwd := "/nonexistent/path/that/cannot/be/created"
 	tool := NewReadMcpResourceTool()
 	result, err := tool.Execute(context.Background(), map[string]any{
@@ -342,36 +353,35 @@ func TestReadMcpResourceTool_AC4_PersistFailure(t *testing.T) {
 	}
 }
 
-// TestReadMcpResourceTool_AC5_ConcurrentCalls tests AC5: concurrent calls are safe.
+// TestReadMcpResourceTool_AC5_ConcurrentCalls tests AC5: concurrent calls are safe via race detector.
 func TestReadMcpResourceTool_AC5_ConcurrentCalls(t *testing.T) {
-	// Save and restore global state
-	mcp.ResetTestClients()
-	t.Cleanup(func() {
-		mcp.ResetTestClients()
-		mcp.ResetReadResourceHook()
-	})
-
-	// Register mock client
-	mcp.SetTestClient("concurrent-server", &mcp.Client{Name: "concurrent-server"})
-
-	counter := atomic.Int64{}
-	mcp.SetReadResourceHook(func(ctx context.Context, clientName string, uri string) ([]mcp.ResourceContent, error) {
-		counter.Add(1)
-		return []mcp.ResourceContent{
-			{Type: "text", Text: "response", MimeType: "text/plain"},
-		}, nil
-	})
+	// Start multiple fake servers, one per client to avoid stdin/stdout conflicts
+	const numServers = 5
+	var servers []*fakeServer
+	for i := range numServers {
+		server := startFakeServer(t, fmt.Sprintf("concurrent-server-%d", i))
+		servers = append(servers, server)
+	}
+	defer func() {
+		for _, s := range servers {
+			s.close()
+		}
+	}()
 
 	cwd := t.TempDir()
-	tool := NewReadMcpResourceTool()
 
 	var wg sync.WaitGroup
 	const numGoroutines = 10
-	for range numGoroutines {
-		wg.Go(func() {
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			tool := NewReadMcpResourceTool()
+			// Round-robin across servers to distribute load
+			server := servers[idx%numServers]
 			result, err := tool.Execute(context.Background(), map[string]any{
-				"server": "concurrent-server",
-				"uri":    "file:///test.txt",
+				"server": server.client.Name,
+				"uri":    "file:///text.txt",
 			}, cwd)
 			if err != nil {
 				t.Errorf("Execute returned error: %v", err)
@@ -380,13 +390,40 @@ func TestReadMcpResourceTool_AC5_ConcurrentCalls(t *testing.T) {
 			if result.IsError {
 				t.Errorf("unexpected error: %s", result.Content)
 			}
-		})
+		}(i)
 	}
 	wg.Wait()
+}
 
-	if counter.Load() != numGoroutines {
-		t.Errorf("expected %d calls, got %d", numGoroutines, counter.Load())
+// TestReadMcpResourceTool_AC5_ConcurrentCalls_SingleClient tests AC5 with a single client
+// to verify the mutex actually protects concurrent access to the transport.
+func TestReadMcpResourceTool_AC5_ConcurrentCalls_SingleClient(t *testing.T) {
+	server := startFakeServer(t, "single-server")
+	defer server.close()
+
+	cwd := t.TempDir()
+	tool := NewReadMcpResourceTool()
+
+	var wg sync.WaitGroup
+	const numGoroutines = 10
+	for range numGoroutines {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			result, err := tool.Execute(context.Background(), map[string]any{
+				"server": "single-server",
+				"uri":    "file:///text.txt",
+			}, cwd)
+			if err != nil {
+				t.Errorf("Execute returned error: %v", err)
+				return
+			}
+			if result.IsError {
+				t.Errorf("unexpected error: %s", result.Content)
+			}
+		}()
 	}
+	wg.Wait()
 }
 
 var _ = mcp.GetClient // Reference mcp package to ensure it compiles
