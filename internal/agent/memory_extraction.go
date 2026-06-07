@@ -114,11 +114,14 @@ func (me *MemoryExtractor) CheckAndExtract(ctx context.Context, turnCtx TurnCont
 		return
 	}
 
-	// Check throttle
+	// Check throttle - protect with mutex to avoid race with goroutine reset
+	me.mu.Lock()
 	me.turnsSinceLastExtract++
 	if me.turnsSinceLastExtract < me.extractEvery() {
+		me.mu.Unlock()
 		return
 	}
+	me.mu.Unlock()
 
 	// AC2: Check if main agent already wrote to auto-mem paths
 	if me.mainAgentWroteToAutoMem(turnCtx) {
@@ -137,8 +140,14 @@ func (me *MemoryExtractor) CheckAndExtract(ctx context.Context, turnCtx TurnCont
 	me.inProgress = true
 	me.mu.Unlock()
 
+	// Capture message ID before spawning goroutine to avoid race on pointer
+	msgID := ""
+	if turnCtx.AssistantMessage != nil {
+		msgID = turnCtx.AssistantMessage.ID
+	}
+
 	// Run extraction synchronously
-	go func() {
+	go func(msgID string) {
 		defer me.finalizeExtraction()
 
 		extractCtx, cancel := context.WithTimeout(context.Background(), me.timeout)
@@ -149,9 +158,18 @@ func (me *MemoryExtractor) CheckAndExtract(ctx context.Context, turnCtx TurnCont
 			return
 		}
 
+		me.mu.Lock()
 		me.turnsSinceLastExtract = 0
-		me.advanceCursor(turnCtx)
-	}()
+		me.mu.Unlock()
+
+		// Build a TurnContext with the captured message ID for advanceCursor
+		cursorTurnCtx := TurnContext{
+			StopReason:       turnCtx.StopReason,
+			AssistantMessage: &api.Message{ID: msgID},
+			TotalMessages:    turnCtx.TotalMessages,
+		}
+		me.advanceCursor(cursorTurnCtx)
+	}(msgID)
 }
 
 // extractEvery returns the throttle interval.
