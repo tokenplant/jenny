@@ -19,10 +19,20 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
-        go-version: '1.20'
-
-    - name: Build
-      run: go build -v ./...
+        go-version: '1.26.1'
 
     - name: Test
       run: go test -v ./...
+
+    - name: Build
+      run: |
+        go build -v ./...
+        go build -v -o jenny ./cmd/jenny
+
+    - name: Run Jenny (Integration)
+      if: ${{ secrets.ANTHROPIC_AUTH_TOKEN != '' }}
+      env:
+        ANTHROPIC_AUTH_TOKEN: ${{ secrets.ANTHROPIC_AUTH_TOKEN }}
+        ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+        ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL }}
+      run: ./jenny "Hello, who are you?"
