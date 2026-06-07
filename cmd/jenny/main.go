@@ -83,13 +83,11 @@ func run() error {
 	}
 
 	// Create tools
-	tools := []tool.Tool{
-		tool.NewBashTool(),
-		tool.NewReadTool(),
-	}
+	var tools []tool.Tool
 
 	// Load MCP configuration if paths are provided
 	var mcpConfig map[string]mcp.MCPServerDef
+	var mcpTools []tool.Tool
 	if len(flags.MCPConfig) > 0 {
 		mcpConfig, err = mcp.LoadConfig(flags.MCPConfig, flags.StrictMCP)
 		if err != nil {
@@ -101,14 +99,20 @@ func run() error {
 			return fmt.Errorf("connecting to MCP servers: %w", err)
 		}
 
-		// Get discovered MCP tools and append to tools list
-		mcpTools := mcp.GetTools()
-		for _, t := range mcpTools {
+		// Get discovered MCP tools
+		for _, t := range mcp.GetTools() {
 			if mcpTool, ok := t.(*mcp.MCPTool); ok {
-				tools = append(tools, mcpTool)
+				mcpTools = append(mcpTools, mcpTool)
 			}
 		}
 	}
+
+	// Build tool registry
+	tools = tool.NewRegistry().
+		WithBaseTools().
+		WithMCPTools(mcpTools).
+		WithDenyRules(flags.DeniedTools).
+		Build()
 
 	// Ensure MCP clients are shut down on exit
 	if len(flags.MCPConfig) > 0 {

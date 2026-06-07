@@ -21,6 +21,7 @@ type Flags struct {
 	NoSessionPersistence   bool
 	MCPConfig              []string
 	StrictMCP              bool
+	DeniedTools            []string
 }
 
 // StringSlice implements flag.Value for multiple string values.
@@ -78,6 +79,9 @@ func Parse() (*Flags, error) {
 	var strictMCP bool
 	flags.BoolVar(&strictMCP, "strict-mcp-config", false, "Only load MCP servers from --mcp-config files")
 
+	var deniedTools = []string{}
+	flags.Var((*StringSlice)(&deniedTools), "deny-tool", "Tool name to deny (can be specified multiple times)")
+
 	// Parse the flags
 	if err := flags.Parse(os.Args[1:]); err != nil {
 		if err == flag.ErrHelp {
@@ -114,6 +118,7 @@ func Parse() (*Flags, error) {
 		NoSessionPersistence:   noSessionPersistence,
 		MCPConfig:              mcpPaths,
 		StrictMCP:              strictMCP,
+		DeniedTools:            deniedTools,
 	}, nil
 }
 
