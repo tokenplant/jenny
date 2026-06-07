@@ -197,8 +197,8 @@ Implement in this order:
 
 #### Tools
 
-- [ ] WebFetch — [`web-fetch.md`](./web-fetch.md)
-- [ ] WebSearch — [`web-search.md`](./web-search.md)
+- [x] WebFetch — [`web-fetch.md`](./web-fetch.md)
+- [x] WebSearch — [`web-search.md`](./web-search.md)
 - [ ] LSP — [`lsp.md`](./lsp.md)
 - [ ] Skill — [`skill.md`](./skill.md)
 - [ ] Sleep / Await — [`sleep-await.md`](./sleep-await.md)

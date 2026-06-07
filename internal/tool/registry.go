@@ -5,14 +5,17 @@ import "github.com/ipy/jenny/internal/sandbox"
 
 // Registry builds a filtered, ordered list of tools.
 type Registry struct {
-	baseTools       []Tool
-	mcpTools        []Tool
-	denyRules       map[string]bool
-	enabled         map[string]bool
-	skipPermissions bool
-	hasBaseTools    bool
-	readCache       *ReadFileCache
-	sandbox         sandbox.SandboxManager
+	baseTools        []Tool
+	mcpTools         []Tool
+	denyRules        map[string]bool
+	enabled          map[string]bool
+	skipPermissions  bool
+	hasBaseTools     bool
+	readCache        *ReadFileCache
+	sandbox          sandbox.SandboxManager
+	webFetchEnabled  bool
+	webSearchEnabled bool
+	model            string
 }
 
 // NewRegistry creates a new Registry.
@@ -72,6 +75,24 @@ func (r *Registry) WithSandbox(sb sandbox.SandboxManager) *Registry {
 	return r
 }
 
+// WithWebFetchEnabled enables or disables the WebFetch tool.
+func (r *Registry) WithWebFetchEnabled(enabled bool) *Registry {
+	r.webFetchEnabled = enabled
+	return r
+}
+
+// WithWebSearchEnabled enables or disables the WebSearch tool.
+func (r *Registry) WithWebSearchEnabled(enabled bool) *Registry {
+	r.webSearchEnabled = enabled
+	return r
+}
+
+// WithModel sets the model name for tools that need it (e.g., WebSearch).
+func (r *Registry) WithModel(model string) *Registry {
+	r.model = model
+	return r
+}
+
 // Build returns the final ordered tool list.
 // Built-in tools appear first, then MCP tools. Deny rules and enabled flags
 // filter the output. On name collision, the built-in tool wins.
@@ -102,6 +123,16 @@ func (r *Registry) Build() []Tool {
 					tool.WithSandbox(r.sandbox)
 				}
 			}
+		}
+
+		// Add WebFetch tool if enabled (P3).
+		if r.webFetchEnabled {
+			r.baseTools = append(r.baseTools, NewWebFetchTool())
+		}
+
+		// Add WebSearch tool if enabled (P3).
+		if r.webSearchEnabled {
+			r.baseTools = append(r.baseTools, NewWebSearchTool(r.model))
 		}
 	}
 

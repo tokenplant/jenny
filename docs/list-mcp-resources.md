@@ -10,6 +10,7 @@ gaps:
   - "Cursor-based pagination (pagination/list) not implemented"
   - "Handling of notifications/resources/list_changed to invalidate cache not implemented"
   - "Resource templates not included in listing"
+# Reviewed 2026-06-08: gaps verified as still accurate
 depends_on:
   - mcp-client
 ---

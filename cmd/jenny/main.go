@@ -115,6 +115,9 @@ func run() error {
 	var tools []tool.Tool
 	tools = tool.NewRegistry().
 		WithBaseTools().
+		WithWebFetchEnabled(true).
+		WithWebSearchEnabled(true).
+		WithModel(flags.Model).
 		WithReadFileCache(readFileCache).
 		WithMCPTools(mcpTools).
 		WithDenyRules(flags.DeniedTools).

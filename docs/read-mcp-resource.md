@@ -10,6 +10,7 @@ gaps:
   - "Resource subscriptions (subscribe/unsubscribe) not implemented"
   - "Handling of notifications/resources/updated not implemented"
   - "Support for reading resource templates (URI templates) not implemented"
+# Reviewed 2026-06-08: gaps verified as still accurate
 depends_on:
   - mcp-client
 ---
