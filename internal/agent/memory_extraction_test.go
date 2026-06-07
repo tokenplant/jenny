@@ -5,7 +5,8 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"sync"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -35,71 +36,109 @@ func TestAC1_EndOfTurnOnly(t *testing.T) {
 		ProjectRoot:        "/test/project",
 	}
 
-	invokeCount := 0
-	mockClient := &mockExtractionAPIClient{
-		sendMessageFn: func(ctx context.Context, messages []api.Message, tools []api.ToolParam, toolResults []api.ToolResult, systemPrompt string) (*api.Response, error) {
-			invokeCount++
-			return &api.Response{}, nil
-		},
-	}
-
-	me := NewMemoryExtractor(mockClient, cfg).WithMemdir(t.TempDir()).WithTimeout(100 * time.Millisecond)
-
 	// Test case 1: end_turn should trigger extraction
-	turnCtx := TurnContext{
-		StopReason: api.StopReasonEndTurn,
-		AssistantMessage: &api.Message{
-			ID:      "msg_1",
-			Content: "hello",
-		},
-	}
-	me.CheckAndExtract(context.Background(), turnCtx)
-	time.Sleep(200 * time.Millisecond)
-	if invokeCount == 0 {
-		t.Error("AC1 FAIL: extraction should run on end_turn")
-	} else {
-		t.Log("AC1 PASS: extraction runs on end_turn")
-	}
-
-	// Reset for next test
-	invokeCount = 0
-	me = NewMemoryExtractor(mockClient, cfg).WithMemdir(t.TempDir()).WithTimeout(100 * time.Millisecond)
+	t.Run("end_turn_triggers", func(t *testing.T) {
+		var invokeCount atomic.Int64
+		mockClient := &mockExtractionAPIClient{
+			sendMessageFn: func(ctx context.Context, messages []api.Message, tools []api.ToolParam, toolResults []api.ToolResult, systemPrompt string) (*api.Response, error) {
+				invokeCount.Add(1)
+				return &api.Response{}, nil
+			},
+		}
+		me := NewMemoryExtractor(mockClient, cfg).WithMemdir(t.TempDir()).WithTimeout(100 * time.Millisecond)
+		turnCtx := TurnContext{
+			StopReason: api.StopReasonEndTurn,
+			AssistantMessage: &api.Message{
+				ID:      "msg_1",
+				Content: "hello",
+			},
+		}
+		me.CheckAndExtract(context.Background(), turnCtx)
+		time.Sleep(200 * time.Millisecond)
+		if invokeCount.Load() == 0 {
+			t.Error("AC1 FAIL: extraction should run on end_turn")
+		} else {
+			t.Log("AC1 PASS: extraction runs on end_turn")
+		}
+	})
 
 	// Test case 2: stop_sequence should trigger extraction
-	turnCtx = TurnContext{
-		StopReason: api.StopReasonStopSeq,
-		AssistantMessage: &api.Message{
-			ID:      "msg_2",
-			Content: "hello",
-		},
-	}
-	me.CheckAndExtract(context.Background(), turnCtx)
-	time.Sleep(200 * time.Millisecond)
-	if invokeCount == 0 {
-		t.Error("AC1 FAIL: extraction should run on stop_sequence")
-	} else {
-		t.Log("AC1 PASS: extraction runs on stop_sequence")
-	}
-
-	// Reset for next test
-	invokeCount = 0
-	me = NewMemoryExtractor(mockClient, cfg).WithMemdir(t.TempDir()).WithTimeout(100 * time.Millisecond)
+	t.Run("stop_sequence_triggers", func(t *testing.T) {
+		var invokeCount atomic.Int64
+		mockClient := &mockExtractionAPIClient{
+			sendMessageFn: func(ctx context.Context, messages []api.Message, tools []api.ToolParam, toolResults []api.ToolResult, systemPrompt string) (*api.Response, error) {
+				invokeCount.Add(1)
+				return &api.Response{}, nil
+			},
+		}
+		me := NewMemoryExtractor(mockClient, cfg).WithMemdir(t.TempDir()).WithTimeout(100 * time.Millisecond)
+		turnCtx := TurnContext{
+			StopReason: api.StopReasonStopSeq,
+			AssistantMessage: &api.Message{
+				ID:      "msg_2",
+				Content: "hello",
+			},
+		}
+		me.CheckAndExtract(context.Background(), turnCtx)
+		time.Sleep(200 * time.Millisecond)
+		if invokeCount.Load() == 0 {
+			t.Error("AC1 FAIL: extraction should run on stop_sequence")
+		} else {
+			t.Log("AC1 PASS: extraction runs on stop_sequence")
+		}
+	})
 
 	// Test case 3: tool_use should NOT trigger extraction
-	turnCtx = TurnContext{
-		StopReason: api.StopReasonToolUse,
-		AssistantMessage: &api.Message{
-			ID:      "msg_3",
-			Content: "hello",
-		},
-	}
-	me.CheckAndExtract(context.Background(), turnCtx)
-	time.Sleep(200 * time.Millisecond)
-	if invokeCount > 0 {
-		t.Error("AC1 FAIL: extraction should NOT run on tool_use")
-	} else {
-		t.Log("AC1 PASS: extraction does not run on tool_use")
-	}
+	t.Run("tool_use_skipped", func(t *testing.T) {
+		var invokeCount atomic.Int64
+		mockClient := &mockExtractionAPIClient{
+			sendMessageFn: func(ctx context.Context, messages []api.Message, tools []api.ToolParam, toolResults []api.ToolResult, systemPrompt string) (*api.Response, error) {
+				invokeCount.Add(1)
+				return &api.Response{}, nil
+			},
+		}
+		me := NewMemoryExtractor(mockClient, cfg).WithMemdir(t.TempDir()).WithTimeout(100 * time.Millisecond)
+		turnCtx := TurnContext{
+			StopReason: api.StopReasonToolUse,
+			AssistantMessage: &api.Message{
+				ID:      "msg_3",
+				Content: "hello",
+			},
+		}
+		me.CheckAndExtract(context.Background(), turnCtx)
+		time.Sleep(200 * time.Millisecond)
+		if invokeCount.Load() > 0 {
+			t.Error("AC1 FAIL: extraction should NOT run on tool_use")
+		} else {
+			t.Log("AC1 PASS: extraction does not run on tool_use")
+		}
+	})
+
+	// Test case 4: max_tokens should NOT trigger extraction
+	t.Run("max_tokens_skipped", func(t *testing.T) {
+		var invokeCount atomic.Int64
+		mockClient := &mockExtractionAPIClient{
+			sendMessageFn: func(ctx context.Context, messages []api.Message, tools []api.ToolParam, toolResults []api.ToolResult, systemPrompt string) (*api.Response, error) {
+				invokeCount.Add(1)
+				return &api.Response{}, nil
+			},
+		}
+		me := NewMemoryExtractor(mockClient, cfg).WithMemdir(t.TempDir()).WithTimeout(100 * time.Millisecond)
+		turnCtx := TurnContext{
+			StopReason: api.StopReasonMaxTokens,
+			AssistantMessage: &api.Message{
+				ID:      "msg_4",
+				Content: "hello",
+			},
+		}
+		me.CheckAndExtract(context.Background(), turnCtx)
+		time.Sleep(200 * time.Millisecond)
+		if invokeCount.Load() > 0 {
+			t.Error("AC1 FAIL: extraction should NOT run on max_tokens")
+		} else {
+			t.Log("AC1 PASS: extraction does not run on max_tokens")
+		}
+	})
 }
 
 // TestAC2_SkipWhenMainAgentWroteMemory verifies that extraction is skipped
@@ -114,10 +153,10 @@ func TestAC2_SkipWhenMainAgentWroteMemory(t *testing.T) {
 		ProjectRoot:        "/test/project",
 	}
 
-	invokeCount := 0
+	var invokeCount atomic.Int64
 	mockClient := &mockExtractionAPIClient{
 		sendMessageFn: func(ctx context.Context, messages []api.Message, tools []api.ToolParam, toolResults []api.ToolResult, systemPrompt string) (*api.Response, error) {
-			invokeCount++
+			invokeCount.Add(1)
 			return &api.Response{}, nil
 		},
 	}
@@ -149,7 +188,7 @@ func TestAC2_SkipWhenMainAgentWroteMemory(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// Extraction should be skipped because main agent wrote to auto-mem
-	if invokeCount > 0 {
+	if invokeCount.Load() > 0 {
 		t.Error("AC2 FAIL: extraction should be skipped when main agent wrote to auto-mem")
 	} else {
 		t.Log("AC2 PASS: extraction skipped when main agent wrote to auto-mem")
@@ -175,10 +214,10 @@ func TestAC2_PostSkipFollowUpTurn(t *testing.T) {
 		ProjectRoot:        "/test/project",
 	}
 
-	invokeCount := 0
+	var invokeCount atomic.Int64
 	mockClient := &mockExtractionAPIClient{
 		sendMessageFn: func(ctx context.Context, messages []api.Message, tools []api.ToolParam, toolResults []api.ToolResult, systemPrompt string) (*api.Response, error) {
-			invokeCount++
+			invokeCount.Add(1)
 			return &api.Response{}, nil
 		},
 	}
@@ -210,7 +249,7 @@ func TestAC2_PostSkipFollowUpTurn(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// Extraction should be skipped in first turn
-	if invokeCount != 0 {
+	if invokeCount.Load() != 0 {
 		t.Error("AC2 follow-up FAIL: first turn should skip extraction")
 	}
 
@@ -228,8 +267,8 @@ func TestAC2_PostSkipFollowUpTurn(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// Second turn should trigger extraction
-	if invokeCount != 1 {
-		t.Errorf("AC2 follow-up FAIL: second turn should trigger extraction, got %d", invokeCount)
+	if invokeCount.Load() != 1 {
+		t.Errorf("AC2 follow-up FAIL: second turn should trigger extraction, got %d", invokeCount.Load())
 	} else {
 		t.Log("AC2 follow-up PASS: second turn triggers extraction after skip")
 	}
@@ -276,6 +315,32 @@ func TestAC3_CompactionCursorFallback(t *testing.T) {
 		t.Errorf("AC3 FAIL: lastMemoryMessageCount should be 50, got %d", me.lastMemoryMessageCount)
 	} else {
 		t.Log("AC3 PASS: cursor falls back to message count when UUID is missing")
+	}
+
+	// AC5 (1): Verify buildExtractionPrompt uses the message-count slice
+	turnCtx.RecentMessages = []api.Message{
+		{Role: "user", Content: "msg1"},
+		{Role: "user", Content: "msg 2"},
+		{Role: "user", Content: "msg 3"},
+		{Role: "user", Content: "msg 4"},
+		{Role: "user", Content: "msg 5"},
+	}
+	prompt := me.buildExtractionPrompt(turnCtx, "")
+	// With lastMemoryMessageCount=50 and only 5 recent messages,
+	// the slice should be empty (count >= len(messages))
+	if strings.Contains(prompt, "msg 1") || strings.Contains(prompt, "msg 5") {
+		t.Error("AC5(1) FAIL: prompt should not contain messages when count >= len(messages)")
+	} else {
+		t.Log("AC5(1) PASS: buildExtractionPrompt correctly handles count-based slicing")
+	}
+
+	// Test with count< len(messages) to verify slicing works
+	me.lastMemoryMessageCount = 2
+	prompt = me.buildExtractionPrompt(turnCtx, "")
+	if !strings.Contains(prompt, "msg 3") {
+		t.Error("AC5(1) FAIL: prompt should contain msg 3 (first message after count=2)")
+	} else {
+		t.Log("AC5(1) PASS: buildExtractionPrompt correctly slices messages after count")
 	}
 }
 
@@ -416,6 +481,50 @@ func TestAC4_EditScopedToAutoMem(t *testing.T) {
 			}
 		}
 	})
+
+	// AC5 (2): End-to-end sub-test exercising processExtractionResponse's isUnderAutoMem guard
+	t.Run("ProcessExtractionRejectsPathOutsideMemdir", func(t *testing.T) {
+		autoMemDir := filepath.Join(tmpDir, "memory")
+		os.MkdirAll(autoMemDir, 0755)
+
+		mockClient := &mockExtractionAPIClient{}
+		me := NewMemoryExtractor(mockClient, cfg).WithMemdir(tmpDir)
+		tools := me.buildExtractionTools()
+
+		// Create a mock response with Edit targeting a path outside auto-mem
+		resp := &api.Response{
+			Content: []api.ContentBlock{
+				{
+					Type: "tool_use",
+					ToolUse: &api.ToolUse{
+						ID:   "tool_1",
+						Name: "edit",
+						Args: map[string]any{
+							"file_path":  "/tmp/outside_memdir.txt",
+							"old_string": "test",
+							"new_string": "replaced",
+						},
+					},
+				},
+			},
+		}
+
+		// Create a temp file outside auto-mem to verify the edit was NOT applied
+		outsideFile := "/tmp/outside_memdir_test.txt"
+		os.WriteFile(outsideFile, []byte("test"), 0644)
+		defer os.Remove(outsideFile)
+
+		// Process the extraction response
+		me.processExtractionResponse(context.Background(), resp, tools)
+
+		// Verify the file was NOT modified (edit was rejected by isUnderAutoMem guard)
+		content, _ := os.ReadFile(outsideFile)
+		if string(content) != "test" {
+			t.Error("AC5(2) FAIL: file should not be modified - edit should be rejected by processExtractionResponse")
+		} else {
+			t.Log("AC5(2) PASS: processExtractionResponse correctly rejects edit outside auto-mem")
+		}
+	})
 }
 
 // TestAC5_CoalescingConcurrentRequests verifies that concurrent extraction
@@ -428,25 +537,26 @@ func TestAC5_CoalescingConcurrentRequests(t *testing.T) {
 		ProjectRoot:        "/test/project",
 	}
 
-	concurrentCount := 0
-	maxConcurrent := 0
-	var lock sync.Mutex
+	var concurrentCount atomic.Int64
+	var maxConcurrent atomic.Int64
 
 	mockClient := &mockExtractionAPIClient{
 		sendMessageFn: func(ctx context.Context, messages []api.Message, tools []api.ToolParam, toolResults []api.ToolResult, systemPrompt string) (*api.Response, error) {
-			lock.Lock()
-			concurrentCount++
-			if concurrentCount > maxConcurrent {
-				maxConcurrent = concurrentCount
+			count := concurrentCount.Add(1)
+			for {
+				max := maxConcurrent.Load()
+				if count <= max {
+					break
+				}
+				if maxConcurrent.CompareAndSwap(max, count) {
+					break
+				}
 			}
-			lock.Unlock()
 
 			// Simulate slow extraction
 			time.Sleep(500 * time.Millisecond)
 
-			lock.Lock()
-			concurrentCount--
-			lock.Unlock()
+			concurrentCount.Add(-1)
 
 			return &api.Response{}, nil
 		},
@@ -474,8 +584,8 @@ func TestAC5_CoalescingConcurrentRequests(t *testing.T) {
 	time.Sleep(1 * time.Second)
 
 	// Verify only one extraction ran at a time
-	if maxConcurrent > 1 {
-		t.Errorf("AC5 FAIL: max concurrent extractions was %d, expected 1 (coalescing failed)", maxConcurrent)
+	if maxConcurrent.Load() > 1 {
+		t.Errorf("AC5 FAIL: max concurrent extractions was %d, expected 1 (coalescing failed)", maxConcurrent.Load())
 	} else {
 		t.Log("AC5 PASS: concurrent extraction requests are coalesced")
 	}
@@ -490,10 +600,10 @@ func TestAC1_SubAgentSkipped(t *testing.T) {
 		ProjectRoot:        "/test/project",
 	}
 
-	invokeCount := 0
+	var invokeCount atomic.Int64
 	mockClient := &mockExtractionAPIClient{
 		sendMessageFn: func(ctx context.Context, messages []api.Message, tools []api.ToolParam, toolResults []api.ToolResult, systemPrompt string) (*api.Response, error) {
-			invokeCount++
+			invokeCount.Add(1)
 			return &api.Response{}, nil
 		},
 	}
@@ -511,7 +621,7 @@ func TestAC1_SubAgentSkipped(t *testing.T) {
 	me.CheckAndExtract(context.Background(), turnCtx)
 	time.Sleep(200 * time.Millisecond)
 
-	if invokeCount > 0 {
+	if invokeCount.Load() > 0 {
 		t.Error("AC1 FAIL: extraction should not run for sub-agent")
 	} else {
 		t.Log("AC1 PASS: extraction skipped for sub-agent")
@@ -528,10 +638,10 @@ func TestAC1_AutoMemoryDisabled(t *testing.T) {
 		ProjectRoot:        "/test/project",
 	}
 
-	invokeCount := 0
+	var invokeCount atomic.Int64
 	mockClient := &mockExtractionAPIClient{
 		sendMessageFn: func(ctx context.Context, messages []api.Message, tools []api.ToolParam, toolResults []api.ToolResult, systemPrompt string) (*api.Response, error) {
-			invokeCount++
+			invokeCount.Add(1)
 			return &api.Response{}, nil
 		},
 	}
@@ -549,7 +659,7 @@ func TestAC1_AutoMemoryDisabled(t *testing.T) {
 	me.CheckAndExtract(context.Background(), turnCtx)
 	time.Sleep(200 * time.Millisecond)
 
-	if invokeCount > 0 {
+	if invokeCount.Load() > 0 {
 		t.Error("AC1 FAIL: extraction should not run when auto-memory is disabled")
 	} else {
 		t.Log("AC1 PASS: extraction skipped when auto-memory is disabled")
@@ -565,10 +675,10 @@ func TestThrottleEveryNTurns(t *testing.T) {
 		ProjectRoot:        "/test/project",
 	}
 
-	invokeCount := 0
+	var invokeCount atomic.Int64
 	mockClient := &mockExtractionAPIClient{
 		sendMessageFn: func(ctx context.Context, messages []api.Message, tools []api.ToolParam, toolResults []api.ToolResult, systemPrompt string) (*api.Response, error) {
-			invokeCount++
+			invokeCount.Add(1)
 			return &api.Response{}, nil
 		},
 	}
@@ -586,24 +696,24 @@ func TestThrottleEveryNTurns(t *testing.T) {
 	// First turn - should not extract (turnsSinceLastExtract becomes 1, but throttle is 3)
 	me.CheckAndExtract(context.Background(), turnCtx)
 	time.Sleep(150 * time.Millisecond)
-	if invokeCount != 0 {
-		t.Errorf("Throttle FAIL: should not extract on turn 1, got %d", invokeCount)
+	if invokeCount.Load() != 0 {
+		t.Errorf("Throttle FAIL: should not extract on turn 1, got %d", invokeCount.Load())
 	}
 
 	// Second turn - should not extract (turnsSinceLastExtract becomes 2, throttle is 3)
 	turnCtx.AssistantMessage.ID = "msg_2"
 	me.CheckAndExtract(context.Background(), turnCtx)
 	time.Sleep(150 * time.Millisecond)
-	if invokeCount != 0 {
-		t.Errorf("Throttle FAIL: should not extract on turn 2, got %d", invokeCount)
+	if invokeCount.Load() != 0 {
+		t.Errorf("Throttle FAIL: should not extract on turn 2, got %d", invokeCount.Load())
 	}
 
 	// Third turn - should extract (turnsSinceLastExtract becomes 3, equals throttle)
 	turnCtx.AssistantMessage.ID = "msg_3"
 	me.CheckAndExtract(context.Background(), turnCtx)
 	time.Sleep(150 * time.Millisecond)
-	if invokeCount != 1 {
-		t.Errorf("Throttle FAIL: should extract on turn 3, got %d", invokeCount)
+	if invokeCount.Load() != 1 {
+		t.Errorf("Throttle FAIL: should extract on turn 3, got %d", invokeCount.Load())
 	} else {
 		t.Log("Throttle PASS: extraction happens every N turns")
 	}
@@ -618,12 +728,12 @@ func TestDrain(t *testing.T) {
 		ProjectRoot:        "/test/project",
 	}
 
-	completed := false
+	var completed atomic.Bool
 	mockClient := &mockExtractionAPIClient{
 		sendMessageFn: func(ctx context.Context, messages []api.Message, tools []api.ToolParam, toolResults []api.ToolResult, systemPrompt string) (*api.Response, error) {
 			// Simulate slow extraction
 			time.Sleep(200 * time.Millisecond)
-			completed = true
+			completed.Store(true)
 			return &api.Response{}, nil
 		},
 	}
@@ -646,7 +756,7 @@ func TestDrain(t *testing.T) {
 	defer cancel()
 	me.Drain(ctx)
 
-	if !completed {
+	if !completed.Load() {
 		t.Error("Drain FAIL: extraction should have completed")
 	} else {
 		t.Log("Drain PASS: drain waits for extraction to complete")

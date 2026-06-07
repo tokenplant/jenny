@@ -49,10 +49,9 @@ type MemoryExtractor struct {
 	turnsSinceLastExtract int
 
 	// Coalescing
-	inProgress    bool
-	pendingCtx    context.Context
-	pendingCancel context.CancelFunc
-	mu            sync.Mutex
+	inProgress bool
+	pendingCtx context.Context
+	mu         sync.Mutex
 
 	// Timeout for extraction
 	timeout time.Duration
@@ -60,20 +59,8 @@ type MemoryExtractor struct {
 
 // NewMemoryExtractor creates a new MemoryExtractor.
 func NewMemoryExtractor(client APIClient, config ExtractorConfig) *MemoryExtractor {
-	// Derive memdir path from constants
-	configHome, err := os.UserConfigDir()
-	if err != nil {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			configHome = "." // Fallback
-		} else {
-			configHome = filepath.Join(home, ".config")
-		}
-	}
-
-	sanitizedRoot := strings.ReplaceAll(config.ProjectRoot, "/", "-")
-	sanitizedRoot = strings.TrimPrefix(sanitizedRoot, "-")
-	memdirPath := filepath.Join(configHome, "projects", sanitizedRoot, "memory")
+	// Use memdir package to compute the path
+	memdirPath := memdir.MemoryPathFromProjectRoot(config.ProjectRoot)
 
 	return &MemoryExtractor{
 		memdir:                memdirPath,
@@ -117,8 +104,8 @@ func (me *MemoryExtractor) CheckAndExtract(ctx context.Context, turnCtx TurnCont
 		return
 	}
 
-	// AC1: Only run on end_turn or stop_sequence, not tool_use
-	if turnCtx.StopReason == api.StopReasonToolUse {
+	// AC1: Only run on end_turn or stop_sequence, not max_tokens, tool_use, etc.
+	if turnCtx.StopReason != api.StopReasonEndTurn && turnCtx.StopReason != api.StopReasonStopSeq {
 		return
 	}
 
@@ -262,7 +249,7 @@ func (me *MemoryExtractor) extract(ctx context.Context, turnCtx TurnContext) err
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			log.Warn("Memory extraction timed out")
-			return nil
+			return ctx.Err()
 		}
 		return err
 	}
@@ -443,17 +430,16 @@ func (me *MemoryExtractor) finalizeExtraction() {
 	me.mu.Lock()
 	pendingCtx := me.pendingCtx
 	me.pendingCtx = nil
-	me.pendingCancel = nil
 
 	// If there was a stashed context, trigger a trailing extraction
-	// Spawn the goroutine BEFORE releasing the inProgress lock to prevent Drain race
 	if pendingCtx != nil {
 		log.Debug("Memory extraction: running trailing extraction")
 		me.inProgress = true // Keep inProgress true for trailing extraction
+
+		// Unlock BEFORE spawning goroutine so it can acquire the lock independently
+		me.mu.Unlock()
 		go func() {
 			defer me.finalizeExtraction()
-
-			me.mu.Unlock() // Unlock after goroutine is spawned and can run independently
 
 			extractCtx, cancel := context.WithTimeout(context.Background(), me.timeout)
 			defer cancel()

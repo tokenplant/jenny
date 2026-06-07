@@ -90,6 +90,23 @@ func New(cfg Config) (*Memdir, error) {
 	}, nil
 }
 
+// MemoryPathFromProjectRoot returns the memory directory path for a given project root.
+// This is a convenience function that computes the path without creating a Memdir instance.
+func MemoryPathFromProjectRoot(projectRoot string) string {
+	configHome, err := os.UserConfigDir()
+	if err != nil {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "." // Fallback
+		}
+		configHome = filepath.Join(home, ".config")
+	}
+
+	sanitizedRoot := strings.ReplaceAll(projectRoot, "/", "-")
+	sanitizedRoot = strings.TrimPrefix(sanitizedRoot, "-")
+	return filepath.Join(configHome, "projects", sanitizedRoot, "memory")
+}
+
 // IsDisabled returns true if memdir is disabled based on the disable chain:
 // - DISABLE_AUTO_MEMORY env var
 // - --bare mode flag
