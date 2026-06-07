@@ -11,7 +11,6 @@ import (
 )
 
 // execMockTool is a test tool with configurable behavior.
-// It listens on mockInterruptCh for abort signals during execution.
 type execMockTool struct {
 	name    string
 	delay   time.Duration
@@ -33,21 +32,9 @@ func (m *execMockTool) Execute(input map[string]any, cwd string) (*tool.ToolResu
 		close(done)
 	}()
 
-	// Build a select that checks abort channel if available
-	var abortCh <-chan struct{}
-	if mockInterruptCh != nil {
-		abortCh = mockInterruptCh
-	}
-
 	select {
 	case <-done:
 		// Completed normally
-	case <-abortCh:
-		// Interrupted by sibling failure - only if channel is open
-		return &tool.ToolResult{
-			Content: "Tool execution aborted due to sibling failure",
-			IsError: true,
-		}, fmt.Errorf("aborted by sibling failure")
 	}
 
 	return &tool.ToolResult{
@@ -57,19 +44,13 @@ func (m *execMockTool) Execute(input map[string]any, cwd string) (*tool.ToolResu
 }
 
 // ExecuteWithContext runs the tool with context cancellation support.
-// For bash-like tools, this checks both the context and the mockInterruptCh.
+// The mock checks ctx.Done() periodically to detect sibling abort.
 func (m *execMockTool) ExecuteWithContext(ctx context.Context, input map[string]any, cwd string) (*tool.ToolResult, error) {
 	// Use a ticker to allow periodic context checks during long delays.
-	// This simulates how exec.CommandContext actually interrupt sleep on cancellation.
+	// This simulates how exec.CommandContext actually checks context cancellation.
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
 	done := time.After(m.delay)
-
-	// Build a select that checks context cancellation and abort channel
-	var abortCh <-chan struct{}
-	if mockInterruptCh != nil {
-		abortCh = mockInterruptCh
-	}
 
 	for {
 		select {
@@ -81,12 +62,6 @@ func (m *execMockTool) ExecuteWithContext(ctx context.Context, input map[string]
 			}, m.err
 		case <-ctx.Done():
 			// Interrupted by context cancellation (sibling abort)
-			return &tool.ToolResult{
-				Content: "Tool execution aborted due to sibling failure",
-				IsError: true,
-			}, fmt.Errorf("aborted by sibling failure")
-		case <-abortCh:
-			// Interrupted by sibling failure via mockInterruptCh (legacy path)
 			return &tool.ToolResult{
 				Content: "Tool execution aborted due to sibling failure",
 				IsError: true,

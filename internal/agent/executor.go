@@ -12,12 +12,6 @@ import (
 // defaultMaxConcurrency is the default maximum parallel tool execution count.
 const defaultMaxConcurrency = 10
 
-// mockInterruptCh is a channel for test mock tools to receive abort signals.
-// When running parallel bash tools and one fails, the executor closes this channel
-// to interrupt any mock tools that are checking it.
-// This is only used for testing; real tools use context cancellation.
-var mockInterruptCh chan struct{}
-
 // toolGroup represents a batch of tools to execute together.
 type toolGroup struct {
 	// tools is the list of tool use blocks in this group.
@@ -126,16 +120,14 @@ func (e *ToolExecutor) partitionGroups(toolUseBlocks []toolUseBlock) []toolGroup
 				serial: true,
 			})
 		} else if isBashTool(block.Name) {
-			// Bash - AC2: Write/Edit/Bash never run concurrently
-			// Each bash gets its own serial group
+			// Bash - batch together for sibling abort (AC3), but use semaphore=1 for serial-like behavior (AC2)
+			// This allows bash sibling abort while ensuring only one bash runs at a time
 			flushBatch()
-			groups = append(groups, toolGroup{
-				tools: []toolUseWithIndex{{
-					block: block,
-					index: i,
-					tool:  t,
-				}},
-				serial: true,
+			currentBatchType = "bash"
+			currentBatch = append(currentBatch, toolUseWithIndex{
+				block: block,
+				index: i,
+				tool:  t,
 			})
 		} else if isReadOnlyTool(block.Name) {
 			// Read/Glob/Grep - flush if previous was bash, then add to batch
@@ -184,12 +176,6 @@ func (e *ToolExecutor) executeParallel(batch []toolUseWithIndex, results []toolR
 	var bashFailed bool
 	var bashMu sync.Mutex
 
-	// Set up mock interrupt channel for test mock tools
-	// This allows mock bash tools to be interrupted when a sibling fails
-	mockInterruptCh = make(chan struct{})
-	// Note: mockInterruptCh is closed when bash sibling fails, not in defer
-	// to avoid race with goroutines that captured the channel before it was closed
-
 	for _, tw := range batch {
 		wg.Add(1)
 		go func(tw toolUseWithIndex) {
@@ -227,8 +213,7 @@ func (e *ToolExecutor) executeParallel(batch []toolUseWithIndex, results []toolR
 				bashMu.Lock()
 				if !bashFailed {
 					bashFailed = true
-					cancel()               // Cancel all siblings via context
-					close(mockInterruptCh) // Close mock channel for test mocks
+					cancel() // Cancel all siblings via context
 				}
 				bashMu.Unlock()
 			}
