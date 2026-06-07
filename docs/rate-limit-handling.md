@@ -2,9 +2,9 @@
 title: Rate Limit Handling
 slug: rate-limit-handling
 priority: P1
-status: not_started
+status: done
 spec: complete
-code: not_started
+code: done
 package: internal/api
 gaps:
   []

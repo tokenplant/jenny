@@ -2,12 +2,13 @@
 title: Tool Registry and Presets
 slug: tool-registry
 priority: P1
-status: not_started
+status: partial
 spec: complete
-code: not_started
+code: partial
 package: internal/tool
 gaps:
-  - Tools hardcoded at entrypoint; no deny rules or feature flags
+  - "Todo v2 / TodoWrite disable (AC2) deferred to P4"
+  - "System prompt tool-list wiring (AC5) not yet wired"
 depends_on:
   - agent-loop
 ---
