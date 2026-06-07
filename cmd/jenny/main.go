@@ -115,15 +115,17 @@ func run() error {
 	// But Registry.Build() also needs it to create Write/Edit/NotebookEdit tools
 	readFileCache := tool.NewReadFileCache()
 
-	// Discover skills from project .jenny/skills/ directory
+	// Discover skills from project .jenny/skills/ directory and bundled default directory
 	var discoveredSkills []skills.Skill
 	projectSkillsDir := filepath.Join(cwd, ".jenny", "skills")
-	if _, err := os.Stat(projectSkillsDir); err == nil {
-		// Directory exists, discover skills
-		discoveredSkills, err = skills.Discover(projectSkillsDir)
-		if err != nil {
-			return fmt.Errorf("discovering skills: %w", err)
-		}
+
+	// Bundled default skills directory (user-level)
+	bundledSkillsDir := filepath.Join(os.Getenv("HOME"), ".jenny", "skills")
+
+	// Discover from both directories (AC6: discovery from multiple directories)
+	discoveredSkills, err = skills.Discover(projectSkillsDir, bundledSkillsDir)
+	if err != nil {
+		return fmt.Errorf("discovering skills: %w", err)
 	}
 
 	var tools []tool.Tool
