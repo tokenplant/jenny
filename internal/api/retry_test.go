@@ -240,6 +240,8 @@ func TestRetry_AC1_429Retry(t *testing.T) {
 
 	// Create client that uses test server
 	client, _ := NewClientWithModel("")
+	// Use jitter=0 to get deterministic backoff timing for verification
+	client.SetRetryConfig(RetryConfig{MaxRetries: 10, Max529Retries: 3, BaseDelay: 500 * time.Millisecond, MaxDelay: 32 * time.Second, Jitter: 0})
 
 	// Create a wrapper that uses our test server URL
 	origBaseURL := server.URL
@@ -284,9 +286,9 @@ func TestRetry_AC1_429Retry(t *testing.T) {
 	}
 
 	// AC1 requires elapsed time shows backoff progression.
-	// With baseDelay=500ms and attempts 0,1,2: expected backoffs are 500ms, 1000ms, 2000ms (with jitter=0).
-	// Sum of expected backoffs = 3.5s. Use lower bound of 3s to account for some execution overhead.
-	minExpected := 3 * time.Second
+	// With baseDelay=500ms, jitter=0, and attempts 0,1,2: expected backoffs are 500ms, 1000ms, 2000ms.
+	// Sum of expected backoffs = 3.5s. Use lower bound of 3.2s to verify backoff is applied.
+	minExpected := 3200 * time.Millisecond
 	if elapsed < minExpected {
 		t.Errorf("expected elapsed time >= %v (backoff progression), got %v", minExpected, elapsed)
 	}

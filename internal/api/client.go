@@ -533,9 +533,13 @@ func (c *Client) SendMessageStream(
 		}
 
 		// Build request
+		maxTokens := 8192
+		if c.maxTokensOverride > 0 {
+			maxTokens = c.maxTokensOverride
+		}
 		body := anthropic.MessageNewParams{
 			Model:     anthropic.Model(c.model),
-			MaxTokens: 8192,
+			MaxTokens: int64(maxTokens),
 		}
 		body.Messages = sdkMessages
 		if systemPrompt != "" {
@@ -547,11 +551,34 @@ func (c *Client) SendMessageStream(
 
 		log.Debug("Starting streaming request", "model", c.model)
 
-		// Create stream with idle watchdog
+		// Create stream
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
 
 		stream := c.client.Messages.NewStreaming(ctx, body)
+
+		// Check for pre-stream error (e.g., 429/529 from HTTP request)
+		// stream.Err() is set when NewStreaming receives an error from the HTTP request
+		if stream.Err() != nil {
+			preStreamErr := stream.Err()
+			log.Warn("Stream pre-error detected, falling back", "error", preStreamErr)
+			// Fall back to non-streaming, which has proper retry logic via sendWithRetry
+			if onStreamingFallback != nil {
+				fallbackCtx, fallbackCancel := context.WithTimeout(context.Background(), fallbackTimeout)
+				defer fallbackCancel()
+				resp, err := onStreamingFallback(fallbackCtx)
+				if err != nil {
+					result.Error = err.Error()
+					return
+				}
+				result.Blocks = resp.Content
+				result.StopReason = resp.StopReason
+				result.Usage = resp.Usage
+				return
+			}
+			result.Error = preStreamErr.Error()
+			return
+		}
 
 		acc := newStreamAccumulator()
 		hasMessageStart := false
