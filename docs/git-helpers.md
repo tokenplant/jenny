@@ -2,9 +2,9 @@
 title: Git Helpers
 slug: git-helpers
 priority: P1
-status: not_started
+status: done
 spec: complete
-code: not_started
+code: done
 package: internal/git
 gaps:
   []
