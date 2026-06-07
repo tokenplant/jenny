@@ -139,14 +139,14 @@ Implement in this order:
 
 #### Engine
 
-1. - [ ] Default tool preset / registry — [`tool-registry.md`](./tool-registry.md)
+1. - [x] Default tool preset / registry — [`tool-registry.md`](./tool-registry.md)
 2. - [x] QueryEngine lifecycle — [`query-engine.md`](./query-engine.md) — partial
    - Persist user message to transcript before API loop ✓
    - AC1-AC5: persist-before-API, maxTurns, flush on completion, RunStream refactor, turn counter ✓
    - **Gap:** readFileState, maxBudgetUsd wired but not via engine
 3. - [ ] Git helpers — [`git-helpers.md`](./git-helpers.md) _(moved from P2)_
 4. - [x] System prompt assembly — [`system-prompt.md`](./system-prompt.md) — AC1-AC5 implemented
-5. - [ ] Parallel tool execution — [`parallel-tool-execution.md`](./parallel-tool-execution.md) _(after tools below)_
+5. - [x] Parallel tool execution — [`parallel-tool-execution.md`](./parallel-tool-execution.md) _(after tools below)_
 6. - [ ] Rate limit handling — [`rate-limit-handling.md`](./rate-limit-handling.md)
 
 #### Tools
@@ -155,10 +155,10 @@ Implement in this order:
 8. - [x] Glob — [`glob.md`](./glob.md)
 9. - [x] Grep — [`grep.md`](./grep.md) _(host ripgrep first; sandboxed path in P2)_
 10. - [x] Dangerous command gate — [`dangerous-command-gate.md`](./dangerous-command-gate.md)
-11. - [ ] Bash (full) — [`bash.md`](./bash.md) _(includes former read-only baseline — partial)_
+11. - [x] Bash (full) — [`bash.md`](./bash.md) _(includes former read-only baseline — partial)_
     - Classifier + sandbox; output spill; sed simulation; `run_in_background`
-12. - [ ] Write — [`write.md`](./write.md)
-13. - [ ] Edit — [`edit.md`](./edit.md)
+12. - [x] Write — [`write.md`](./write.md)
+13. - [x] Edit — [`edit.md`](./edit.md)
 
 Then return to engine items 5–6 (parallel execution, rate limits).
 
