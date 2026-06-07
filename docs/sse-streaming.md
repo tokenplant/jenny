@@ -2,10 +2,12 @@
 title: SSE Streaming from API
 slug: sse-streaming
 priority: P0
-status: done
+status: partial
 spec: complete
-code: done
+code: partial
 package: internal/api
+gaps:
+  - "Non-streaming fallback not triggered correctly on idle timeout (AC5)"
 depends_on:
   - anthropic-api-client
 ---

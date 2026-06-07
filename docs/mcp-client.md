@@ -7,12 +7,22 @@ spec: complete
 code: partial
 package: internal/mcp
 gaps:
-  - "SSE, HTTP, WebSocket transports not implemented (stdio only this iteration)"
-  - "OAuth token refresh not implemented (no HTTP transport)"
-  - "Binary MCP results not persisted to disk (text only)"
+  - "SSE, HTTP (Streamable), WebSocket transports not implemented (stdio only this iteration)"
+  - "OAuth 2.1 authorization not implemented (no HTTP transport)"
+  - "Binary MCP results from tools not persisted to disk (text/path only for ReadMcpResource, but missing for ToolCall)"
   - "Content truncation at MAX_MCP_OUTPUT_TOKENS not implemented"
-  - "Resource cache not implemented"
-  - "Progress events not implemented"
+  - "Resource cache is minimal (missing support for notifications/resources/list_changed)"
+  - "Progress events not implemented (notifications/progress)"
+  - "Prompts (prompts/list, prompts/get) not implemented"
+  - "Resource templates (resources/templates/list) not implemented"
+  - "Resource subscriptions (resources/subscribe, notifications/resources/updated) not implemented"
+  - "Pagination (cursor-based) for list requests not implemented"
+  - "Client capabilities (roots/list, sampling/createMessage) not implemented"
+  - "Logging (logging/setLevel, notifications/message) not implemented"
+  - "Icons metadata not supported"
+  - "Tasks (experimental) not implemented"
+  - "Protocol version 2025-11-25 support missing (currently 2025-03-26)"
+  - "Asynchronous message loop for handling server-initiated requests/notifications (sampling, list_changed, logging) not implemented"
 defer_to: P4
 depends_on:
   - mcp-config

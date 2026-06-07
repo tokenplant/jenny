@@ -2,12 +2,14 @@
 title: ReadMcpResource Tool
 slug: read-mcp-resource
 priority: P2
-status: not_started
+status: partial
 spec: complete
-code: not_started
+code: partial
 package: internal/tool
 gaps:
-  []
+  - "Resource subscriptions (subscribe/unsubscribe) not implemented"
+  - "Handling of notifications/resources/updated not implemented"
+  - "Support for reading resource templates (URI templates) not implemented"
 depends_on:
   - mcp-client
 ---

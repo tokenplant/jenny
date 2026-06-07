@@ -2,12 +2,14 @@
 title: ListMcpResources Tool
 slug: list-mcp-resources
 priority: P2
-status: not_started
+status: partial
 spec: complete
-code: not_started
-package: internal/tool
+code: partial
+package: internal/mcp
 gaps:
-  []
+  - "Cursor-based pagination (pagination/list) not implemented"
+  - "Handling of notifications/resources/list_changed to invalidate cache not implemented"
+  - "Resource templates not included in listing"
 depends_on:
   - mcp-client
 ---

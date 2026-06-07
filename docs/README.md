@@ -64,11 +64,11 @@ CLI → API → loop → persistence → resume → SSE → stream-json → cost
 | 3 | Core agent loop | [agent-loop.md](./agent-loop.md) | partial |
 | 4 | Session persistence | [session-persistence.md](./session-persistence.md) | partial |
 | 5 | Session resume | [session-resume.md](./session-resume.md) | partial |
-| 6 | SSE streaming | [sse-streaming.md](./sse-streaming.md) | not_started |
+| 6 | SSE streaming | [sse-streaming.md](./sse-streaming.md) | partial |
 | 7 | Stream-json | [stream-json.md](./stream-json.md) | partial |
-| 8 | Cost tracking | [cost-tracking.md](./cost-tracking.md) | partial |
-| 9 | MCP config | [mcp-config.md](./mcp-config.md) | not_started |
-| 10 | MCP client | [mcp-client.md](./mcp-client.md) | not_started |
+| 8 | Cost tracking | [cost-tracking.md](./cost-tracking.md) | done |
+| 9 | MCP config | [mcp-config.md](./mcp-config.md) | partial |
+| 10 | MCP client | [mcp-client.md](./mcp-client.md) | partial |
 
 ### P1 — Autonomous coding
 

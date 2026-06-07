@@ -102,7 +102,7 @@ Implement in this order:
    - Rebuild message history from transcript ✓
    - **Deferred:** `readFileState` restoration, cost state, queue-only filtering, compaction boundaries → P3+
 
-7. - [x] SSE streaming from API — [`sse-streaming.md`](./sse-streaming.md) _(moved from P2)_
+7. - [x] SSE streaming from API — [`sse-streaming.md`](./sse-streaming.md) — partial _(moved from P2)_
    - Stream via server-sent events; yield partial text as it arrives ✓
    - On streaming failure with fallback configured, retry non-streaming ✓
    - Emit `stream_request_start` before each API iteration ✓
@@ -181,8 +181,8 @@ Implement in this order:
 #### Tools
 
 5. - [x] Notebook edit — [`notebook-edit.md`](./notebook-edit.md)
-6. - [x] ListMcpResources — [`list-mcp-resources.md`](./list-mcp-resources.md)
-7. - [ ] ReadMcpResource — [`read-mcp-resource.md`](./read-mcp-resource.md)
+6. - [x] ListMcpResources — [`list-mcp-resources.md`](./list-mcp-resources.md) — partial
+7. - [x] ReadMcpResource — [`read-mcp-resource.md`](./read-mcp-resource.md) — partial
 
 ---
 

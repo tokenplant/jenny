@@ -2,11 +2,12 @@
 title: Session Persistence
 slug: session-persistence
 priority: P0
-status: done
+status: partial
 spec: complete
-code: done
+code: partial
 package: internal/session
-gaps: []
+gaps:
+  - "Tombstone rewrite cap (MAX_TOMBSTONE_REWRITE_BYTES) not yet enforced (AC2)"
 depends_on:
   - session-id-stability
 ---

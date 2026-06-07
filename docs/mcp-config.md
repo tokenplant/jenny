@@ -2,11 +2,15 @@
 title: MCP Configuration
 slug: mcp-config
 priority: P0
-status: done
+status: partial
 spec: complete
-code: complete
+code: partial
 package: internal/mcp
-gaps: []
+gaps:
+  - "Managed-domains-only mode and enterprise policy enforcement not implemented"
+  - "Orphaned plugin cache exclusion from search tools not implemented"
+  - "Strict mode does not yet exclude all non-CLI sources (partially wired)"
+  - "OAuth credentials and OpenID Connect Discovery not supported in server definition"
 depends_on:
   - cli
 ---
