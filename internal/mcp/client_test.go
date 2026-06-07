@@ -3,6 +3,9 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"os/exec"
+	"strings"
 	"testing"
 )
 
@@ -105,7 +108,15 @@ func TestShutdownAll(t *testing.T) {
 }
 
 func TestGetToolsWithNoClients(t *testing.T) {
-	// Reset clients state
+	// Save and restore global state to avoid polluting other tests
+	origClients := clients
+	t.Cleanup(func() {
+		clientsMu.Lock()
+		clients = origClients
+		clientsMu.Unlock()
+	})
+
+	// Reset clients state for this test
 	clientsMu.Lock()
 	clients = make(map[string]*Client)
 	clientsMu.Unlock()
@@ -117,7 +128,15 @@ func TestGetToolsWithNoClients(t *testing.T) {
 }
 
 func TestGetClientNotFound(t *testing.T) {
-	// Reset clients state
+	// Save and restore global state
+	origClients := clients
+	t.Cleanup(func() {
+		clientsMu.Lock()
+		clients = origClients
+		clientsMu.Unlock()
+	})
+
+	// Reset clients state for this test
 	clientsMu.Lock()
 	clients = make(map[string]*Client)
 	clientsMu.Unlock()
@@ -167,5 +186,134 @@ func TestNewClient(t *testing.T) {
 	}
 	if client.env["KEY"] != "value" {
 		t.Errorf("expected env KEY='value', got %v", client.env)
+	}
+}
+
+// TestMCPToolExecuteUnknownServer tests AC4: unknown server returns error tool_result without connecting.
+func TestMCPToolExecuteUnknownServer(t *testing.T) {
+	// Save and restore global state
+	origClients := clients
+	t.Cleanup(func() {
+		clientsMu.Lock()
+		clients = origClients
+		clientsMu.Unlock()
+	})
+
+	// Reset clients state for this test
+	clientsMu.Lock()
+	clients = make(map[string]*Client)
+	clientsMu.Unlock()
+
+	mcpTool := &MCPTool{
+		serverName:  "nonexistent-server",
+		toolName:    "some-tool",
+		inputSchema: map[string]any{"type": "object"},
+	}
+
+	result, err := mcpTool.Execute(map[string]any{}, "/tmp")
+	if err != nil {
+		t.Fatalf("Execute returned unexpected error: %v", err)
+	}
+	if !result.IsError {
+		t.Error("expected IsError=true for unknown server")
+	}
+	if result.Content == "" {
+		t.Error("expected non-empty error content")
+	}
+}
+
+// TestMCPToolExecuteDisconnectedServer tests AC5: disconnected server returns error tool_result, no crash.
+func TestMCPToolExecuteDisconnectedServer(t *testing.T) {
+	// Save and restore global state
+	origClients := clients
+	t.Cleanup(func() {
+		clientsMu.Lock()
+		clients = origClients
+		clientsMu.Unlock()
+	})
+
+	// Reset clients state for this test
+	clientsMu.Lock()
+	clients = make(map[string]*Client)
+	clientsMu.Unlock()
+
+	// Create a client that is "connected" but with nil proc (disconnected state)
+	client := &Client{
+		Name: "test-server",
+		proc: nil, // Disconnected
+	}
+
+	clients[NormalizeName("test-server")] = client
+
+	mcpTool := &MCPTool{
+		serverName:  "test-server",
+		toolName:    "some-tool",
+		inputSchema: map[string]any{"type": "object"},
+	}
+
+	result, err := mcpTool.Execute(map[string]any{}, "/tmp")
+	if err != nil {
+		t.Fatalf("Execute returned unexpected error: %v", err)
+	}
+	if !result.IsError {
+		t.Error("expected IsError=true for disconnected server")
+	}
+	if result.Content == "" {
+		t.Error("expected non-empty error content")
+	}
+}
+
+// TestIntegrationMCPSubprocess tests AC1-AC5 with a real MCP server subprocess.
+// This verifies the full JSON-RPC message exchange, tool discovery registration,
+// and tool call dispatch using the stdio transport.
+func TestIntegrationMCPSubprocess(t *testing.T) {
+	// Get the absolute path to the fake MCP server source
+	execDir, err := os.Getwd()
+	if err != nil {
+		t.Skipf("skipping integration test: could not get working directory: %v", err)
+	}
+	serverSrc := execDir + "/testdata/fake-mcp-server"
+	serverBin := execDir + "/testdata/fake-mcp-server/fake-mcp-server"
+
+	// Build the fake MCP server first
+	cmd := exec.Command("go", "build", "-o", serverBin, serverSrc)
+	if err := cmd.Run(); err != nil {
+		t.Skipf("skipping integration test: could not build fake MCP server: %v", err)
+	}
+
+	// Create client connected to fake server
+	client := NewClient("test-server", serverBin, nil, nil)
+
+	// Connect (tests AC1: initialize and handshake)
+	ctx := context.Background()
+	if err := client.Connect(ctx); err != nil {
+		t.Fatalf("failed to connect to fake MCP server: %v", err)
+	}
+	defer client.Disconnect()
+
+	// List tools (tests AC2: tool discovery and registration)
+	mcpTools, err := client.ListTools(ctx)
+	if err != nil {
+		t.Fatalf("failed to list tools: %v", err)
+	}
+	if len(mcpTools) == 0 {
+		t.Error("expected at least one tool from fake server")
+	}
+
+	// Verify tool normalization
+	for _, mt := range mcpTools {
+		toolName := mt.Name()
+		if !strings.HasPrefix(toolName, "mcp__test_server__") {
+			t.Errorf("expected tool name prefix 'mcp__test_server__', got %s", toolName)
+		}
+	}
+
+	// Call a tool (tests AC3: tool call dispatch)
+	result, err := client.CallTool("test-tool", map[string]any{})
+	if err != nil {
+		t.Fatalf("failed to call tool: %v", err)
+	}
+	if result == "" {
+		t.Error("expected non-empty result from tool call")
 	}
 }

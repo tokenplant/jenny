@@ -404,7 +404,12 @@ func (c *Client) CallTool(name string, arguments map[string]any) (string, error)
 }
 
 // sendRequest sends a JSON-RPC request and waits for a response.
+// Caller must hold c.mu.
 func (c *Client) sendRequest(_ context.Context, req jsonRPCRequest) (*jsonRPCResponse, error) {
+	if c.proc == nil || c.proc.stdin == nil || c.proc.stdout == nil {
+		return nil, fmt.Errorf("not connected")
+	}
+
 	// Marshal the request
 	data, err := json.Marshal(req)
 	if err != nil {
@@ -412,25 +417,11 @@ func (c *Client) sendRequest(_ context.Context, req jsonRPCRequest) (*jsonRPCRes
 	}
 
 	// Send the request
-	c.mu.Lock()
-	if c.proc == nil || c.proc.stdin == nil {
-		c.mu.Unlock()
-		return nil, fmt.Errorf("not connected")
-	}
 	if _, err := c.proc.stdin.Write(append(data, '\n')); err != nil {
-		c.mu.Unlock()
 		return nil, fmt.Errorf("writing request: %w", err)
 	}
-	c.mu.Unlock()
 
 	// Read the response
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if c.proc == nil || c.proc.stdout == nil {
-		return nil, fmt.Errorf("not connected")
-	}
-
 	reader := bufio.NewReader(c.proc.stdout)
 	line, err := reader.ReadBytes('\n')
 	if err != nil {
@@ -446,17 +437,15 @@ func (c *Client) sendRequest(_ context.Context, req jsonRPCRequest) (*jsonRPCRes
 }
 
 // sendNotification sends a JSON-RPC notification (no response expected).
+// Caller must hold c.mu.
 func (c *Client) sendNotification(notif jsonRPCRequest) error {
+	if c.proc == nil || c.proc.stdin == nil {
+		return fmt.Errorf("not connected")
+	}
+
 	data, err := json.Marshal(notif)
 	if err != nil {
 		return fmt.Errorf("marshaling notification: %w", err)
-	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if c.proc == nil || c.proc.stdin == nil {
-		return fmt.Errorf("not connected")
 	}
 
 	_, err = c.proc.stdin.Write(append(data, '\n'))
