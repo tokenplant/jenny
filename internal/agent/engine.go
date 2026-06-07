@@ -28,6 +28,10 @@ type QueryEngine struct {
 	turnCount      int
 	maxTurns       int
 	mu             sync.Mutex
+
+	// Compaction state
+	compactConfig    CompactConfig
+	compactFailCount int
 }
 
 // NewQueryEngine creates a new QueryEngine with the given configuration.
@@ -72,15 +76,17 @@ func NewQueryEngine(cfg StreamConfig, tools []tool.Tool, model string) *QueryEng
 	}
 
 	return &QueryEngine{
-		client:         client,
-		sessionManager: cfg.SessionManager,
-		costState:      costState,
-		tools:          tools,
-		toolParams:     toolParams,
-		streamCfg:      cfg,
-		model:          model,
-		turnCount:      0,
-		maxTurns:       0, // 0 means unlimited
+		client:           client,
+		sessionManager:   cfg.SessionManager,
+		costState:        costState,
+		tools:            tools,
+		toolParams:       toolParams,
+		streamCfg:        cfg,
+		model:            model,
+		turnCount:        0,
+		maxTurns:         0, // 0 means unlimited
+		compactConfig:    newCompactConfig(),
+		compactFailCount: 0,
 	}
 }
 
@@ -230,6 +236,46 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 			fmt.Fprintln(os.Stdout, string(data))
 		}
 
+		// AC1: Check compaction threshold before API request
+		// Estimate tokens and check if auto-compact should trigger
+		estimatedTokens := estimateTokens(messages)
+
+		// Emit warning if approaching threshold
+		if e.compactConfig.checkWarningThreshold(estimatedTokens) {
+			EmitCompactWarning(estimatedTokens, e.compactConfig.warningThreshold())
+		}
+
+		// Check blocking limit when auto-compact is disabled (AC3)
+		// compact/session_memory sources skip this check (AC5)
+		if err := e.compactConfig.blockIfOverLimit(estimatedTokens, "user"); err != nil {
+			return "", err
+		}
+
+		// AC1: Auto-compact if threshold exceeded and circuit breaker not tripped
+		if e.compactConfig.checkCompactThreshold(estimatedTokens) {
+			e.mu.Lock()
+			circuitBreakerTripped := e.compactFailCount >= MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES
+			e.mu.Unlock()
+
+			if !circuitBreakerTripped {
+				// Attempt compaction
+				compacted, err := e.compactMessages(ctx, messages, e.compactConfig, systemPrompt)
+				if err == nil {
+					// Compaction succeeded - normalize the compacted chain
+					messages = normalizeCompactedChain(compacted)
+					log.Debug("Context compaction succeeded", "newMessageCount", len(messages))
+				} else {
+					// Compaction failed - increment failure counter
+					e.mu.Lock()
+					e.compactFailCount++
+					log.Warn("Context compaction failed", "error", err, "consecutiveFailures", e.compactFailCount)
+					e.mu.Unlock()
+				}
+			} else {
+				log.Debug("Auto-compact skipped: circuit breaker tripped")
+			}
+		}
+
 		// Normalize messages before API request (strip internal fields, enforce tool pairing, etc.)
 		messages = normalizeMessages(messages)
 
@@ -303,6 +349,8 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 			if wasMediaError {
 				continue // Retry with modified messages
 			}
+			// AC2: Non-user-abort error - increment compaction failure counter
+			e.incrementCompactFailCount()
 			return "", fmt.Errorf("streaming error: %v", streamResult.Error)
 		}
 
@@ -435,6 +483,8 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 					data, _ := json.Marshal(msg)
 					fmt.Fprintln(os.Stdout, string(data))
 				}
+				// AC2: Reset compaction failure counter on successful API response
+				e.resetCompactFailCount()
 				return textOutput.String(), nil
 			}
 			// Output final result
@@ -455,6 +505,8 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 				data, _ := json.Marshal(msg)
 				fmt.Fprintln(os.Stdout, string(data))
 			}
+			// AC2: Reset compaction failure counter on successful API response
+			e.resetCompactFailCount()
 			return textOutput.String(), nil
 
 		case api.StopReasonToolUse:
@@ -496,6 +548,8 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 				data, _ := json.Marshal(msg)
 				fmt.Fprintln(os.Stdout, string(data))
 			}
+			// AC2: Reset compaction failure counter on successful API response
+			e.resetCompactFailCount()
 			return textOutput.String(), nil
 		}
 
@@ -513,4 +567,27 @@ func (e *QueryEngine) TurnCount() int {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return e.turnCount
+}
+
+// resetCompactFailCount resets the compaction failure counter on successful API response.
+// AC2: Circuit breaker resets on success.
+func (e *QueryEngine) resetCompactFailCount() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.compactFailCount = 0
+}
+
+// incrementCompactFailCount increments the compaction failure counter.
+// AC2: Circuit breaker tracks consecutive failures.
+func (e *QueryEngine) incrementCompactFailCount() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.compactFailCount++
+}
+
+// CompactFailCount returns the current compaction failure count for diagnostics.
+func (e *QueryEngine) CompactFailCount() int {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.compactFailCount
 }
