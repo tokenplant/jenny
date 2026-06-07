@@ -2,6 +2,7 @@
 package tool
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -286,4 +287,11 @@ func isBinary(content string) bool {
 		}
 	}
 	return false
+}
+
+// ExecuteWithContext runs the tool with context support. Edit operations are fast
+// and typically complete before context cancellation is relevant, so this delegates
+// to Execute.
+func (t *EditTool) ExecuteWithContext(ctx context.Context, input map[string]any, cwd string) (*ToolResult, error) {
+	return t.Execute(input, cwd)
 }

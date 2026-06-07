@@ -1,6 +1,7 @@
 package tool
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -234,4 +235,11 @@ func (t *GlobTool) Execute(input map[string]any, cwd string) (*ToolResult, error
 		IsError:   false,
 		Truncated: truncated,
 	}, nil
+}
+
+// ExecuteWithContext runs the tool with context support. Glob operations are fast
+// and typically complete before context cancellation is relevant, so this delegates
+// to Execute.
+func (t *GlobTool) ExecuteWithContext(ctx context.Context, input map[string]any, cwd string) (*ToolResult, error) {
+	return t.Execute(input, cwd)
 }

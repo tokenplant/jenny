@@ -161,6 +161,13 @@ func (t *MCPTool) Execute(input map[string]any, cwd string) (*tool.ToolResult, e
 	}, nil
 }
 
+// ExecuteWithContext runs the tool with context support.
+// MCP tool calls are typically fast and don't need context cancellation,
+// so this delegates to Execute.
+func (t *MCPTool) ExecuteWithContext(ctx context.Context, input map[string]any, cwd string) (*tool.ToolResult, error) {
+	return t.Execute(input, cwd)
+}
+
 // NormalizeName normalizes a name for use in tool naming.
 // Lowercase, non-alphanumeric characters become underscores, repeats collapsed.
 func NormalizeName(name string) string {

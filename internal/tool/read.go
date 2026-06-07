@@ -3,6 +3,7 @@ package tool
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -219,4 +220,11 @@ func (t *ReadTool) Execute(input map[string]any, cwd string) (*ToolResult, error
 	}
 
 	return result, nil
+}
+
+// ExecuteWithContext runs the tool with context support. Read operations are fast
+// and typically complete before context cancellation is relevant, so this delegates
+// to Execute.
+func (t *ReadTool) ExecuteWithContext(ctx context.Context, input map[string]any, cwd string) (*ToolResult, error) {
+	return t.Execute(input, cwd)
 }

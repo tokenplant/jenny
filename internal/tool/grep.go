@@ -289,3 +289,10 @@ func boolVal(input map[string]any, key string) bool {
 	}
 	return false
 }
+
+// ExecuteWithContext runs the tool with context support. Grep operations use
+// context for timeout handling, so this delegates to Execute which creates
+// its own timeout context.
+func (t *GrepTool) ExecuteWithContext(ctx context.Context, input map[string]any, cwd string) (*ToolResult, error) {
+	return t.Execute(input, cwd)
+}

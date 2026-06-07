@@ -2,6 +2,7 @@
 package tool
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -169,4 +170,11 @@ func PathInWorkingDir(filePath, cwd string) (string, error) {
 	}
 
 	return absFilePath, nil
+}
+
+// ExecuteWithContext runs the tool with context support. Write operations are fast
+// and typically complete before context cancellation is relevant, so this delegates
+// to Execute.
+func (t *WriteTool) ExecuteWithContext(ctx context.Context, input map[string]any, cwd string) (*ToolResult, error) {
+	return t.Execute(input, cwd)
 }

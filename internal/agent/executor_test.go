@@ -2,6 +2,7 @@
 package agent
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -53,6 +54,48 @@ func (m *execMockTool) Execute(input map[string]any, cwd string) (*tool.ToolResu
 		Content: m.content,
 		IsError: m.isError,
 	}, m.err
+}
+
+// ExecuteWithContext runs the tool with context cancellation support.
+// For bash-like tools, this checks both the context and the mockInterruptCh.
+func (m *execMockTool) ExecuteWithContext(ctx context.Context, input map[string]any, cwd string) (*tool.ToolResult, error) {
+	// Use a ticker to allow periodic context checks during long delays.
+	// This simulates how exec.CommandContext actually interrupt sleep on cancellation.
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	done := time.After(m.delay)
+
+	// Build a select that checks context cancellation and abort channel
+	var abortCh <-chan struct{}
+	if mockInterruptCh != nil {
+		abortCh = mockInterruptCh
+	}
+
+	for {
+		select {
+		case <-done:
+			// Completed normally
+			return &tool.ToolResult{
+				Content: m.content,
+				IsError: m.isError,
+			}, m.err
+		case <-ctx.Done():
+			// Interrupted by context cancellation (sibling abort)
+			return &tool.ToolResult{
+				Content: "Tool execution aborted due to sibling failure",
+				IsError: true,
+			}, fmt.Errorf("aborted by sibling failure")
+		case <-abortCh:
+			// Interrupted by sibling failure via mockInterruptCh (legacy path)
+			return &tool.ToolResult{
+				Content: "Tool execution aborted due to sibling failure",
+				IsError: true,
+			}, fmt.Errorf("aborted by sibling failure")
+		case <-ticker.C:
+			// Continue checking - allows context to be checked periodically
+			continue
+		}
+	}
 }
 
 // TestExecutor_AC1_ParallelReadOnly verifies AC1: Read/Glob/Grep run in parallel when consecutive.
@@ -146,12 +189,39 @@ func TestExecutor_AC2_SerializedMutation(t *testing.T) {
 	// With parallel batches: first batch ~100ms (parallel reads), then ~100ms (write), then ~100ms (read)
 	// Either way it should be < 200ms if reads were truly parallel, but since write is serial it should be ≥300ms
 	_ = mixedResults
+
+	// B3: Test: Bash + Bash should be serial (≥2s) - AC2 explicit case
+	bashTools := []tool.Tool{
+		&execMockTool{name: "bash", delay: 1000 * time.Millisecond, isSafe: false},
+		&execMockTool{name: "bash", delay: 1000 * time.Millisecond, isSafe: false},
+	}
+	bashExecutor := NewToolExecutor(bashTools, "/tmp")
+
+	bashBlocks := []toolUseBlock{
+		{ID: "6", Name: "bash", Input: map[string]any{"command": "sleep 1"}},
+		{ID: "7", Name: "bash", Input: map[string]any{"command": "sleep 1"}},
+	}
+
+	bashStart := time.Now()
+	bashResults, err := bashExecutor.Execute(bashBlocks)
+	bashElapsed := time.Since(bashStart)
+
+	if err != nil {
+		t.Fatalf("Bash serial execution returned error: %v", err)
+	}
+
+	if len(bashResults) != 2 {
+		t.Fatalf("Expected 2 bash results, got %d", len(bashResults))
+	}
+
+	// Serial bash execution should take ≥2s (1000ms + 1000ms)
+	if bashElapsed < 2000*time.Millisecond {
+		t.Errorf("Serial Bash execution took %v, expected ≥2000ms", bashElapsed)
+	}
 }
 
 // TestExecutor_AC3_BashSiblingAbort verifies AC3: Bash failure aborts sibling bash in same batch.
-// Note: This test cannot fully verify cancellation behavior because mock tools don't respect
-// context cancellation. The real BashTool uses exec.CommandContext which IS interruptible.
-// This test verifies the partition and execution mechanism works correctly.
+// When one bash fails, sibling bash processes should be cancelled via context before completion.
 func TestExecutor_AC3_BashSiblingAbort(t *testing.T) {
 	tools := []tool.Tool{
 		&execMockTool{
@@ -162,9 +232,11 @@ func TestExecutor_AC3_BashSiblingAbort(t *testing.T) {
 		},
 		&execMockTool{
 			name:    "bash",
-			delay:   0, // Returns immediately
+			delay:   100 * time.Millisecond, // Longer delay so bash1/3 start first
 			isSafe:  false,
-			content: "bash2 completed",
+			err:     fmt.Errorf("exit 1"), // This one fails and triggers abort
+			isError: true,
+			content: "bash2 failed",
 		},
 		&execMockTool{
 			name:    "bash",
@@ -182,15 +254,30 @@ func TestExecutor_AC3_BashSiblingAbort(t *testing.T) {
 		{ID: "3", Name: "bash", Input: map[string]any{"command": "sleep 10"}},
 	}
 
+	start := time.Now()
 	results, err := executor.Execute(blocks)
+	elapsed := time.Since(start)
 
 	if err != nil {
 		t.Fatalf("Execute returned error: %v", err)
 	}
 
-	// Verify all three bash tools were executed and results returned
 	if len(results) != 3 {
 		t.Errorf("Expected 3 results, got %d", len(results))
+	}
+
+	// Result 2 (failing bash) should be an error
+	if !results[1].IsError {
+		t.Errorf("Result 2 (failing bash) should be an error")
+	}
+
+	// Siblings should be aborted - they should not run to completion.
+	// If sibling abort works, total time should be < 700ms (time for failing bash + cancellation).
+	// Without sibling abort, it would take ~1000ms (500 + 100 + 500 for serial, or 500ms if fully parallel).
+	// With proper context cancellation, siblings bash1 and bash3 should be cancelled
+	// when bash2 fails at ~100ms, so total should be < 300ms.
+	if elapsed >= 400*time.Millisecond {
+		t.Errorf("Sibling abort: execution took %v, expected <400ms (siblings should be cancelled)", elapsed)
 	}
 
 	// Verify results are in request order

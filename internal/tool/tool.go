@@ -1,6 +1,8 @@
 // Package tool provides the tool interface and implementations for the agent.
 package tool
 
+import "context"
+
 // ToolResult represents the result of a tool execution.
 type ToolResult struct {
 	// Content is the text content of the tool result.
@@ -21,6 +23,10 @@ type Tool interface {
 	InputSchema() map[string]any
 	// Execute runs the tool with the given input and returns the result.
 	Execute(input map[string]any, cwd string) (*ToolResult, error)
+	// ExecuteWithContext runs the tool with context support for cancellation.
+	// If the context is cancelled, the tool should abort any in-progress work.
+	// The default implementation wraps Execute and ignores the context.
+	ExecuteWithContext(ctx context.Context, input map[string]any, cwd string) (*ToolResult, error)
 }
 
 // ToolUse represents a tool use request from the model.

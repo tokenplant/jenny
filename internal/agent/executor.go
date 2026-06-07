@@ -95,9 +95,9 @@ func (e *ToolExecutor) partitionGroups(toolUseBlocks []toolUseBlock) []toolGroup
 				tools:  currentBatch,
 				serial: false,
 			})
-			currentBatch = nil
-			currentBatchType = ""
 		}
+		currentBatch = nil
+		currentBatchType = ""
 	}
 
 	for i, block := range toolUseBlocks {
@@ -126,15 +126,16 @@ func (e *ToolExecutor) partitionGroups(toolUseBlocks []toolUseBlock) []toolGroup
 				serial: true,
 			})
 		} else if isBashTool(block.Name) {
-			// Bash - flush current batch if not bash type, then add to batch
-			if currentBatchType != "" && currentBatchType != "bash" {
-				flushBatch()
-			}
-			currentBatchType = "bash"
-			currentBatch = append(currentBatch, toolUseWithIndex{
-				block: block,
-				index: i,
-				tool:  t,
+			// Bash - AC2: Write/Edit/Bash never run concurrently
+			// Each bash gets its own serial group
+			flushBatch()
+			groups = append(groups, toolGroup{
+				tools: []toolUseWithIndex{{
+					block: block,
+					index: i,
+					tool:  t,
+				}},
+				serial: true,
 			})
 		} else if isReadOnlyTool(block.Name) {
 			// Read/Glob/Grep - flush if previous was bash, then add to batch
@@ -208,8 +209,8 @@ func (e *ToolExecutor) executeParallel(batch []toolUseWithIndex, results []toolR
 				return
 			}
 
-			// Execute the tool
-			execResult, err := tw.tool.Execute(tw.block.Input, e.cwd)
+			// Execute the tool with context for cancellation support
+			execResult, err := tw.tool.ExecuteWithContext(ctx, tw.block.Input, e.cwd)
 
 			// Check if cancelled (sibling abort) - check BEFORE storing result
 			if ctx.Err() == context.Canceled {
@@ -265,8 +266,8 @@ func (e *ToolExecutor) executeSerial(batch []toolUseWithIndex, results []toolRes
 			continue
 		}
 
-		// Execute the tool
-		execResult, err := tw.tool.Execute(tw.block.Input, e.cwd)
+		// Execute the tool with context (background context for serial, no cancellation)
+		execResult, err := tw.tool.ExecuteWithContext(context.Background(), tw.block.Input, e.cwd)
 
 		if err != nil {
 			results[tw.index] = toolResult{
