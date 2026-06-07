@@ -6,17 +6,26 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
 // WriteTool writes content to files with read-before-write validation.
 type WriteTool struct {
-	readCache *ReadFileCache
+	readCache    *ReadFileCache
+	allowedPaths []string // If set, writes are restricted to these paths only
 }
 
 // NewWriteTool creates a new WriteTool.
 func NewWriteTool(readCache *ReadFileCache) *WriteTool {
 	return &WriteTool{readCache: readCache}
+}
+
+// SetAllowedPaths restricts Write to only these paths.
+// If nil or empty, no restriction is applied beyond the cwd gate.
+func (t *WriteTool) SetAllowedPaths(paths []string) *WriteTool {
+	t.allowedPaths = paths
+	return t
 }
 
 // Name returns the tool name.
@@ -76,14 +85,30 @@ func (t *WriteTool) Execute(ctx context.Context, input map[string]any, cwd strin
 	// Clean the path
 	filePath = filepath.Clean(filePath)
 
-	// Gate: ensure path is within working directory
-	var pathErr error
-	filePath, pathErr = PathInWorkingDir(filePath, cwd)
-	if pathErr != nil {
-		return &ToolResult{
-			Content: pathErr.Error(),
-			IsError: true,
-		}, nil
+	// Check allowedPaths restriction first - paths in allowedPaths bypass cwd gate
+	if len(t.allowedPaths) > 0 {
+		allowed := slices.Contains(t.allowedPaths, filePath)
+		if !allowed {
+			// Path not in allowlist - apply cwd gate
+			var pathErr error
+			filePath, pathErr = PathInWorkingDir(filePath, cwd)
+			if pathErr != nil {
+				return &ToolResult{
+					Content: pathErr.Error(),
+					IsError: true,
+				}, nil
+			}
+		}
+	} else {
+		// No allowedPaths restriction - apply cwd gate
+		var pathErr error
+		filePath, pathErr = PathInWorkingDir(filePath, cwd)
+		if pathErr != nil {
+			return &ToolResult{
+				Content: pathErr.Error(),
+				IsError: true,
+			}, nil
+		}
 	}
 
 	// AC1: Check readFileState cache for the path

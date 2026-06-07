@@ -2,9 +2,9 @@
 title: Memory Extraction
 slug: memory-extraction
 priority: P3
-status: not_started
+status: done
 spec: complete
-code: not_started
+code: done
 package: internal/agent
 gaps:
   []

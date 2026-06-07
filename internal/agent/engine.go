@@ -37,6 +37,9 @@ type QueryEngine struct {
 
 	// Session memory
 	sessionMemory *SessionMemory
+
+	// Memory extraction
+	memExtractor *MemoryExtractor
 }
 
 // NewQueryEngine creates a new QueryEngine with the given configuration.
@@ -193,6 +196,8 @@ func (e *QueryEngine) SubmitMessage(ctx context.Context, prompt string) (string,
 					e.streamCfg.MemoryContent = indexContent
 				}
 			}
+			// Initialize memory extractor with project root
+			e.initMemoryExtractor(gitRoot)
 		}
 	}
 
@@ -629,6 +634,17 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 			}
 			// AC2: Reset compaction failure counter on successful API response
 			e.resetCompactFailCount()
+
+			// Check and run memory extraction before returning
+			if e.memExtractor != nil && resp.StopReason != "" {
+				e.memExtractor.CheckAndExtract(ctx, TurnContext{
+					StopReason:       resp.StopReason,
+					AssistantMessage: &assistantMsg,
+					TotalMessages:    len(messages),
+					RecentMessages:   messages,
+				})
+			}
+
 			return textOutput.String(), nil
 
 		case api.StopReasonToolUse:
@@ -676,6 +692,17 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 			}
 			// AC2: Reset compaction failure counter on successful API response
 			e.resetCompactFailCount()
+
+			// Check and run memory extraction before returning
+			if e.memExtractor != nil {
+				e.memExtractor.CheckAndExtract(ctx, TurnContext{
+					StopReason:       resp.StopReason,
+					AssistantMessage: &assistantMsg,
+					TotalMessages:    len(messages),
+					RecentMessages:   messages,
+				})
+			}
+
 			return textOutput.String(), nil
 		}
 
@@ -730,4 +757,28 @@ func (e *QueryEngine) CompactFailCount() int {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return e.compactFailCount
+}
+
+// initMemoryExtractor initializes the memory extractor with the project root.
+// It is called lazily when auto-memory is enabled and the project root is derived.
+func (e *QueryEngine) initMemoryExtractor(projectRoot string) {
+	if e.memExtractor != nil {
+		return // Already initialized
+	}
+	e.memExtractor = NewMemoryExtractor(e.client, ExtractorConfig{
+		IsSubAgent:         false,
+		ExtractEveryNTurns: 1,
+		AutoMemoryEnabled:  e.streamCfg.AutoMemoryEnabled,
+		ProjectRoot:        projectRoot,
+		SessionID:          e.streamCfg.SessionID,
+	})
+}
+
+// Drain waits for any in-progress memory extraction to complete.
+// Used during shutdown to ensure clean termination.
+func (e *QueryEngine) Drain(ctx context.Context) {
+	if e.memExtractor == nil {
+		return
+	}
+	e.memExtractor.Drain(ctx)
 }
