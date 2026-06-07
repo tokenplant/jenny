@@ -365,10 +365,6 @@ func TestSandbox_AC4_MockMissingDepsWarningMode(t *testing.T) {
 // Test that the macOS backend properly checks for sandbox-exec
 // (black-box: initializing on macOS should succeed since sandbox-exec is present)
 func TestSandbox_AC4_MacOSBackendDependencyCheck(t *testing.T) {
-	// This is a platform-specific test — only runs on darwin
-	if runtime.GOOS != "darwin" {
-		t.Skip("macOS sandbox tests require darwin")
-	}
 	sb := sandbox.NewMacOSSandboxManager()
 	cfg := sandbox.Config{
 		Backend:           sandbox.BackendMacOS,
@@ -377,20 +373,37 @@ func TestSandbox_AC4_MacOSBackendDependencyCheck(t *testing.T) {
 
 	err := sb.Initialize(context.Background(), cfg)
 	if err != nil {
-		// Could fail if sandbox-exec is not available (e.g., containerized env)
-		// The important thing is it returns a clear error
-		depErr, ok := err.(*sandbox.ErrMissingDependency)
-		if !ok {
-			t.Fatalf("expected ErrMissingDependency on failure, got %T: %v", err, err)
+		if runtime.GOOS == "darwin" {
+			// Darwin: sandbox-exec may be missing (containerized env)
+			depErr, ok := err.(*sandbox.ErrMissingDependency)
+			if !ok {
+				t.Fatalf("expected ErrMissingDependency on failure, got %T: %v", err, err)
+			}
+			t.Logf("macOS backend missing dependency: %s — hint: %s", depErr.Dependency, depErr.InstallHint)
+		} else {
+			// Non-darwin: stub returns informative error about macOS limitation
+			if !strings.Contains(err.Error(), "macOS") {
+				t.Errorf("expected error to mention 'macOS', got: %s", err.Error())
+			}
+			if sb.IsAvailable() {
+				t.Error("expected IsAvailable() to be false on non-darwin")
+			}
+			if sb.IsActive() {
+				t.Error("expected IsActive() to be false on non-darwin")
+			}
 		}
-		t.Logf("macOS backend missing dependency: %s — hint: %s", depErr.Dependency, depErr.InstallHint)
-	}
-	if err == nil {
-		if !sb.IsAvailable() {
-			t.Error("expected sandbox to be available after successful init")
-		}
-		if !sb.IsActive() {
-			t.Error("expected sandbox to be active with BackendMacOS")
+	} else {
+		if runtime.GOOS == "darwin" {
+			// Darwin: successful init when sandbox-exec is present
+			if !sb.IsAvailable() {
+				t.Error("expected sandbox to be available after successful init")
+			}
+			if !sb.IsActive() {
+				t.Error("expected sandbox to be active with BackendMacOS")
+			}
+		} else {
+			// Non-darwin: stub should never return nil error
+			t.Error("expected non-nil error on non-darwin, got nil")
 		}
 	}
 }
@@ -644,12 +657,7 @@ func TestBashTool_AC1_Unhappy_NilSandboxInactive(t *testing.T) {
 }
 
 func TestMacOSSandbox_AC4_Unhappy_MissingBinary(t *testing.T) {
-	// Test macOS backend behavior when binary is not found
-	if runtime.GOOS != "darwin" {
-		t.Skip("macOS sandbox tests require darwin")
-	}
 	sb := sandbox.NewMacOSSandboxManager()
-	// Use a non-existent ripgrep path to trigger missing dep error
 	cfg := sandbox.Config{
 		Backend:           sandbox.BackendMacOS,
 		FailIfUnavailable: true,
@@ -659,18 +667,30 @@ func TestMacOSSandbox_AC4_Unhappy_MissingBinary(t *testing.T) {
 	}
 
 	err := sb.Initialize(context.Background(), cfg)
-	if err == nil {
-		t.Skip("ripgrep at nonexistent path found (unexpected), skipping")
-	}
-
-	depErr, ok := err.(*sandbox.ErrMissingDependency)
-	if !ok {
-		t.Fatalf("expected ErrMissingDependency, got %T: %v", err, err)
-	}
-	if !strings.Contains(depErr.Dependency, "ripgrep") {
-		t.Errorf("expected dependency reference to ripgrep, got %q", depErr.Dependency)
-	}
-	if depErr.InstallHint == "" {
-		t.Error("expected non-empty install hint")
+	if err != nil {
+		if runtime.GOOS == "darwin" {
+			// Darwin: ripgrep resolution may succeed or fail
+			depErr, ok := err.(*sandbox.ErrMissingDependency)
+			if !ok {
+				t.Fatalf("expected ErrMissingDependency, got %T: %v", err, err)
+			}
+			if !strings.Contains(depErr.Dependency, "ripgrep") {
+				t.Errorf("expected dependency reference to ripgrep, got %q", depErr.Dependency)
+			}
+			if depErr.InstallHint == "" {
+				t.Error("expected non-empty install hint")
+			}
+		} else {
+			// Non-darwin: stub returns informative error about macOS limitation
+			if !strings.Contains(err.Error(), "macOS") {
+				t.Errorf("expected error to mention 'macOS', got: %s", err.Error())
+			}
+		}
+	} else {
+		if runtime.GOOS == "darwin" {
+			t.Skip("ripgrep at nonexistent path found (unexpected), skipping")
+		} else {
+			t.Error("expected non-nil error on non-darwin, got nil")
+		}
 	}
 }
