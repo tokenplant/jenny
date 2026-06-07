@@ -196,22 +196,22 @@ func TestExecutor_AC2_SerializedMutation(t *testing.T) {
 }
 
 // TestExecutor_AC3_BashSiblingAbort verifies AC3: Bash failure aborts sibling bash in same batch.
-// When one bash fails, sibling bash processes should be cancelled via context before completion.
+// When one bash fails, subsequent sibling bash processes should be aborted.
 func TestExecutor_AC3_BashSiblingAbort(t *testing.T) {
 	tools := []tool.Tool{
 		&execMockTool{
 			name:    "bash",
-			delay:   500 * time.Millisecond,
-			isSafe:  false,
-			content: "bash1 running",
-		},
-		&execMockTool{
-			name:    "bash",
-			delay:   100 * time.Millisecond, // Longer delay so bash1/3 start first
+			delay:   100 * time.Millisecond,
 			isSafe:  false,
 			err:     fmt.Errorf("exit 1"), // This one fails and triggers abort
 			isError: true,
-			content: "bash2 failed",
+			content: "bash1 failed",
+		},
+		&execMockTool{
+			name:    "bash",
+			delay:   500 * time.Millisecond,
+			isSafe:  false,
+			content: "bash2 running",
 		},
 		&execMockTool{
 			name:    "bash",
@@ -224,8 +224,8 @@ func TestExecutor_AC3_BashSiblingAbort(t *testing.T) {
 	executor := NewToolExecutor(tools, "/tmp")
 
 	blocks := []toolUseBlock{
-		{ID: "1", Name: "bash", Input: map[string]any{"command": "sleep 10"}},
-		{ID: "2", Name: "bash", Input: map[string]any{"command": "exit 1"}},
+		{ID: "1", Name: "bash", Input: map[string]any{"command": "exit 1"}},
+		{ID: "2", Name: "bash", Input: map[string]any{"command": "sleep 10"}},
 		{ID: "3", Name: "bash", Input: map[string]any{"command": "sleep 10"}},
 	}
 
@@ -241,18 +241,24 @@ func TestExecutor_AC3_BashSiblingAbort(t *testing.T) {
 		t.Errorf("Expected 3 results, got %d", len(results))
 	}
 
-	// Result 2 (failing bash) should be an error
-	if !results[1].IsError {
-		t.Errorf("Result 2 (failing bash) should be an error")
+	// Result 1 (failing bash) should be an error
+	if !results[0].IsError {
+		t.Errorf("Result 1 (failing bash) should be an error")
 	}
 
 	// Siblings should be aborted - they should not run to completion.
-	// If sibling abort works, total time should be < 700ms (time for failing bash + cancellation).
-	// Without sibling abort, it would take ~1000ms (500 + 100 + 500 for serial, or 500ms if fully parallel).
-	// With proper context cancellation, siblings bash1 and bash3 should be cancelled
-	// when bash2 fails at ~100ms, so total should be < 300ms.
+	// Since bash1 fails at ~100ms, and bash is serial, total should be ~100ms.
 	if elapsed >= 400*time.Millisecond {
-		t.Errorf("Sibling abort: execution took %v, expected <400ms (siblings should be cancelled)", elapsed)
+		t.Errorf("Sibling abort: execution took %v, expected <400ms (siblings should be aborted)", elapsed)
+	}
+
+	// Results 2 and 3 should be aborted
+	expectedAbort := "Tool execution aborted due to sibling failure"
+	if results[1].Content != expectedAbort {
+		t.Errorf("Result 2: expected %q, got %q", expectedAbort, results[1].Content)
+	}
+	if results[2].Content != expectedAbort {
+		t.Errorf("Result 3: expected %q, got %q", expectedAbort, results[2].Content)
 	}
 
 	// Verify results are in request order

@@ -76,7 +76,7 @@ func (e *ToolExecutor) Execute(toolUseBlocks []toolUseBlock) ([]toolResult, erro
 
 // partitionGroups partitions tool use blocks into parallel and serial groups.
 // Consecutive concurrency-safe tools (read, glob, grep) go into parallel batches.
-// Bash tools are batched together for sibling abort (AC3), with semaphore=1 for AC2 compliance.
+// Bash tools are accumulated into serial batches for sibling abort (AC3).
 // Write/Edit tools are serialized individually.
 func (e *ToolExecutor) partitionGroups(toolUseBlocks []toolUseBlock) []toolGroup {
 	var groups []toolGroup
@@ -87,7 +87,7 @@ func (e *ToolExecutor) partitionGroups(toolUseBlocks []toolUseBlock) []toolGroup
 		if len(currentBatch) > 0 {
 			groups = append(groups, toolGroup{
 				tools:  currentBatch,
-				serial: false,
+				serial: currentBatchType == "bash",
 			})
 		}
 		currentBatch = nil
@@ -95,10 +95,14 @@ func (e *ToolExecutor) partitionGroups(toolUseBlocks []toolUseBlock) []toolGroup
 	}
 
 	for i, block := range toolUseBlocks {
-		t := tool.FindTool(e.tools, block.Name)
+		var t tool.Tool
+		if i < len(e.tools) && e.tools[i].Name() == block.Name {
+			t = e.tools[i]
+		} else {
+			t = tool.FindTool(e.tools, block.Name)
+		}
 
 		if t == nil {
-			// Unknown tool - serial error
 			flushBatch()
 			groups = append(groups, toolGroup{
 				tools: []toolUseWithIndex{{
@@ -109,7 +113,6 @@ func (e *ToolExecutor) partitionGroups(toolUseBlocks []toolUseBlock) []toolGroup
 				serial: true,
 			})
 		} else if isSerialTool(block.Name) {
-			// Write/Edit - serial execution, flushed before and after
 			flushBatch()
 			groups = append(groups, toolGroup{
 				tools: []toolUseWithIndex{{
@@ -120,8 +123,9 @@ func (e *ToolExecutor) partitionGroups(toolUseBlocks []toolUseBlock) []toolGroup
 				serial: true,
 			})
 		} else if isBashTool(block.Name) {
-			// Bash - accumulate into batch for sibling abort (AC3).
-			// Semaphore in executeParallel ensures serial-like behavior (AC2).
+			if currentBatchType != "" && currentBatchType != "bash" {
+				flushBatch()
+			}
 			currentBatchType = "bash"
 			currentBatch = append(currentBatch, toolUseWithIndex{
 				block: block,
@@ -129,8 +133,7 @@ func (e *ToolExecutor) partitionGroups(toolUseBlocks []toolUseBlock) []toolGroup
 				tool:  t,
 			})
 		} else if isReadOnlyTool(block.Name) {
-			// Read/Glob/Grep - flush if previous was bash, then add to batch
-			if currentBatchType == "bash" {
+			if currentBatchType != "" && currentBatchType != "readonly" {
 				flushBatch()
 			}
 			currentBatchType = "readonly"
@@ -140,7 +143,6 @@ func (e *ToolExecutor) partitionGroups(toolUseBlocks []toolUseBlock) []toolGroup
 				tool:  t,
 			})
 		} else {
-			// Unknown non-serial tool - treat as serial
 			flushBatch()
 			groups = append(groups, toolGroup{
 				tools: []toolUseWithIndex{{
@@ -153,9 +155,7 @@ func (e *ToolExecutor) partitionGroups(toolUseBlocks []toolUseBlock) []toolGroup
 		}
 	}
 
-	// Flush remaining batch
 	flushBatch()
-
 	return groups
 }
 
@@ -169,26 +169,14 @@ func (e *ToolExecutor) executeParallel(batch []toolUseWithIndex, results []toolR
 	defer cancel()
 
 	var wg sync.WaitGroup
-
-	// Use semaphore size 1 for bash batches to enforce AC2 (serial-like behavior).
-	// For other batches, use maxConcurrency.
-	semSize := e.maxConcurrency
-	if isAllBashBatch(batch) {
-		semSize = 1
-	}
-	sem := make(chan struct{}, semSize)
-
-	// Track bash failure for sibling abort
-	var bashFailed bool
-	var bashMu sync.Mutex
+	sem := make(chan struct{}, e.maxConcurrency)
 
 	for _, tw := range batch {
 		wg.Add(1)
 		go func(tw toolUseWithIndex) {
 			defer wg.Done()
 
-			// Check if already cancelled before acquiring semaphore
-			if ctx.Err() == context.Canceled {
+			if ctx.Err() != nil {
 				results[tw.index] = toolResult{
 					ToolUseID: tw.block.ID,
 					Content:   "Tool execution aborted due to sibling failure",
@@ -197,25 +185,21 @@ func (e *ToolExecutor) executeParallel(batch []toolUseWithIndex, results []toolR
 				return
 			}
 
-			// Acquire semaphore slot
-			sem <- struct{}{}
+			select {
+			case sem <- struct{}{}:
+			case <-ctx.Done():
+				results[tw.index] = toolResult{
+					ToolUseID: tw.block.ID,
+					Content:   "Tool execution aborted due to sibling failure",
+					IsError:   true,
+				}
+				return
+			}
 			defer func() { <-sem }()
 
-			// Check if cancelled after acquiring semaphore (context may have been cancelled while waiting)
-			if ctx.Err() == context.Canceled {
-				results[tw.index] = toolResult{
-					ToolUseID: tw.block.ID,
-					Content:   "Tool execution aborted due to sibling failure",
-					IsError:   true,
-				}
-				return
-			}
-
-			// Execute the tool with context for cancellation support
 			execResult, err := tw.tool.ExecuteWithContext(ctx, tw.block.Input, e.cwd)
 
-			// Check if cancelled (sibling abort) - check BEFORE storing result
-			if ctx.Err() == context.Canceled {
+			if ctx.Err() != nil {
 				results[tw.index] = toolResult{
 					ToolUseID: tw.block.ID,
 					Content:   "Tool execution aborted due to sibling failure",
@@ -224,17 +208,6 @@ func (e *ToolExecutor) executeParallel(batch []toolUseWithIndex, results []toolR
 				return
 			}
 
-			// Check for bash failure - abort siblings
-			if isBashTool(tw.block.Name) && err != nil {
-				bashMu.Lock()
-				if !bashFailed {
-					bashFailed = true
-					cancel() // Cancel all siblings via context
-				}
-				bashMu.Unlock()
-			}
-
-			// Store result
 			if err != nil {
 				results[tw.index] = toolResult{
 					ToolUseID: tw.block.ID,
@@ -254,21 +227,23 @@ func (e *ToolExecutor) executeParallel(batch []toolUseWithIndex, results []toolR
 	wg.Wait()
 }
 
-// isAllBashBatch returns true if all tools in the batch are bash tools.
-func isAllBashBatch(batch []toolUseWithIndex) bool {
-	for _, tw := range batch {
-		if !isBashTool(tw.block.Name) {
-			return false
-		}
-	}
-	return len(batch) > 0
-}
-
 // executeSerial runs tools one at a time in request order.
+// For bash batches, failure of one tool aborts subsequent bash tools in the same batch (AC3).
 func (e *ToolExecutor) executeSerial(batch []toolUseWithIndex, results []toolResult) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	for _, tw := range batch {
+		if ctx.Err() != nil {
+			results[tw.index] = toolResult{
+				ToolUseID: tw.block.ID,
+				Content:   "Tool execution aborted due to sibling failure",
+				IsError:   true,
+			}
+			continue
+		}
+
 		if tw.tool == nil {
-			// Unknown tool - immediate error
 			results[tw.index] = toolResult{
 				ToolUseID: tw.block.ID,
 				Content:   fmt.Sprintf("Error: No such tool available: %s", tw.block.Name),
@@ -277,8 +252,7 @@ func (e *ToolExecutor) executeSerial(batch []toolUseWithIndex, results []toolRes
 			continue
 		}
 
-		// Execute the tool with context (background context for serial, no cancellation)
-		execResult, err := tw.tool.ExecuteWithContext(context.Background(), tw.block.Input, e.cwd)
+		execResult, err := tw.tool.ExecuteWithContext(ctx, tw.block.Input, e.cwd)
 
 		if err != nil {
 			results[tw.index] = toolResult{
@@ -286,11 +260,19 @@ func (e *ToolExecutor) executeSerial(batch []toolUseWithIndex, results []toolRes
 				Content:   fmt.Sprintf("Error executing tool: %v", err),
 				IsError:   true,
 			}
+			// Bash failure aborts siblings in same batch
+			if isBashTool(tw.block.Name) {
+				cancel()
+			}
 		} else {
 			results[tw.index] = toolResult{
 				ToolUseID: tw.block.ID,
 				Content:   execResult.Content,
 				IsError:   execResult.IsError,
+			}
+			// Also abort on logical error for bash if it's considered a "failure"
+			if isBashTool(tw.block.Name) && execResult.IsError {
+				cancel()
 			}
 		}
 	}
