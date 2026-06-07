@@ -2,12 +2,11 @@
 title: MCP Configuration
 slug: mcp-config
 priority: P0
-status: not_started
+status: done
 spec: complete
-code: not_started
+code: complete
 package: internal/mcp
-gaps:
-  - --mcp-config flag parsed but not wired
+gaps: []
 depends_on:
   - cli
 ---

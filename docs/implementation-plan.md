@@ -118,9 +118,9 @@ Implement in this order:
    - Emit usage in stream-json `result` line (`cache_read_input_tokens`, `cache_creation_input_tokens`)
    - **Gap:** only input/output tokens emitted today
 
-10. - [ ] MCP config (`--mcp-config`) — [`mcp-config.md`](./mcp-config.md)
+10. - [x] MCP config (`--mcp-config`) — [`mcp-config.md`](./mcp-config.md)
     - Load multiple config files; expand env vars in server definitions
-    - **Gap:** flag parsed but not wired
+    - **AC1-AC5:** All acceptance criteria implemented and tested ✓
 
 11. - [ ] MCP client — [`mcp-client.md`](./mcp-client.md)
     - stdio/SSE/HTTP/WebSocket transports; OAuth refresh on 401
