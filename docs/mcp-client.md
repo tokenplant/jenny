@@ -2,12 +2,17 @@
 title: MCP Client
 slug: mcp-client
 priority: P0
-status: not_started
+status: partial
 spec: complete
-code: not_started
+code: partial
 package: internal/mcp
 gaps:
-  []
+  - "SSE, HTTP, WebSocket transports not implemented (stdio only this iteration)"
+  - "OAuth token refresh not implemented (no HTTP transport)"
+  - "Binary MCP results not persisted to disk (text only)"
+  - "Content truncation at MAX_MCP_OUTPUT_TOKENS not implemented"
+  - "Resource cache not implemented"
+  - "Progress events not implemented"
 depends_on:
   - mcp-config
 ---

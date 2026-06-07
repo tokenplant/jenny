@@ -122,10 +122,10 @@ Implement in this order:
     - Load multiple config files; expand env vars in server definitions
     - **AC1-AC5:** All acceptance criteria implemented and tested ✓
 
-11. - [ ] MCP client — [`mcp-client.md`](./mcp-client.md)
-    - stdio/SSE/HTTP/WebSocket transports; OAuth refresh on 401
-    - Tool names prefixed `mcp__<server>__<tool>`
-    - Binary MCP results persisted to disk
+11. - [x] MCP client — [`mcp-client.md`](./mcp-client.md) — partial
+    - **stdio transport:** connect, initialize, tool discovery, tool dispatch ✓
+    - **AC1-AC5:** All ACs implemented and tested (stdio only this iteration)
+    - **Gaps:** SSE/HTTP/WebSocket, OAuth, binary persistence, content truncation, resource cache, progress events
 
 #### Tools
 

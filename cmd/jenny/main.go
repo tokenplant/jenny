@@ -95,6 +95,24 @@ func run() error {
 		if err != nil {
 			return fmt.Errorf("loading MCP config: %w", err)
 		}
+
+		// Connect to MCP servers and discover their tools
+		if err := mcp.ConnectAll(mcpConfig); err != nil {
+			return fmt.Errorf("connecting to MCP servers: %w", err)
+		}
+
+		// Get discovered MCP tools and append to tools list
+		mcpTools := mcp.GetTools()
+		for _, t := range mcpTools {
+			if mcpTool, ok := t.(*mcp.MCPTool); ok {
+				tools = append(tools, mcpTool)
+			}
+		}
+	}
+
+	// Ensure MCP clients are shut down on exit
+	if len(flags.MCPConfig) > 0 {
+		defer mcp.ShutdownAll()
 	}
 
 	// Create context
