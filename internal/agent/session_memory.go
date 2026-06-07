@@ -38,11 +38,8 @@ type SessionMemory struct {
 }
 
 // NewSessionMemory creates a new SessionMemory instance.
-func NewSessionMemory(sessionID string, client APIClient, compactCfg CompactConfig, memdir string) *SessionMemory {
+func NewSessionMemory(sessionID string, client APIClient, compactCfg CompactConfig) *SessionMemory {
 	baseDir := filepath.Join(constants.JennyHomeDir(), "session-memory")
-	if memdir != "" {
-		baseDir = memdir
-	}
 	return &SessionMemory{
 		sessionID:        sessionID,
 		memdir:           baseDir,
@@ -134,14 +131,18 @@ func (sm *SessionMemory) Update(ctx context.Context) error {
 		}
 	}
 
-	// Read current content
+	// Read current content and get mtime
+	info, err := os.Stat(sm.memoryFilePath)
+	if err != nil {
+		return fmt.Errorf("reading session memory file stats: %w", err)
+	}
 	currentContent, err := os.ReadFile(sm.memoryFilePath)
 	if err != nil {
 		return fmt.Errorf("reading session memory file: %w", err)
 	}
 
-	// Invalidate readFileState before forked edit (edge case: read dedup)
-	sm.readCache.Remove(sm.memoryFilePath)
+	// Record read in cache so Edit tool's read-before-write check passes
+	sm.readCache.RecordRead(sm.memoryFilePath, string(currentContent), info.ModTime(), true)
 
 	// Create context with 15-second timeout
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
@@ -198,17 +199,24 @@ func (sm *SessionMemory) Update(ctx context.Context) error {
 		return fmt.Errorf("forked agent call: %w", err)
 	}
 
-	// Process response - extract text content
-	var summary strings.Builder
+	// Process response - handle tool_use blocks and text content
+	// Loop over content blocks and execute any tool_use blocks
 	for _, block := range resp.Content {
-		if block.Type == "text" {
-			summary.WriteString(block.Text)
+		if block.Type == "tool_use" && block.ToolUse != nil {
+			// Execute the edit tool
+			input := block.ToolUse.Args
+			cwd := "/" // Using allowedPaths, so cwd doesn't matter for path validation
+			result, err := editTool.Execute(ctx, input, cwd)
+			if err != nil {
+				log.Warn("Edit tool execution failed", "error", err)
+				continue
+			}
+			// Update cache after edit (EditTool.Execute already does this, but being explicit)
+			// The editTool.Execute already updates the cache on success
+			log.Debug("Edit tool executed", "toolUseID", block.ToolUse.ID, "isError", result.IsError)
 		}
+		// Text blocks are informational only - no need to capture for summary
 	}
-
-	// If the model requested an edit, execute it
-	// (The model should have used the Edit tool based on system prompt)
-	// For now, we rely on the model following instructions
 
 	// Update baselines
 	sm.lastBaseline = sm.accumTokens

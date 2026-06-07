@@ -4,7 +4,7 @@ package agent
 import (
 	"context"
 	"os"
-	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -39,9 +39,6 @@ func (m *mockAPIClient) SendMessage(ctx context.Context, messages []api.Message,
 // TestAC1_SessionMemoryInitAt10KTokens verifies that session memory file is created
 // after accumulating approximately 10K context tokens when auto-compact is enabled.
 func TestAC1_SessionMemoryInitAt10KTokens(t *testing.T) {
-	// Create temp directory for memdir
-	tmpDir := t.TempDir()
-
 	// Create compact config with auto-compact enabled
 	compactCfg := CompactConfig{
 		DisableAutoCompact: false,
@@ -52,7 +49,7 @@ func TestAC1_SessionMemoryInitAt10KTokens(t *testing.T) {
 	mockClient := &mockAPIClient{}
 
 	// Create session memory instance
-	sm := NewSessionMemory("test-session-ac1", mockClient, compactCfg, tmpDir)
+	sm := NewSessionMemory("test-session-ac1", mockClient, compactCfg)
 
 	// Verify no file exists initially
 	if sm.fileExists() {
@@ -118,15 +115,13 @@ func TestAC1_SessionMemoryInitAt10KTokens(t *testing.T) {
 // TestAC2_UpdateRequiresBothThresholds verifies that update requires both
 // token growth >= 5K AND tool calls >= 3.
 func TestAC2_UpdateRequiresBothThresholds(t *testing.T) {
-	tmpDir := t.TempDir()
-
 	compactCfg := CompactConfig{
 		DisableAutoCompact: false,
 		DisableCompact:     false,
 	}
 
 	mockClient := &mockAPIClient{}
-	sm := NewSessionMemory("test-session-ac2", mockClient, compactCfg, tmpDir)
+	sm := NewSessionMemory("test-session-ac2", mockClient, compactCfg)
 
 	// Create the memory file first (simulate init happened)
 	_ = sm.Init()
@@ -170,8 +165,6 @@ func TestAC2_UpdateRequiresBothThresholds(t *testing.T) {
 // When the forked agent takes longer than 15 seconds, the extraction is abandoned
 // and the main agent loop continues without blocking.
 func TestAC3_15SecondTimeout(t *testing.T) {
-	tmpDir := t.TempDir()
-
 	compactCfg := CompactConfig{
 		DisableAutoCompact: false,
 		DisableCompact:     false,
@@ -190,7 +183,7 @@ func TestAC3_15SecondTimeout(t *testing.T) {
 		},
 	}
 
-	sm := NewSessionMemory("test-session-ac3", slowClient, compactCfg, tmpDir)
+	sm := NewSessionMemory("test-session-ac3", slowClient, compactCfg)
 
 	// Create memory file
 	_ = sm.Init()
@@ -218,8 +211,6 @@ func TestAC3_15SecondTimeout(t *testing.T) {
 // TestAC4_ForkedAgentEditOnly verifies that the forked agent is restricted to
 // Edit tool only on the session memory file.
 func TestAC4_ForkedAgentEditOnly(t *testing.T) {
-	tmpDir := t.TempDir()
-
 	compactCfg := CompactConfig{
 		DisableAutoCompact: false,
 		DisableCompact:     false,
@@ -242,7 +233,7 @@ func TestAC4_ForkedAgentEditOnly(t *testing.T) {
 		},
 	}
 
-	sm := NewSessionMemory("test-session-ac4", mockClient, compactCfg, tmpDir)
+	sm := NewSessionMemory("test-session-ac4", mockClient, compactCfg)
 
 	// Create memory file
 	_ = sm.Init()
@@ -263,8 +254,6 @@ func TestAC4_ForkedAgentEditOnly(t *testing.T) {
 // TestAC5_DisabledWhenAutoCompactOff verifies that session memory is disabled
 // when auto-compact is disabled.
 func TestAC5_DisabledWhenAutoCompactOff(t *testing.T) {
-	tmpDir := t.TempDir()
-
 	// Test with DisableAutoCompact = true
 	compactCfg := CompactConfig{
 		DisableAutoCompact: true,
@@ -272,7 +261,7 @@ func TestAC5_DisabledWhenAutoCompactOff(t *testing.T) {
 	}
 
 	mockClient := &mockAPIClient{}
-	sm := NewSessionMemory("test-session-ac5", mockClient, compactCfg, tmpDir)
+	sm := NewSessionMemory("test-session-ac5", mockClient, compactCfg)
 
 	// Even with 10K+ tokens, should not trigger
 	shouldAct, action := sm.CheckThreshold(15000, 5)
@@ -295,7 +284,7 @@ func TestAC5_DisabledWhenAutoCompactOff(t *testing.T) {
 		DisableCompact:     true,
 	}
 
-	sm2 := NewSessionMemory("test-session-ac5-2", mockClient, compactCfg2, tmpDir)
+	sm2 := NewSessionMemory("test-session-ac5-2", mockClient, compactCfg2)
 
 	shouldAct, action = sm2.CheckThreshold(15000, 5)
 
@@ -309,15 +298,13 @@ func TestAC5_DisabledWhenAutoCompactOff(t *testing.T) {
 
 // TestAC5_DisabledBothFlags verifies session memory is disabled when both flags are set.
 func TestAC5_DisabledBothFlags(t *testing.T) {
-	tmpDir := t.TempDir()
-
 	compactCfg := CompactConfig{
 		DisableAutoCompact: true,
 		DisableCompact:     true,
 	}
 
 	mockClient := &mockAPIClient{}
-	sm := NewSessionMemory("test-session-ac5-both", mockClient, compactCfg, tmpDir)
+	sm := NewSessionMemory("test-session-ac5-both", mockClient, compactCfg)
 
 	shouldAct, action := sm.CheckThreshold(20000, 10)
 
@@ -331,31 +318,30 @@ func TestAC5_DisabledBothFlags(t *testing.T) {
 
 // TestSessionMemory_FilePath verifies the correct file path construction.
 func TestSessionMemory_FilePath(t *testing.T) {
-	tmpDir := t.TempDir()
-
 	compactCfg := CompactConfig{}
 
 	mockClient := &mockAPIClient{}
-	sm := NewSessionMemory("sess_abc123", mockClient, compactCfg, tmpDir)
+	sm := NewSessionMemory("sess_abc123", mockClient, compactCfg)
 
-	expectedPath := filepath.Join(tmpDir, "sess_abc123.md")
-	if sm.memoryFilePath != expectedPath {
-		t.Fatalf("Expected memory file path %s, got %s", expectedPath, sm.memoryFilePath)
+	// Verify file path ends with session ID and is under session-memory directory
+	if !strings.HasSuffix(sm.memoryFilePath, "sess_abc123.md") {
+		t.Fatalf("Expected memory file path to end with sess_abc123.md, got %s", sm.memoryFilePath)
+	}
+	if !strings.Contains(sm.memoryFilePath, "session-memory") {
+		t.Fatalf("Expected memory file path to contain session-memory, got %s", sm.memoryFilePath)
 	}
 }
 
 // TestSessionMemory_ReadCacheRestricted verifies that the read cache is properly
 // managed for the Edit tool restriction.
 func TestSessionMemory_ReadCacheRestricted(t *testing.T) {
-	tmpDir := t.TempDir()
-
 	compactCfg := CompactConfig{
 		DisableAutoCompact: false,
 		DisableCompact:     false,
 	}
 
 	mockClient := &mockAPIClient{}
-	sm := NewSessionMemory("test-session-cache", mockClient, compactCfg, tmpDir)
+	sm := NewSessionMemory("test-session-cache", mockClient, compactCfg)
 
 	// Create memory file
 	_ = sm.Init()
@@ -379,12 +365,10 @@ func TestSessionMemory_ReadCacheRestricted(t *testing.T) {
 
 // TestSessionMemory_ResetBaselines verifies that ResetBaselines correctly updates baselines.
 func TestSessionMemory_ResetBaselines(t *testing.T) {
-	tmpDir := t.TempDir()
-
 	compactCfg := CompactConfig{}
 
 	mockClient := &mockAPIClient{}
-	sm := NewSessionMemory("test-session-reset", mockClient, compactCfg, tmpDir)
+	sm := NewSessionMemory("test-session-reset", mockClient, compactCfg)
 
 	// Set up state
 	sm.accumTokens = 20000

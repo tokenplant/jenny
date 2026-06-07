@@ -106,7 +106,7 @@ func NewQueryEngine(cfg StreamConfig, tools []tool.Tool, model string) *QueryEng
 	engine.WireReadFileCache()
 
 	// Initialize session memory
-	engine.sessionMemory = NewSessionMemory(sessionID, client, engine.compactConfig, "")
+	engine.sessionMemory = NewSessionMemory(sessionID, client, engine.compactConfig)
 
 	return engine
 }

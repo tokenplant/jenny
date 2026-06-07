@@ -92,30 +92,37 @@ func (t *EditTool) Execute(ctx context.Context, input map[string]any, cwd string
 
 	replaceAll, _ := input["replace_all"].(bool)
 
-	// Resolve relative paths relative to cwd
+	// Resolve relative paths relative to cwd (but preserve tilde for now)
+	resolvedPath := filePath
 	if !filepath.IsAbs(filePath) {
-		filePath = filepath.Join(cwd, filePath)
+		resolvedPath = filepath.Join(cwd, filePath)
 	}
+	resolvedPath = filepath.Clean(resolvedPath)
 
-	// Clean the path
-	filePath = filepath.Clean(filePath)
-
-	// Gate: ensure path is within working directory
-	var pathErr error
-	filePath, pathErr = PathInWorkingDir(filePath, cwd)
-	if pathErr != nil {
-		return &ToolResult{
-			Content: pathErr.Error(),
-			IsError: true,
-		}, nil
-	}
-
-	// Check allowedPaths restriction
+	// Check allowedPaths restriction first - paths in allowedPaths bypass cwd gate
 	if len(t.allowedPaths) > 0 {
-		allowed := slices.Contains(t.allowedPaths, filePath)
-		if !allowed {
+		allowed := slices.Contains(t.allowedPaths, resolvedPath)
+		if allowed {
+			// Path is in allowlist - skip cwd gate and use resolved path
+			filePath = resolvedPath
+		} else {
+			// Path not in allowlist - apply cwd gate
+			var pathErr error
+			filePath, pathErr = PathInWorkingDir(resolvedPath, cwd)
+			if pathErr != nil {
+				return &ToolResult{
+					Content: pathErr.Error(),
+					IsError: true,
+				}, nil
+			}
+		}
+	} else {
+		// No allowedPaths restriction - apply cwd gate
+		var pathErr error
+		filePath, pathErr = PathInWorkingDir(resolvedPath, cwd)
+		if pathErr != nil {
 			return &ToolResult{
-				Content: fmt.Sprintf("Edit is restricted to specific paths only"),
+				Content: pathErr.Error(),
 				IsError: true,
 			}, nil
 		}
