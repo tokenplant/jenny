@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"maps"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ipy/jenny/internal/tool"
@@ -14,10 +15,20 @@ import (
 
 const resourceCacheTTL = 30 * time.Second
 
-// resourceCacheEntry holds cached resource list with timestamp.
+// resourceCacheEntry holds cached resource list with timestamp and generation.
 type resourceCacheEntry struct {
-	resources []MCPResource
-	fetchedAt time.Time
+	resources  []MCPResource
+	fetchedAt  time.Time
+	generation int64
+}
+
+// cacheGen is the generation counter for resource cache invalidation.
+var cacheGen int64
+
+// bumpCacheGen increments the cache generation counter.
+func bumpCacheGen() {
+	// Uses atomic to allow safe read from cache access without full lock
+	atomic.AddInt64(&cacheGen, 1)
 }
 
 // ListMcpResourcesTool lists MCP resources from connected servers.
@@ -25,6 +36,10 @@ type ListMcpResourcesTool struct {
 	cache map[string]*resourceCacheEntry
 	mu    sync.Mutex
 }
+
+// listResourcesHook allows injecting mock behavior for testing.
+// If set, this function is called instead of client.ListResources in getResourcesWithCache.
+var listResourcesHook func(ctx context.Context, serverName string) ([]MCPResource, error)
 
 // NewListMcpResourcesTool creates a new ListMcpResourcesTool.
 func NewListMcpResourcesTool() *ListMcpResourcesTool {
@@ -141,52 +156,101 @@ func (t *ListMcpResourcesTool) executeForAllServers(ctx context.Context) (*tool.
 
 	wg.Wait()
 
-	// Aggregate results from all servers
-	var allResources []MCPResource
+	// Build per-server JSON results and merge, preserving server attribution
+	var allOutputs []map[string]any
 	var hasResources bool
+	serverErrors := make(map[string]string)
 
 	for _, sr := range results {
 		if sr.err != nil {
 			// AC3: Per-server failure returns [] for that server (not whole-call failure)
-			allResources = append(allResources, []MCPResource{}...)
+			// Record error for observability (AC3)
+			serverErrors[sr.serverName] = sr.err.Error()
 			continue
 		}
-		allResources = append(allResources, sr.resources...)
+		// Build output with correct server attribution for each entry
+		for _, r := range sr.resources {
+			entry := map[string]any{
+				"uri":  r.URI,
+				"name": r.Name,
+			}
+			if r.MimeType != "" {
+				entry["mimeType"] = r.MimeType
+			}
+			if r.Description != "" {
+				entry["description"] = r.Description
+			}
+			entry["server"] = sr.serverName
+			allOutputs = append(allOutputs, entry)
+		}
 		if len(sr.resources) > 0 {
 			hasResources = true
 		}
 	}
 
 	// AC4: Empty result includes tools-may-exist note
-	if !hasResources {
+	if !hasResources && len(serverErrors) == 0 {
 		return &tool.ToolResult{
 			Content: "[]\nNote: No resources found. Resources may be empty while tools still exist.",
 			IsError: false,
 		}, nil
 	}
 
-	return t.buildResult(allResources, "")
+	// AC3: Include errors map if any servers failed (observability)
+	if len(serverErrors) > 0 {
+		errBytes, _ := json.Marshal(serverErrors)
+		resBytes, _ := json.Marshal(allOutputs)
+		return &tool.ToolResult{
+			Content: fmt.Sprintf(`{"resources":%s,"errors":%s}`, string(resBytes), string(errBytes)),
+			IsError: false,
+		}, nil
+	}
+
+	jsonBytes, err := json.Marshal(allOutputs)
+	if err != nil {
+		return &tool.ToolResult{
+			Content: fmt.Sprintf("Error marshaling resources: %v", err),
+			IsError: true,
+		}, nil
+	}
+
+	return &tool.ToolResult{
+		Content: string(jsonBytes),
+		IsError: false,
+	}, nil
 }
 
 // getResourcesWithCache returns cached resources or fetches new ones.
 func (t *ListMcpResourcesTool) getResourcesWithCache(ctx context.Context, serverName string, client *Client) ([]MCPResource, error) {
+	currentGen := atomic.LoadInt64(&cacheGen)
+
 	t.mu.Lock()
 	entry, exists := t.cache[serverName]
 	t.mu.Unlock()
 
-	if exists && time.Since(entry.fetchedAt) < resourceCacheTTL {
+	if exists && time.Since(entry.fetchedAt) < resourceCacheTTL && entry.generation == currentGen {
 		return entry.resources, nil
 	}
 
-	resources, err := client.ListResources(ctx)
+	var resources []MCPResource
+	var err error
+
+	// Use test hook if set (allows mock injection for testing)
+	if listResourcesHook != nil {
+		resources, err = listResourcesHook(ctx, serverName)
+	} else {
+		resources, err = client.ListResources(ctx)
+	}
+
 	if err != nil {
 		return nil, err
 	}
 
 	t.mu.Lock()
 	t.cache[serverName] = &resourceCacheEntry{
-		resources: resources,
-		fetchedAt: time.Now(),
+		resources:  resources,
+		fetchedAt:  time.Now(),
+		generation: currentGen,
 	}
 	t.mu.Unlock()
 
@@ -226,11 +290,10 @@ func (t *ListMcpResourcesTool) buildResult(resources []MCPResource, serverName s
 	}, nil
 }
 
-// InvalidateCache clears the resource cache (call on disconnect).
+// InvalidateCache clears the resource cache by bumping generation counter.
+// This invalidates cached entries for all servers without clearing the map.
 func (t *ListMcpResourcesTool) InvalidateCache() {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.cache = make(map[string]*resourceCacheEntry)
+	bumpCacheGen()
 }
 
 // Clone returns a deep copy of the cache for snapshot.

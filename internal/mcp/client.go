@@ -545,6 +545,7 @@ func (c *Client) Disconnect() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.cleanup()
+	bumpCacheGen()
 }
 
 // GetClient returns the client for a given normalized server name.
@@ -573,6 +574,9 @@ func ConnectAll(cfg map[string]MCPServerDef) error {
 		}
 	}
 
+	// Invalidate resource cache since client set has changed
+	bumpCacheGen()
+
 	return nil
 }
 
@@ -585,6 +589,7 @@ func ShutdownAll() {
 		client.Disconnect()
 	}
 	clients = make(map[string]*Client)
+	bumpCacheGen()
 }
 
 // GetTools returns all discovered MCP tools from all connected servers.
