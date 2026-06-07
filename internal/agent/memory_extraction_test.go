@@ -195,8 +195,8 @@ func TestAC2_SkipWhenMainAgentWroteMemory(t *testing.T) {
 	}
 
 	// Verify cursor still advanced (even though extraction was skipped)
-	if me.lastMemoryMessageUuid != "msg_1" {
-		t.Errorf("AC2 FAIL: cursor should advance to msg_1, got %s", me.lastMemoryMessageUuid)
+	if uuid, _ := me.getCursor(); uuid != "msg_1" {
+		t.Errorf("AC2 FAIL: cursor should advance to msg_1, got %s", uuid)
 	} else {
 		t.Log("AC2 PASS: cursor advances even when extraction is skipped")
 	}
@@ -274,8 +274,8 @@ func TestAC2_PostSkipFollowUpTurn(t *testing.T) {
 	}
 
 	// Cursor should advance to msg_2
-	if me.lastMemoryMessageUuid != "msg_2" {
-		t.Errorf("AC2 follow-up FAIL: cursor should advance to msg_2, got %s", me.lastMemoryMessageUuid)
+	if uuid, _ := me.getCursor(); uuid != "msg_2" {
+		t.Errorf("AC2 follow-up FAIL: cursor should advance to msg_2, got %s", uuid)
 	} else {
 		t.Log("AC2 follow-up PASS: cursor advances to msg_2 after second turn")
 	}

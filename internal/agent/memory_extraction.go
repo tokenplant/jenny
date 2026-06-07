@@ -86,6 +86,14 @@ func (me *MemoryExtractor) WithTimeout(timeout time.Duration) *MemoryExtractor {
 	return me
 }
 
+// getCursor returns the current extraction cursor state.
+// For test use only - provides synchronized access to cursor fields.
+func (me *MemoryExtractor) getCursor() (uuid string, count int) {
+	me.mu.RLock()
+	defer me.mu.RUnlock()
+	return me.lastMemoryMessageUuid, me.lastMemoryMessageCount
+}
+
 // CheckAndExtract determines whether to run memory extraction after a turn.
 // It returns immediately if:
 // - Sub-agent (AC4: main agent only)
