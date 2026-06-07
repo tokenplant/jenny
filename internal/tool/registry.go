@@ -1,7 +1,10 @@
 // Package tool provides the tool interface, implementations, and registry.
 package tool
 
-import "github.com/ipy/jenny/internal/sandbox"
+import (
+	"github.com/ipy/jenny/internal/lsp"
+	"github.com/ipy/jenny/internal/sandbox"
+)
 
 // Registry builds a filtered, ordered list of tools.
 type Registry struct {
@@ -15,6 +18,8 @@ type Registry struct {
 	sandbox          sandbox.SandboxManager
 	webFetchEnabled  bool
 	webSearchEnabled bool
+	lspEnabled       bool
+	lspClient        *lsp.Client
 	model            string
 }
 
@@ -93,6 +98,18 @@ func (r *Registry) WithModel(model string) *Registry {
 	return r
 }
 
+// WithLSPEnabled enables or disables the LSP tool.
+func (r *Registry) WithLSPEnabled(enabled bool) *Registry {
+	r.lspEnabled = enabled
+	return r
+}
+
+// WithLSPClient sets the LSP client for the LSP tool.
+func (r *Registry) WithLSPClient(client *lsp.Client) *Registry {
+	r.lspClient = client
+	return r
+}
+
 // Build returns the final ordered tool list.
 // Built-in tools appear first, then MCP tools. Deny rules and enabled flags
 // filter the output. On name collision, the built-in tool wins.
@@ -133,6 +150,11 @@ func (r *Registry) Build() []Tool {
 		// Add WebSearch tool if enabled (P3).
 		if r.webSearchEnabled {
 			r.baseTools = append(r.baseTools, NewWebSearchTool(r.model))
+		}
+
+		// Add LSP tool if enabled and client is provided (P3).
+		if r.lspEnabled && r.lspClient != nil {
+			r.baseTools = append(r.baseTools, NewLSPTool(*r.lspClient))
 		}
 	}
 

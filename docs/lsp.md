@@ -2,9 +2,9 @@
 title: LSP Tool
 slug: lsp
 priority: P3
-status: not_started
+status: done
 spec: complete
-code: not_started
+code: done
 package: internal/tool
 gaps:
   []
