@@ -2,9 +2,9 @@
 title: Subagent Types
 slug: subagent-types
 priority: P4
-status: not_started
+status: done
 spec: complete
-code: not_started
+code: done
 package: internal/agent
 gaps:
   []
