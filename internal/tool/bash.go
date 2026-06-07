@@ -23,6 +23,7 @@ const (
 // BashTool executes shell commands.
 type BashTool struct {
 	skipPermissions bool
+	mu              sync.Mutex
 	commandCwd      string
 	projectRoot     string
 	backgroundTasks sync.Map
@@ -74,6 +75,7 @@ func (t *BashTool) Execute(input map[string]any, cwd string) (*ToolResult, error
 		return nil, fmt.Errorf("command is required and must be a string")
 	}
 
+	t.mu.Lock()
 	// Set project root from cwd
 	if t.projectRoot == "" {
 		t.projectRoot = cwd
@@ -83,6 +85,7 @@ func (t *BashTool) Execute(input map[string]any, cwd string) (*ToolResult, error
 	if t.commandCwd == "" {
 		t.commandCwd = cwd
 	}
+	t.mu.Unlock()
 
 	// Handle sed simulation (AC5) - before any security checks
 	if isSedInPlace(command) {
@@ -324,6 +327,8 @@ func (t *BashTool) executeBackground(command string, cwd string, input map[strin
 
 // resetCwdIfOutsideProject checks if command changed directory outside project and resets
 func (t *BashTool) resetCwdIfOutsideProject(command string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	newCwd := parseCdTarget(command, t.commandCwd)
 	if newCwd == "" {
 		return
@@ -351,6 +356,9 @@ func parseCdTarget(command string, currentCwd string) string {
 	rest = strings.TrimPrefix(rest, "cd\t")
 	rest = strings.TrimSpace(rest)
 
+	// Strip shell operators after the path (e.g., "&& pwd", "; echo", "| cat")
+	rest = stripShellOperators(rest)
+
 	if rest == "" || rest == "~" {
 		// cd to home
 		home := os.Getenv("HOME")
@@ -375,6 +383,15 @@ func parseCdTarget(command string, currentCwd string) string {
 
 	// Relative path - resolve from current cwd
 	return filepath.Clean(filepath.Join(currentCwd, rest))
+}
+
+// stripShellOperators removes shell operators (&&, ||, ;, |, >, <, &, #) and their arguments
+// from the input string. This ensures only the actual path is extracted from cd commands.
+func stripShellOperators(s string) string {
+	// Match any shell operator and everything after it
+	// Operators: &&, ||, ;, |, >, <, &, #
+	shellOpRegex := regexp.MustCompile(`^[\s]*([&\|;<>]|&&|\|\||##).*$`)
+	return shellOpRegex.ReplaceAllString(s, "")
 }
 
 // isSedInPlace checks if command is a sed in-place edit
