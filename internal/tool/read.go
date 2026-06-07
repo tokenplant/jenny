@@ -199,11 +199,23 @@ func (t *ReadTool) Execute(input map[string]any, cwd string) (*ToolResult, error
 	if t.readCache != nil {
 		fullContent := ""
 		if isFullRead {
-			// Re-read the full file content for the cache
+			// Reuse scanner content - the scanner already read the full file
+			fullContent = strings.Join(lines, "\n")
+			if len(lines) > 0 {
+				fullContent += "\n"
+			}
+		} else {
+			// Partial read: need to read full file for cache
 			fullContentBytes, _ := os.ReadFile(absFilePath)
 			fullContent = string(fullContentBytes)
 		}
-		t.readCache.RecordRead(absFilePath, fullContent, info.ModTime(), isFullRead)
+		// Re-stat after read to get accurate mtime (avoids TOCTOU between stat and cache)
+		finalInfo, _ := os.Stat(absFilePath)
+		finalMtime := info.ModTime()
+		if finalInfo != nil {
+			finalMtime = finalInfo.ModTime()
+		}
+		t.readCache.RecordRead(absFilePath, fullContent, finalMtime, isFullRead)
 	}
 
 	return result, nil

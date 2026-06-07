@@ -69,6 +69,16 @@ func (t *WriteTool) Execute(input map[string]any, cwd string) (*ToolResult, erro
 	// Clean the path
 	filePath = filepath.Clean(filePath)
 
+	// Gate: ensure path is within working directory
+	var pathErr error
+	filePath, pathErr = PathInWorkingDir(filePath, cwd)
+	if pathErr != nil {
+		return &ToolResult{
+			Content: pathErr.Error(),
+			IsError: true,
+		}, nil
+	}
+
 	// AC1: Check readFileState cache for the path
 	entry, exists := t.readCache.GetRead(filePath)
 	if !exists {

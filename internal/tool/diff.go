@@ -140,19 +140,29 @@ func formatHunk(lines []DiffLine, fullDiff []diffEntry, endIdx int) string {
 		return ""
 	}
 
-	// Find hunk start positions
+	// Find hunk start positions by scanning from beginning to find first non-context line
 	oldStart := 1
 	newStart := 1
-	for i, line := range lines {
-		if line.Type == "delete" {
-			oldStart++
-		} else if line.Type == "add" {
-			newStart++
-		} else {
-			oldStart++
-			newStart++
+	for _, line := range lines {
+		if line.Type != "context" {
+			break
 		}
-		_ = i
+		oldStart++
+		newStart++
+	}
+
+	// Adjust start to be the line number of the first line in this hunk
+	for i := endIdx - len(lines) + 1; i <= endIdx; i++ {
+		if i < 0 || i >= len(fullDiff) {
+			continue
+		}
+		entry := fullDiff[i]
+		if entry.Type == "context" {
+			// Adjust start to the actual line numbers from the diff entries
+			oldStart = entry.OldIdx + 1
+			newStart = entry.NewIdx + 1
+			break
+		}
 	}
 
 	oldCount := 0

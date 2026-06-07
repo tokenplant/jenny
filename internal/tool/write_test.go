@@ -119,21 +119,27 @@ func TestWriteTool_AC2_StaleMtime(t *testing.T) {
 func TestWriteTool_AC3_ParentDirs(t *testing.T) {
 	tmpDir := t.TempDir()
 	readCache := NewReadFileCache()
+	readTool := NewReadTool(false, readCache)
+	writeTool := NewWriteTool(readCache)
 
-	// Create parent dirs and a file
-	parentDir := filepath.Join(tmpDir, "newdir", "subdir", "deep")
-	err := os.MkdirAll(parentDir, 0755)
+	// Define a deep path where NO parent directories exist
+	deepDir := filepath.Join(tmpDir, "newdir", "subdir", "deep")
+	testFile := filepath.Join(deepDir, "newfile.txt")
+
+	// Verify parent dirs don't exist (this is the test precondition)
+	if _, err := os.Stat(deepDir); err == nil || !os.IsNotExist(err) {
+		t.Fatalf("parent directory should not exist for AC3 test: %v", err)
+	}
+
+	// Create and read a file at the deep path (this creates the parents)
+	err := os.MkdirAll(deepDir, 0755)
 	if err != nil {
 		t.Fatalf("failed to create parent directories: %v", err)
 	}
-	testFile := filepath.Join(parentDir, "newfile.txt")
 	err = os.WriteFile(testFile, []byte("initial content\n"), 0644)
 	if err != nil {
 		t.Fatalf("failed to create test file: %v", err)
 	}
-
-	readTool := NewReadTool(false, readCache)
-	writeTool := NewWriteTool(readCache)
 
 	// Read the file first
 	_, err = readTool.Execute(map[string]any{
@@ -143,19 +149,25 @@ func TestWriteTool_AC3_ParentDirs(t *testing.T) {
 		t.Fatalf("unexpected error during read: %v", err)
 	}
 
-	// Delete the file but keep parent dirs
-	err = os.Remove(testFile)
+	// Now delete the file AND parent dirs to simulate truly new path
+	err = os.RemoveAll(deepDir)
 	if err != nil {
-		t.Fatalf("failed to delete test file: %v", err)
+		t.Fatalf("failed to remove file and parent dirs: %v", err)
 	}
 
-	// Write to same path - parent dirs already exist
-	writeTool.Execute(map[string]any{
+	// Write to the deep path - WriteTool should create parent dirs automatically
+	writeResult, err := writeTool.Execute(map[string]any{
 		"file_path": testFile,
 		"content":   "new content",
 	}, tmpDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if writeResult.IsError {
+		t.Fatalf("write failed: %s", writeResult.Content)
+	}
 
-	// Verify file was created
+	// Verify file was created with correct content
 	content, err := os.ReadFile(testFile)
 	if err != nil {
 		t.Errorf("file was not created: %v", err)
