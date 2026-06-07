@@ -4,7 +4,9 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/ipy/jenny/internal/log"
@@ -21,10 +23,11 @@ const DefaultFallbackTimeout = 5 * time.Minute
 
 // Client wraps the Anthropic SDK client.
 type Client struct {
-	client       anthropic.Client
-	model        string
-	retryConfig  RetryConfig
-	isBackground bool
+	client            anthropic.Client
+	model             string
+	maxTokensOverride int // Override for max_tokens; 0 means use default
+	retryConfig       RetryConfig
+	isBackground      bool
 }
 
 // defaultModel is the default model used when ANTHROPIC_MODEL is not set.
@@ -64,6 +67,11 @@ func (c *Client) SetModel(model string) {
 // GetModel returns the model being used.
 func (c *Client) GetModel() string {
 	return c.model
+}
+
+// SetMaxTokensOverride sets the max_tokens override for API requests.
+func (c *Client) SetMaxTokensOverride(maxTokens int) {
+	c.maxTokensOverride = maxTokens
 }
 
 // Message represents a message in the conversation.
@@ -230,9 +238,13 @@ func (c *Client) doSendMessage(ctx context.Context, messages []Message, tools []
 	}
 
 	// Build request
+	maxTokens := 8192
+	if c.maxTokensOverride > 0 {
+		maxTokens = c.maxTokensOverride
+	}
 	body := anthropic.MessageNewParams{
 		Model:     anthropic.Model(c.model),
-		MaxTokens: 8192,
+		MaxTokens: int64(maxTokens),
 	}
 	body.Messages = sdkMessages
 	if systemPrompt != "" {
@@ -302,47 +314,33 @@ func wrapSDKError(err error) error {
 		return nil
 	}
 
-	// Try to extract status code from error message
-	// The SDK error format is typically: "error: HTTP 429 Too Many Requests"
-	errStr := err.Error()
+	// Use errors.As with SDK's typed error to properly extract status code
+	var apiErr *anthropic.Error
+	if errors.As(err, &apiErr) {
+		// Extract Retry-After from response headers if present
+		var retryAfter *time.Duration
+		if apiErr.Response != nil {
+			if retryAfterStr := apiErr.Response.Header.Get("Retry-After"); retryAfterStr != "" {
+				if seconds, parseErr := strconv.ParseFloat(retryAfterStr, 64); parseErr == nil {
+					ms := int64(seconds * 1000)
+					d := time.Duration(ms) * time.Millisecond
+					retryAfter = &d
+				}
+			}
+		}
 
-	// Check for known status codes in error message
-	statusCode := extractStatusCode(errStr)
-	if statusCode > 0 {
-		isPermanent := statusCode >= 400 && statusCode < 500 && statusCode != 429 && statusCode != 408 && statusCode != 409
+		isPermanent := apiErr.StatusCode >= 400 && apiErr.StatusCode < 500 &&
+			apiErr.StatusCode != 429 && apiErr.StatusCode != 408 && apiErr.StatusCode != 409
 		return &RetryableHTTPError{
-			StatusCode:  statusCode,
-			Message:     errStr,
+			StatusCode:  apiErr.StatusCode,
+			Message:     err.Error(),
 			IsPermanent: isPermanent,
+			RetryAfter:  retryAfter,
 		}
 	}
 
 	// For unknown errors, return as-is (will be handled as connection errors if retryable)
 	return err
-}
-
-// extractStatusCode extracts HTTP status code from error string.
-func extractStatusCode(errStr string) int {
-	// Look for "HTTP 429", "HTTP 529", etc.
-	for i := 0; i < len(errStr)-6; i++ {
-		if errStr[i:i+4] == "HTTP" {
-			// Skip space
-			j := i + 4
-			for j < len(errStr) && errStr[j] == ' ' {
-				j++
-			}
-			// Read status code
-			code := 0
-			for j < len(errStr) && errStr[j] >= '0' && errStr[j] <= '9' {
-				code = code*10 + int(errStr[j]-'0')
-				j++
-			}
-			if code > 0 {
-				return code
-			}
-		}
-	}
-	return 0
 }
 
 // streamAccumulator tracks content blocks during streaming.

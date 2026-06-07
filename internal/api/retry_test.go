@@ -2,10 +2,14 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"sync"
 	"testing"
 	"time"
 )
@@ -265,7 +269,10 @@ func TestRetry_AC1_429Retry(t *testing.T) {
 		return &Response{Content: []ContentBlock{{Type: "text", Text: "success"}}}, nil
 	}
 
+	start := time.Now()
 	result, err := client.sendWithRetry(context.Background(), sendFn, false)
+	elapsed := time.Since(start)
+
 	if err != nil {
 		t.Fatalf("expected success after retries, got error: %v", err)
 	}
@@ -274,6 +281,14 @@ func TestRetry_AC1_429Retry(t *testing.T) {
 	}
 	if attemptCount != 4 {
 		t.Errorf("expected 4 attempts (3 retries + 1 success), got %d", attemptCount)
+	}
+
+	// AC1 requires elapsed time shows backoff progression.
+	// With baseDelay=500ms and attempts 0,1,2: expected backoffs are 500ms, 1000ms, 2000ms (with jitter=0).
+	// Sum of expected backoffs = 3.5s. Use lower bound of 3s to account for some execution overhead.
+	minExpected := 3 * time.Second
+	if elapsed < minExpected {
+		t.Errorf("expected elapsed time >= %v (backoff progression), got %v", minExpected, elapsed)
 	}
 }
 
@@ -509,53 +524,86 @@ func TestRetry_AC4_RetryAfterZero(t *testing.T) {
 
 // AC5: Model and max_tokens preserved across retries
 func TestRetry_AC5_PreservesParams(t *testing.T) {
-	client, _ := NewClientWithModel("")
-	client.SetRetryConfig(RetryConfig{MaxRetries: 3, Max529Retries: 3, BaseDelay: 10 * time.Millisecond})
+	// Track requests to verify model/max_tokens are preserved
+	var requests []map[string]any
+	var mu sync.Mutex
 
-	// Note: The actual preservation test requires integration with the real SDK path
-	// For unit testing, we verify the retry mechanism calls the same function
-	// The model is preserved because the same fn is called (same closure)
+	// Create a test server that returns 429 for first 2 attempts, then 200
+	attemptCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		attemptCount++
+		currentAttempt := attemptCount
+		mu.Unlock()
 
-	// Create a test that captures and verifies the function is called with same params
-	type callParams struct {
-		model     string
-		maxTokens int
-	}
+		// Read request body
+		body, _ := io.ReadAll(r.Body)
+		r.Body.Close()
 
-	var calls []callParams
+		var reqBody map[string]any
+		json.Unmarshal(body, &reqBody)
 
-	testFn := func(ctx context.Context) (*Response, error) {
-		// Simulate capturing the model/maxTokens from closure
-		calls = append(calls, callParams{
-			model:     "test-model",
-			maxTokens: 8192,
-		})
-		if len(calls) < 3 {
-			return nil, &RetryableHTTPError{
-				StatusCode: http.StatusTooManyRequests,
-				Message:    "rate limited",
-			}
+		mu.Lock()
+		requests = append(requests, reqBody)
+		mu.Unlock()
+
+		if currentAttempt <= 2 {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusTooManyRequests)
+			w.Write([]byte(`{"error":{"type":"rate_limit","message":"rate limited"}}`))
+			return
 		}
-		return &Response{Content: []ContentBlock{{Type: "text", Text: "success"}}}, nil
-	}
 
-	result, err := client.sendWithRetry(context.Background(), testFn, false)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"model":"test-model","content":[{"type":"text","text":"success"}],"stop_reason":"end_turn","usage":{"input_tokens":1,"output_tokens":1}}`))
+	}))
+	defer server.Close()
+
+	// Set environment to use test server
+	oldBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
+	oldAPIKey := os.Getenv("ANTHROPIC_API_KEY")
+	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	os.Setenv("ANTHROPIC_API_KEY", "test-key")
+	defer func() {
+		os.Setenv("ANTHROPIC_BASE_URL", oldBaseURL)
+		os.Setenv("ANTHROPIC_API_KEY", oldAPIKey)
+	}()
+
+	// Create client with specific model and maxTokensOverride
+	client, err := NewClientWithModel("my-test-model")
 	if err != nil {
-		t.Fatalf("expected success, got error: %v", err)
+		t.Fatalf("NewClientWithModel failed: %v", err)
 	}
-	if result == nil {
+	client.SetRetryConfig(RetryConfig{MaxRetries: 5, Max529Retries: 3, BaseDelay: 10 * time.Millisecond})
+	client.SetMaxTokensOverride(4096)
+
+	// Send message - this should retry and preserve model/max_tokens
+	resp, err := client.SendMessage(context.Background(), nil, nil, nil, "")
+	if err != nil {
+		t.Fatalf("SendMessage failed: %v", err)
+	}
+	if resp == nil {
 		t.Fatal("expected non-nil response")
 	}
-	if len(calls) != 3 {
-		t.Errorf("expected 3 calls, got %d", len(calls))
+
+	// Verify we made 3 attempts (2 retries + 1 success)
+	mu.Lock()
+	gotAttempts := len(requests)
+	mu.Unlock()
+	if gotAttempts != 3 {
+		t.Errorf("expected 3 attempts, got %d", gotAttempts)
 	}
-	// All calls should have same parameters (verifying preservation)
-	for i, call := range calls {
-		if call.model != "test-model" {
-			t.Errorf("call %d: expected model 'test-model', got %q", i, call.model)
+
+	// Verify all requests had the same model and max_tokens
+	for i, req := range requests {
+		model, ok := req["model"].(string)
+		if !ok || model != "my-test-model" {
+			t.Errorf("request %d: expected model 'my-test-model', got %v", i, req["model"])
 		}
-		if call.maxTokens != 8192 {
-			t.Errorf("call %d: expected maxTokens 8192, got %d", i, call.maxTokens)
+		maxTokens, ok := req["max_tokens"].(float64)
+		if !ok || int(maxTokens) != 4096 {
+			t.Errorf("request %d: expected max_tokens 4096, got %v", i, req["max_tokens"])
 		}
 	}
 }
