@@ -2,12 +2,11 @@
 title: Dangerous Command Gate
 slug: dangerous-command-gate
 priority: P1
-status: not_started
+status: done
 spec: complete
-code: not_started
+code: done
 package: internal/tool
-gaps:
-  - Bash has prefix allowlist only; no substitution/pipeline analysis
+gaps: []
 depends_on:
   - tool-registry
 ---
