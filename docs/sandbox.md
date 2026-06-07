@@ -2,9 +2,9 @@
 title: Sandbox Abstraction
 slug: sandbox
 priority: P2
-status: not_started
+status: done
 spec: complete
-code: not_started
+code: done
 package: internal/sandbox
 gaps:
   []

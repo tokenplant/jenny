@@ -2,9 +2,9 @@
 title: Notebook Edit Tool
 slug: notebook-edit
 priority: P2
-status: not_started
+status: done
 spec: complete
-code: not_started
+code: done
 package: internal/tool
 gaps:
   []
