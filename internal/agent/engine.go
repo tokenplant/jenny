@@ -345,6 +345,27 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 			fmt.Fprintln(os.Stdout, string(data))
 		}
 
+		// AC3: Inject pending task completions as synthetic tool_results
+		// before each API iteration so the model can process them
+		completions := e.drainTaskCompletions()
+		if len(completions) > 0 {
+			userMsg := api.Message{
+				Role:        "user",
+				ToolResults: make([]api.ToolResultBlock, 0, len(completions)),
+			}
+			for _, c := range completions {
+				userMsg.ToolResults = append(userMsg.ToolResults, api.ToolResultBlock{
+					ToolUseID: "task_completed_" + c.TaskID,
+					Content: fmt.Sprintf(
+						`<task_completed task_id="%s" duration_seconds="%.1f" exit_code="%d"/>`,
+						c.TaskID, c.DurationSeconds, c.ExitCode,
+					),
+					IsError: false,
+				})
+			}
+			messages = append(messages, userMsg)
+		}
+
 		// AC1: Check compaction threshold before API request
 		// Estimate tokens and check if auto-compact should trigger
 		estimatedTokens := estimateTokens(messages)
@@ -803,6 +824,26 @@ func (e *QueryEngine) Drain(ctx context.Context) {
 		return
 	}
 	e.memExtractor.Drain(ctx)
+}
+
+// getTaskManager returns the TaskManager from the BashTool if available.
+func (e *QueryEngine) getTaskManager() *tool.TaskManager {
+	for _, t := range e.tools {
+		if bt, ok := t.(*tool.BashTool); ok {
+			return bt.GetTaskManager()
+		}
+	}
+	return nil
+}
+
+// drainTaskCompletions drains pending task completions from the TaskManager.
+// AC3: Completions are injected as synthetic tool_results in the message chain.
+func (e *QueryEngine) drainTaskCompletions() []tool.TaskCompletion {
+	tm := e.getTaskManager()
+	if tm == nil {
+		return nil
+	}
+	return tm.DrainCompletions()
 }
 
 // seedReadFileCacheFromTranscript seeds the ReadFileCache from transcript entries.

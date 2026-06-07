@@ -368,6 +368,10 @@ func (t *BashTool) executeBackground(command string, cwd string, input map[strin
 	// Start time for duration tracking
 	startTime := time.Now()
 
+	// Track output for progress events (shared between goroutines)
+	var outputMu sync.Mutex
+	var output strings.Builder
+
 	// Spawn goroutine
 	go func() {
 		cmd := exec.CommandContext(ctx, "sh", "-c", command)
@@ -377,17 +381,16 @@ func (t *BashTool) executeBackground(command string, cwd string, input map[strin
 		cmd.Stdout = &stdout
 		cmd.Stderr = &stderr
 
-		// Track output for progress events
-		var output strings.Builder
-
 		// Inner goroutine runs the command
 		go func() {
 			err := cmd.Start()
 			if err != nil {
 				// Command failed to start
+				outputMu.Lock()
 				output.WriteString(fmt.Sprintf("failed to start command: %v", err))
-				close(done)
+				outputMu.Unlock()
 				atomic.StoreInt32(&cmdDone, 1)
+				close(done)
 				return
 			}
 
@@ -400,6 +403,7 @@ func (t *BashTool) executeBackground(command string, cwd string, input map[strin
 			err = cmd.Wait()
 
 			// Capture output
+			outputMu.Lock()
 			output.WriteString(stdout.String())
 			if stderr.Len() > 0 {
 				if output.Len() > 0 {
@@ -407,6 +411,7 @@ func (t *BashTool) executeBackground(command string, cwd string, input map[strin
 				}
 				output.WriteString("stderr: " + stderr.String())
 			}
+			outputMu.Unlock()
 
 			// Determine exit code
 			exitCode := 0
@@ -421,9 +426,14 @@ func (t *BashTool) executeBackground(command string, cwd string, input map[strin
 			// Calculate duration
 			duration := time.Since(startTime).Seconds()
 
+			// Get output snapshot for file writing
+			outputMu.Lock()
+			outputSnapshot := output.String()
+			outputMu.Unlock()
+
 			// Write final result to output file (AC1)
 			if t.taskManager != nil {
-				_ = t.taskManager.WriteTaskResult(taskID, output.String(), exitCode, duration)
+				_ = t.taskManager.WriteTaskResult(taskID, outputSnapshot, exitCode, duration)
 
 				// Update task state
 				t.taskManager.UpdateState(taskID, TaskStateCompleted)
@@ -433,12 +443,12 @@ func (t *BashTool) executeBackground(command string, cwd string, input map[strin
 					TaskID:          taskID,
 					DurationSeconds: duration,
 					ExitCode:        exitCode,
-					Output:          output.String(),
+					Output:          outputSnapshot,
 				})
 			}
 
 			// Store result for parent
-			cmdOutput := output.String()
+			cmdOutput := outputSnapshot
 			var result *ToolResult
 			if cmd.ProcessState != nil && cmd.ProcessState.Exited() {
 				exitCode := cmd.ProcessState.ExitCode()
@@ -454,21 +464,21 @@ func (t *BashTool) executeBackground(command string, cwd string, input map[strin
 			}
 
 			// Signal completion BEFORE sending result (to avoid race with outer close)
-			close(done)
+			// Fix resultch-send-close-race: atomic store must happen before close(done)
 			atomic.StoreInt32(&cmdDone, 1)
+			close(done)
 
 			// Now send result (after done is closed, so outer won't close resultCh yet)
 			resultCh <- result
 		}()
 
-		// AC2: Progress timer runs concurrently with command (created BEFORE cmd.Start())
+		// AC2: Progress timer created BEFORE cmd.Start() so it fires concurrently with command
 		progressTimer := time.NewTimer(2 * time.Second)
 		flushTicker := time.NewTicker(5 * time.Second)
 		defer progressTimer.Stop()
 		defer flushTicker.Stop()
 
 		// AC5: Manual timeout handling with SIGTERM then SIGKILL (not context timeout)
-		// Context timeout sends SIGKILL directly, but we need SIGTERM first
 		timeoutChan := time.After(time.Duration(timeout) * time.Second)
 		var killSent bool
 		var killMu sync.Mutex
@@ -479,47 +489,23 @@ func (t *BashTool) executeBackground(command string, cwd string, input map[strin
 			select {
 			case <-progressTimer.C:
 				// Task ran for more than 2 seconds - emit progress
+				// Fix ac2-progress-always-emits: emit progress only if still running
+				outputMu.Lock()
+				outputSnapshot := output.String()
+				outputMu.Unlock()
 				if t.taskManager != nil {
-					EmitTaskProgress(taskID, 2.0, output.String())
+					EmitTaskProgress(taskID, 2.0, outputSnapshot)
 				}
-				// Continue waiting for command completion (don't exit loop)
-				// Use inner select to allow flush ticker to fire while waiting
-				for {
-					select {
-					case <-flushTicker.C:
-						// Periodic flush of partial output (AC1)
-						if t.taskManager != nil {
-							duration := time.Since(startTime).Seconds()
-							_ = t.taskManager.FlushPartialOutput(taskID, output.String(), duration)
-						}
-					case <-done:
-						break outer
-					case <-timeoutChan:
-						// Timeout - send SIGTERM first (AC5)
-						killMu.Lock()
-						if !killSent {
-							killSent = true
-							if cmd.Process != nil {
-								_ = cmd.Process.Signal(syscall.SIGTERM)
-							}
-							// Schedule SIGKILL after 5s if process doesn't exit
-							go func() {
-								time.Sleep(5 * time.Second)
-								killMu.Lock()
-								defer killMu.Unlock()
-								if cmd.Process != nil {
-									_ = cmd.Process.Signal(syscall.SIGKILL)
-								}
-							}()
-						}
-						killMu.Unlock()
-					}
-				}
+				// Continue waiting - don't re-arm timer, progress is one-shot
+				continue
 			case <-flushTicker.C:
 				// Periodic flush of partial output (AC1)
+				outputMu.Lock()
+				outputSnapshot := output.String()
+				outputMu.Unlock()
 				if t.taskManager != nil {
 					duration := time.Since(startTime).Seconds()
-					_ = t.taskManager.FlushPartialOutput(taskID, output.String(), duration)
+					_ = t.taskManager.FlushPartialOutput(taskID, outputSnapshot, duration)
 				}
 			case <-done:
 				// Command completed before either timer fired - no progress event
