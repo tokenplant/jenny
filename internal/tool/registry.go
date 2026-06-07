@@ -23,6 +23,7 @@ type Registry struct {
 	lspClient        *lsp.Client
 	model            string
 	skills           []skills.Skill
+	taskStopEnabled  bool
 }
 
 // NewRegistry creates a new Registry.
@@ -118,6 +119,12 @@ func (r *Registry) WithSkills(skills []skills.Skill) *Registry {
 	return r
 }
 
+// WithTaskStopEnabled enables the TaskStop tool for canceling background tasks.
+func (r *Registry) WithTaskStopEnabled(enabled bool) *Registry {
+	r.taskStopEnabled = enabled
+	return r
+}
+
 // Build returns the final ordered tool list.
 // Built-in tools appear first, then MCP tools. Deny rules and enabled flags
 // filter the output. On name collision, the built-in tool wins.
@@ -148,6 +155,18 @@ func (r *Registry) Build() []Tool {
 					tool.WithSandbox(r.sandbox)
 				}
 			}
+		}
+
+		// Wire TaskManager to BashTool and add TaskStop tool if enabled
+		if r.taskStopEnabled {
+			taskManager := NewTaskManager()
+			for _, t := range r.baseTools {
+				if bt, ok := t.(*BashTool); ok {
+					bt.WithTaskManager(taskManager)
+					break
+				}
+			}
+			r.baseTools = append(r.baseTools, NewTaskStopTool(taskManager))
 		}
 
 		// Add WebFetch tool if enabled (P3).

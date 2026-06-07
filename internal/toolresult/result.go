@@ -9,4 +9,6 @@ type ToolResult struct {
 	IsError bool `json:"is_error,omitempty"`
 	// Truncated indicates the result was truncated due to size limits.
 	Truncated bool `json:"truncated,omitempty"`
+	// OutputFile is the path to a file containing the output (for large results).
+	OutputFile string `json:"output_file,omitempty"`
 }

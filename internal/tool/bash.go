@@ -31,6 +31,7 @@ type BashTool struct {
 	commandCwd      string
 	projectRoot     string
 	backgroundTasks sync.Map
+	taskManager     *TaskManager
 }
 
 // NewBashTool creates a new BashTool.
@@ -44,6 +45,17 @@ func NewBashTool(skipPermissions bool) *BashTool {
 func (t *BashTool) WithSandbox(sb sandbox.SandboxManager) *BashTool {
 	t.sandbox = sb
 	return t
+}
+
+// WithTaskManager sets the task manager for background task tracking.
+func (t *BashTool) WithTaskManager(tm *TaskManager) *BashTool {
+	t.taskManager = tm
+	return t
+}
+
+// GetTaskManager returns the task manager for sharing with other tools.
+func (t *BashTool) GetTaskManager() *TaskManager {
+	return t.taskManager
 }
 
 // Name returns the tool name.
@@ -179,6 +191,9 @@ func (t *BashTool) Execute(ctx context.Context, input map[string]any, cwd string
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
+	// Track start time for auto-background hint (AC4)
+	startTime := time.Now()
+
 	err := cmd.Run()
 	output := stdout.String()
 	if stderr.Len() > 0 {
@@ -211,6 +226,12 @@ func (t *BashTool) Execute(ctx context.Context, input map[string]any, cwd string
 			Content: fmt.Sprintf("Error executing command: %v\n%s", err, output),
 			IsError: true,
 		}, nil
+	}
+
+	// AC4: Auto-background hint for long-running commands (>120s)
+	duration := time.Since(startTime)
+	if duration > 120*time.Second {
+		output += "\n(Tip: long-running commands work better with run_in_background: true)"
 	}
 
 	// Handle output spill (AC2)
@@ -302,10 +323,33 @@ func (t *BashTool) executeBackground(command string, cwd string, input map[strin
 	// Create result channel
 	resultCh := make(chan *ToolResult, 1)
 
-	// Generate task ID
-	taskID := time.Now().UnixNano()
+	// Generate string task ID
+	taskID := fmt.Sprintf("task_%d", time.Now().UnixNano())
 
-	// Store in background tasks
+	// Initialize task manager if nil
+	if t.taskManager == nil {
+		t.taskManager = NewTaskManager()
+	}
+
+	// Get output file path
+	outputFile := ""
+	if tm := t.taskManager; tm != nil {
+		path, err := tm.TaskOutputPath(taskID)
+		if err == nil {
+			outputFile = path
+			// Store task info
+			tm.Store(taskID, &TaskInfo{
+				TaskID:     taskID,
+				State:      TaskStateRunning,
+				OutputFile: outputFile,
+				StartTime:  time.Now(),
+				Command:    command,
+				Cancel:     cancel,
+			})
+		}
+	}
+
+	// Store in background tasks (using string key for compatibility)
 	t.backgroundTasks.Store(taskID, resultCh)
 
 	// Spawn goroutine
@@ -317,38 +361,86 @@ func (t *BashTool) executeBackground(command string, cwd string, input map[strin
 		cmd.Stdout = &stdout
 		cmd.Stderr = &stderr
 
-		err := cmd.Run()
-		output := stdout.String()
-		if stderr.Len() > 0 {
-			if output != "" {
-				output += "\n"
-			}
-			output += "stderr: " + stderr.String()
-		}
+		// Track output for progress events
+		var output strings.Builder
 
+		// Channel to signal command completion
+		done := make(chan struct{})
+
+		// Start command
+		startTime := time.Now()
+		go func() {
+			err := cmd.Run()
+			output.WriteString(stdout.String())
+			if stderr.Len() > 0 {
+				if output.Len() > 0 {
+					output.WriteString("\n")
+				}
+				output.WriteString("stderr: " + stderr.String())
+			}
+
+			// Determine exit code
+			exitCode := 0
+			if err != nil {
+				if exitErr, ok := err.(*exec.ExitError); ok {
+					exitCode = exitErr.ExitCode()
+				} else {
+					exitCode = -1
+				}
+			}
+
+			// AC2: Emit progress event after 2s if still running
+			if t.taskManager != nil {
+				// Check if task is still running after 2 seconds
+				select {
+				case <-time.After(2 * time.Second):
+					// Task is still running, emit progress
+					EmitTaskProgress(taskID, 2.0, output.String())
+				case <-done:
+					// Command completed before 2 seconds, no progress event
+				}
+			}
+
+			// Write result to output file (AC1)
+			if t.taskManager != nil {
+				duration := time.Since(startTime).Seconds()
+				_ = t.taskManager.WriteTaskResult(taskID, output.String(), exitCode, duration)
+
+				// Update task state
+				t.taskManager.UpdateState(taskID, TaskStateCompleted)
+
+				// Queue completion notification (AC3)
+				t.taskManager.EnqueueCompletion(TaskCompletion{
+					TaskID:          taskID,
+					DurationSeconds: duration,
+					ExitCode:        exitCode,
+					Output:          output.String(),
+				})
+			}
+
+			close(done)
+		}()
+
+		// Wait for done signal
+		<-done
+
+		// Build result
+		cmdOutput := output.String()
 		var result *ToolResult
 		if ctx.Err() == context.DeadlineExceeded {
 			result = &ToolResult{
 				Content: fmt.Sprintf("Command timed out after %d seconds", timeout),
 				IsError: true,
 			}
-		} else if err != nil {
-			exitErr, ok := err.(*exec.ExitError)
-			if ok {
-				exitCode := exitErr.ExitCode()
-				result = &ToolResult{
-					Content: fmt.Sprintf("%s\n(exit code: %d)", output, exitCode),
-					IsError: true,
-				}
-			} else {
-				result = &ToolResult{
-					Content: fmt.Sprintf("Error executing command: %v\n%s", err, output),
-					IsError: true,
-				}
+		} else if cmd.ProcessState != nil && cmd.ProcessState.Exited() {
+			exitCode := cmd.ProcessState.ExitCode()
+			result = &ToolResult{
+				Content: fmt.Sprintf("%s\n(exit code: %d)", cmdOutput, exitCode),
+				IsError: exitCode != 0,
 			}
 		} else {
 			result = &ToolResult{
-				Content: output,
+				Content: cmdOutput,
 				IsError: false,
 			}
 		}
@@ -357,11 +449,17 @@ func (t *BashTool) executeBackground(command string, cwd string, input map[strin
 		resultCh <- result
 		close(resultCh)
 		t.backgroundTasks.Delete(taskID)
+
+		// Clean up task from manager
+		if t.taskManager != nil {
+			t.taskManager.Delete(taskID)
+		}
 	}()
 
 	return &ToolResult{
-		Content: fmt.Sprintf("Background task %d started", taskID),
-		IsError: false,
+		Content:    fmt.Sprintf("Background task %s started", taskID),
+		OutputFile: outputFile,
+		IsError:    false,
 	}, nil
 }
 
