@@ -2,11 +2,13 @@ module github.com/ipy/jenny
 
 go 1.26.1
 
-require github.com/anthropics/anthropic-sdk-go v1.47.0
+require (
+	github.com/JohannesKaufmann/html-to-markdown/v2 v2.5.2
+	github.com/anthropics/anthropic-sdk-go v1.47.0
+)
 
 require (
 	github.com/JohannesKaufmann/dom v0.3.1 // indirect
-	github.com/JohannesKaufmann/html-to-markdown/v2 v2.5.2 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/buger/jsonparser v1.1.2 // indirect
 	github.com/invopop/jsonschema v0.14.0 // indirect
