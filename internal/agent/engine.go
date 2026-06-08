@@ -608,14 +608,7 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 		interrupted := make([]bool, len(execResults))
 		if ctx.Err() != nil {
 			for i, res := range execResults {
-				// A tool is interrupted when it has no ToolUseID (never ran) or
-				// the executor marked it as aborted/error due to context cancel.
-				if res.ToolUseID == "" ||
-					strings.Contains(res.Content, "aborted") ||
-					strings.Contains(res.Content, "interrupted") ||
-					strings.Contains(res.Content, "Error executing tool:") {
-					interrupted[i] = true
-				}
+				interrupted[i] = res.Interrupted
 			}
 		}
 

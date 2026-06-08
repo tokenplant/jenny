@@ -573,6 +573,131 @@ func TestExecutor_BashAbortOnlyAffectsBash(t *testing.T) {
 	}
 }
 
+// TestExecutor_SiblingAbort_SetsInterruptedField verifies AC2: every aborted sibling
+// toolResult has Interrupted=true.
+func TestExecutor_SiblingAbort_SetsInterruptedField(t *testing.T) {
+	tools := []tool.Tool{
+		&execMockTool{
+			name:    "bash",
+			delay:   100 * time.Millisecond,
+			isSafe:  false,
+			content: "bash1 success",
+		},
+		&execMockTool{
+			name:    "bash",
+			delay:   100 * time.Millisecond,
+			isSafe:  false,
+			err:     fmt.Errorf("exit 1"),
+			isError: true,
+			content: "bash2 failed",
+		},
+		&execMockTool{
+			name:    "bash",
+			delay:   500 * time.Millisecond,
+			isSafe:  false,
+			content: "bash3 should be skipped",
+		},
+	}
+
+	executor := NewToolExecutor(tools, "/tmp")
+
+	blocks := []toolUseBlock{
+		{ID: "1", Name: "bash", Input: map[string]any{"command": "echo success"}},
+		{ID: "2", Name: "bash", Input: map[string]any{"command": "exit 1"}},
+		{ID: "3", Name: "bash", Input: map[string]any{"command": "sleep 10"}},
+	}
+
+	results, err := executor.Execute(context.Background(), blocks)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	if len(results) != 3 {
+		t.Fatalf("Expected 3 results, got %d", len(results))
+	}
+
+	// Result 1 (bash1): completed successfully — Interrupted must be false
+	if results[0].Interrupted {
+		t.Errorf("Result 1: Interrupted should be false for successful tool, got true")
+	}
+
+	// Result 2 (bash2): tool-execution error — Interrupted must be false
+	// (individual tool errors are not interrupts)
+	if results[1].Interrupted {
+		t.Errorf("Result 2: Interrupted should be false for tool error, got true")
+	}
+
+	// Result 3 (bash3): sibling abort — Interrupted must be true
+	if !results[2].Interrupted {
+		t.Errorf("Result 3: Interrupted should be true for sibling-aborted tool, got false")
+	}
+	if results[2].Content != "Tool execution aborted due to sibling failure" {
+		t.Errorf("Result 3: expected abort message, got %q", results[2].Content)
+	}
+}
+
+// TestExecutor_CtxCancelled_SetsInterruptedField verifies AC3: when parent context
+// is cancelled mid-execution, every pending (not-yet-run) tool's toolResult has
+// Interrupted=true and ToolUseID still populated from the block.
+func TestExecutor_CtxCancelled_SetsInterruptedField(t *testing.T) {
+	tools := []tool.Tool{
+		&execMockTool{
+			name:    "bash",
+			delay:   500 * time.Millisecond,
+			isSafe:  false,
+			content: "bash1 slow",
+		},
+		&execMockTool{
+			name:    "bash",
+			delay:   500 * time.Millisecond,
+			isSafe:  false,
+			content: "bash2 slow",
+		},
+		&execMockTool{
+			name:    "bash",
+			delay:   500 * time.Millisecond,
+			isSafe:  false,
+			content: "bash3 slow",
+		},
+	}
+
+	executor := NewToolExecutor(tools, "/tmp")
+
+	blocks := []toolUseBlock{
+		{ID: "1", Name: "bash", Input: map[string]any{"command": "sleep 1"}},
+		{ID: "2", Name: "bash", Input: map[string]any{"command": "sleep 1"}},
+		{ID: "3", Name: "bash", Input: map[string]any{"command": "sleep 1"}},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel()
+
+	results, err := executor.Execute(ctx, blocks)
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
+	}
+
+	if len(results) != 3 {
+		t.Fatalf("Expected 3 results, got %d", len(results))
+	}
+
+	// At least one tool should have been interrupted
+	interruptedCount := 0
+	for i, res := range results {
+		if res.Interrupted {
+			interruptedCount++
+			// ToolUseID must still be populated (preserves block identity)
+			if res.ToolUseID == "" {
+				t.Errorf("Result %d: Interrupted=true but ToolUseID is empty", i)
+			}
+		}
+	}
+
+	if interruptedCount == 0 {
+		t.Errorf("Expected at least one tool with Interrupted=true after context cancellation, got 0")
+	}
+}
+
 // TestExecutor_TaskAliasFallback verifies that "task" tool_use blocks dispatch to "agent" tool.
 func TestExecutor_TaskAliasFallback(t *testing.T) {
 	// Create a mock "agent" tool

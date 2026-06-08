@@ -182,9 +182,10 @@ func (e *ToolExecutor) executeParallel(parentCtx context.Context, batch []toolUs
 
 			if ctx.Err() != nil {
 				results[tw.index] = toolResult{
-					ToolUseID: tw.block.ID,
-					Content:   "Tool execution aborted due to sibling failure",
-					IsError:   true,
+					ToolUseID:   tw.block.ID,
+					Content:     "Tool execution aborted due to sibling failure",
+					IsError:     true,
+					Interrupted: true,
 				}
 				return
 			}
@@ -193,9 +194,10 @@ func (e *ToolExecutor) executeParallel(parentCtx context.Context, batch []toolUs
 			case sem <- struct{}{}:
 			case <-ctx.Done():
 				results[tw.index] = toolResult{
-					ToolUseID: tw.block.ID,
-					Content:   "Tool execution aborted due to sibling failure",
-					IsError:   true,
+					ToolUseID:   tw.block.ID,
+					Content:     "Tool execution aborted due to sibling failure",
+					IsError:     true,
+					Interrupted: true,
 				}
 				return
 			}
@@ -205,9 +207,10 @@ func (e *ToolExecutor) executeParallel(parentCtx context.Context, batch []toolUs
 
 			if ctx.Err() != nil {
 				results[tw.index] = toolResult{
-					ToolUseID: tw.block.ID,
-					Content:   "Tool execution aborted due to sibling failure",
-					IsError:   true,
+					ToolUseID:   tw.block.ID,
+					Content:     "Tool execution aborted due to sibling failure",
+					IsError:     true,
+					Interrupted: true,
 				}
 				return
 			}
@@ -240,9 +243,10 @@ func (e *ToolExecutor) executeSerial(parentCtx context.Context, batch []toolUseW
 	for _, tw := range batch {
 		if ctx.Err() != nil {
 			results[tw.index] = toolResult{
-				ToolUseID: tw.block.ID,
-				Content:   "Tool execution aborted due to sibling failure",
-				IsError:   true,
+				ToolUseID:   tw.block.ID,
+				Content:     "Tool execution aborted due to sibling failure",
+				IsError:     true,
+				Interrupted: true,
 			}
 			continue
 		}
@@ -309,7 +313,8 @@ func isBashTool(toolName string) bool {
 
 // toolResult represents a tool execution result.
 type toolResult struct {
-	ToolUseID string
-	Content   string
-	IsError   bool
+	ToolUseID   string
+	Content     string
+	IsError     bool
+	Interrupted bool
 }

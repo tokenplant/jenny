@@ -1496,6 +1496,215 @@ func TestInterruptSyntheticToolResults_AC5(t *testing.T) {
 	}
 }
 
+// TestEngine_InterruptedField_TriggersSynthetic verifies AC4: when execResults
+// has Interrupted=true, the engine emits "Tool execution interrupted" synthetic
+// regardless of the original content.
+//
+// This uses a sibling-abort pattern: tool1 (fast) completes, tool2 (blocking) starts
+// but then tool3 (blocking) fails and cancels the context, interrupting tool2 before
+// it can complete.
+func TestEngine_InterruptedField_TriggersSynthetic(t *testing.T) {
+	tmpDir := t.TempDir()
+	sessMgr, err := session.NewManager(tmpDir, false)
+	if err != nil {
+		t.Fatalf("NewManager error: %v", err)
+	}
+
+	sessionID := "sess_interrupted_field_test"
+
+	// Multi-turn mock: first call returns tool_use (loop continues), second returns end_turn
+	turn1Events := []string{
+		testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
+		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tool_1","name":"read","input":{}}}`),
+		testSseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
+		testSseLine("content_block_start", `{"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"tool_2","name":"bash","input":{}}}`),
+		testSseLine("content_block_stop", `{"type":"content_block_stop","index":1}`),
+		testSseLine("content_block_start", `{"type":"content_block_start","index":2,"content_block":{"type":"tool_use","id":"tool_3","name":"bash","input":{}}}`),
+		testSseLine("content_block_stop", `{"type":"content_block_stop","index":2}`),
+		testSseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"tool_use","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":1}}`),
+		testSseLine("message_stop", `{"type":"message_stop"}`),
+	}
+	turn2Events := []string{
+		testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_2","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
+		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":"done"}}`),
+		testSseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
+		testSseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":1}}`),
+		testSseLine("message_stop", `{"type":"message_stop"}`),
+	}
+
+	var apiCallCount atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.ReadAll(r.Body)
+		r.Body.Close()
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.WriteHeader(http.StatusOK)
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			return
+		}
+		flusher.Flush()
+
+		n := apiCallCount.Add(1)
+		var events []string
+		if n == 1 {
+			events = turn1Events
+		} else {
+			events = turn2Events
+		}
+		for _, e := range events {
+			io.WriteString(w, e)
+			flusher.Flush()
+		}
+	}))
+	defer server.Close()
+
+	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
+	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
+	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	os.Setenv("ANTHROPIC_API_KEY", "test-key")
+	defer func() {
+		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
+		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
+	}()
+
+	// Three tools: fast (completes), blocking (gets interrupted), failing (triggers abort)
+	// read is concurrency-safe and runs in parallel with bash tools
+	// bash tools are serial, so tool1 runs first, then tool2 starts, then tool3 fails and aborts tool2
+	fast := &fastTool{name: "read", content: "fast-completed"}
+	blocker := &blockingTool{name: "bash", blockDuration: 10 * time.Second}
+	failing := &execMockTool{
+		name:    "bash",
+		delay:   0,
+		isSafe:  false,
+		err:     fmt.Errorf("exit 1"),
+		isError: true,
+		content: "failing",
+	}
+	tools := []tool.Tool{fast, blocker, failing}
+
+	cfg := StreamConfig{
+		Enabled:        false,
+		SessionManager: sessMgr,
+		SessionID:      sessionID,
+	}
+
+	engine := NewQueryEngine(cfg, tools, "test-model")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	_, err = engine.SubmitMessage(ctx, "test prompt")
+
+	// Debug: check API call count
+	t.Logf("API call count: %d", apiCallCount.Load())
+
+	// Load transcript and check for synthetic interrupt result
+	entries, err := sessMgr.LoadTranscript(sessionID)
+	if err != nil {
+		t.Fatalf("LoadTranscript error: %v", err)
+	}
+
+	var foundSynthetic bool
+	for _, entry := range entries {
+		if entry.Type == "tool_result" && entry.IsError &&
+			strings.Contains(entry.Content, "Tool execution interrupted") {
+			foundSynthetic = true
+			break
+		}
+	}
+
+	if !foundSynthetic {
+		t.Error("AC4 FAIL: expected synthetic 'Tool execution interrupted' result for interrupted tool")
+	} else {
+		t.Log("AC4 PASS: engine emitted synthetic interrupt result")
+	}
+}
+
+// TestEngine_BenignContent_NotInterpretedAsInterrupt verifies AC5: when a tool
+// returns content containing "aborted" or "interrupted" but Interrupted=false,
+// the engine passes the original content through (no synthetic rewrite).
+// This is a regression test: the old substring-based detection would false-positive
+// on content like "make: *** [build] aborted".
+func TestEngine_BenignContent_NotInterpretedAsInterrupt(t *testing.T) {
+	tmpDir := t.TempDir()
+	sessMgr, err := session.NewManager(tmpDir, false)
+	if err != nil {
+		t.Fatalf("NewManager error: %v", err)
+	}
+
+	sessionID := "sess_benign_content_test"
+
+	// Server returns a single tool_use then end_turn
+	server := makeTestMockStreamServer([]string{
+		testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
+		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tool_1","name":"bash","input":{}}}`),
+		testSseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
+		testSseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":1}}`),
+		testSseLine("message_stop", `{"type":"message_stop"}`),
+	})
+	defer server.Close()
+
+	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
+	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
+	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	os.Setenv("ANTHROPIC_API_KEY", "test-key")
+	defer func() {
+		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
+		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
+	}()
+
+	// A tool that returns benign content containing "aborted" — NOT interrupted.
+	// This simulates a build tool whose stdout is "make: *** [build] aborted".
+	benignTool := &benignAbortedTool{content: "make: *** [build] aborted", isError: true}
+	tools := []tool.Tool{benignTool}
+
+	cfg := StreamConfig{
+		Enabled:        false,
+		SessionManager: sessMgr,
+		SessionID:      sessionID,
+	}
+
+	engine := NewQueryEngine(cfg, tools, "test-model")
+
+	// Use a valid context (not cancelled) so the tool completes normally
+	ctx := context.Background()
+
+	_, err = engine.SubmitMessage(ctx, "test prompt")
+	// We expect no error — the tool returns its content normally
+
+	// Load transcript and check that the original benign content is preserved
+	entries, err := sessMgr.LoadTranscript(sessionID)
+	if err != nil {
+		t.Fatalf("LoadTranscript error: %v", err)
+	}
+
+	var foundBenign, foundSynthetic bool
+	for _, entry := range entries {
+		if entry.Type == "tool_result" {
+			if strings.Contains(entry.Content, "make: *** [build] aborted") {
+				foundBenign = true
+			}
+			if strings.Contains(entry.Content, "Tool execution interrupted") {
+				foundSynthetic = true
+			}
+		}
+	}
+
+	if foundSynthetic {
+		t.Error("AC5 FAIL: engine emitted synthetic interrupt for benign content (should not)")
+	} else {
+		t.Log("AC5 PASS: engine did NOT emit synthetic interrupt for benign content")
+	}
+
+	if !foundBenign {
+		t.Error("AC5 FAIL: expected original benign content 'make: *** [build] aborted', got something else")
+	} else {
+		t.Log("AC5 PASS: original benign content preserved")
+	}
+}
+
 // blockingTool is a test tool that blocks until the context is cancelled.
 type blockingTool struct {
 	name          string
@@ -1526,6 +1735,21 @@ func (f *fastTool) Description() string         { return "A fast test tool" }
 func (f *fastTool) InputSchema() map[string]any { return map[string]any{} }
 func (f *fastTool) Execute(ctx context.Context, input map[string]any, cwd string) (*tool.ToolResult, error) {
 	return &tool.ToolResult{Content: f.content, IsError: false}, nil
+}
+
+// benignAbortedTool returns content that looks like a build abort but is not
+// actually an interrupt. Used to verify the engine does not false-positive
+// on benign content containing "aborted".
+type benignAbortedTool struct {
+	content string
+	isError bool
+}
+
+func (b *benignAbortedTool) Name() string                { return "bash" }
+func (b *benignAbortedTool) Description() string         { return "A tool that returns benign aborted content" }
+func (b *benignAbortedTool) InputSchema() map[string]any { return map[string]any{} }
+func (b *benignAbortedTool) Execute(ctx context.Context, input map[string]any, cwd string) (*tool.ToolResult, error) {
+	return &tool.ToolResult{Content: b.content, IsError: b.isError}, nil
 }
 
 // TestToolCallEvents_Negative verifies that when stream-json mode is DISABLED
