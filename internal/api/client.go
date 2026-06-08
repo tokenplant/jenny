@@ -1052,9 +1052,10 @@ type ToolParam struct {
 
 // ToolInputSchema represents the input schema for a tool.
 type ToolInputSchema struct {
-	Type       string
-	Properties map[string]any
-	Required   []string
+	Type        string
+	Properties  map[string]any
+	Required    []string
+	ExtraFields map[string]any // NEW: carries $defs and other non-standard schema keys
 }
 
 // toolToSDK converts a ToolParam to an SDK ToolUnionParam.
@@ -1071,14 +1072,28 @@ func toolToSDK(t ToolParam, isLast bool) anthropic.ToolUnionParam {
 		}
 		return anthropic.ToolUnionParam{OfWebSearchTool20250305: tool}
 	}
+
+	// Ensure Properties is non-null for MiniMax compatibility (AC2)
+	props := t.InputSchema.Properties
+	if props == nil {
+		props = make(map[string]any)
+	}
+
+	inputSchema := anthropic.ToolInputSchemaParam{
+		Type:       constant.Object("object"),
+		Properties: props,
+		Required:   t.InputSchema.Required,
+	}
+
+	// Pass through extra fields ($defs, etc.) if present (AC3)
+	if len(t.InputSchema.ExtraFields) > 0 {
+		inputSchema.ExtraFields = t.InputSchema.ExtraFields
+	}
+
 	tool := &anthropic.ToolParam{
 		Name:        t.Name,
 		Description: anthropic.String(t.Description),
-		InputSchema: anthropic.ToolInputSchemaParam{
-			Type:       constant.Object("object"),
-			Properties: t.InputSchema.Properties,
-			Required:   t.InputSchema.Required,
-		},
+		InputSchema: inputSchema,
 	}
 	if isLast {
 		tool.CacheControl = anthropic.NewCacheControlEphemeralParam()

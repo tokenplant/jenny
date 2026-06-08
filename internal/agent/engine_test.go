@@ -2177,3 +2177,64 @@ func TestRunLoop_EmptyStopReason_MemExtractorCalledWithEmpty(t *testing.T) {
 		t.Log("AC10 PASS: memdir created, proving CheckAndExtract was called with empty stop_reason")
 	}
 }
+
+type mockExtraTool struct{}
+
+func (m *mockExtraTool) Name() string        { return "extra_tool" }
+func (m *mockExtraTool) Description() string { return "A tool with extra schema fields" }
+func (m *mockExtraTool) InputSchema() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"foo": map[string]any{"type": "string"},
+		},
+		"required": []string{"foo"},
+		"$defs": map[string]any{
+			"item": map[string]any{"type": "string"},
+		},
+		"examples": []any{"ex"},
+	}
+}
+func (m *mockExtraTool) Execute(ctx context.Context, input map[string]any, cwd string) (*tool.ToolResult, error) {
+	return nil, nil
+}
+
+func TestQueryEngine_ToolParamExtraction(t *testing.T) {
+	// AC1, AC3: Verify QueryEngine extracts extra fields from tool schema
+	tools := []tool.Tool{&mockExtraTool{}}
+	cfg := StreamConfig{Enabled: false}
+	engine := NewQueryEngine(cfg, tools, "")
+
+	if len(engine.toolParams) != 1 {
+		t.Fatalf("expected 1 tool param, got %d", len(engine.toolParams))
+	}
+
+	tp := engine.toolParams[0]
+	if tp.Name != "extra_tool" {
+		t.Errorf("expected tool name 'extra_tool', got %q", tp.Name)
+	}
+
+	extra := tp.InputSchema.ExtraFields
+	if len(extra) != 2 {
+		t.Errorf("expected 2 extra fields, got %d: %v", len(extra), extra)
+	}
+
+	if _, ok := extra["$defs"]; !ok {
+		t.Error("$defs missing from ExtraFields")
+	}
+	if _, ok := extra["examples"]; !ok {
+		t.Error("examples missing from ExtraFields")
+	}
+
+	// Verify standard fields are not in extra
+	if _, ok := extra["properties"]; ok {
+		t.Error("properties should not be in ExtraFields")
+	}
+	if _, ok := extra["type"]; ok {
+		t.Error("type should not be in ExtraFields")
+	}
+	if _, ok := extra["required"]; ok {
+		t.Error("required should not be in ExtraFields")
+	}
+}
+

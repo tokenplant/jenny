@@ -79,13 +79,23 @@ func NewQueryEngine(cfg StreamConfig, tools []tool.Tool, model string) *QueryEng
 		if req, ok := schema["required"].([]string); ok {
 			required = req
 		}
+
+		// Extract extra fields ($defs, $schema, etc.) for third-party API compatibility (AC1, AC3)
+		extraFields := make(map[string]any)
+		for k, v := range schema {
+			if k != "type" && k != "properties" && k != "required" {
+				extraFields[k] = v
+			}
+		}
+
 		tp := ToolParam{
 			Name:        t.Name(),
 			Description: t.Description(),
 			InputSchema: ToolInputSchema{
-				Type:       "object",
-				Properties: props,
-				Required:   required,
+				Type:        "object",
+				Properties:  props,
+				Required:    required,
+				ExtraFields: extraFields,
 			},
 		}
 		// Set MaxUses for web_search to enforce max results at definition level

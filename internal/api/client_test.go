@@ -807,3 +807,112 @@ func TestClient_NonStreaming_UsageTokensRegression(t *testing.T) {
 		t.Errorf("CacheCreationInputTokens = %d, want 100", resp.Usage.CacheCreationInputTokens)
 	}
 }
+
+func TestToolToSDK_ExtraFields(t *testing.T) {
+	// AC3: Verify extra fields are preserved
+	extraFields := map[string]any{
+		"$defs": map[string]any{
+			"item": map[string]any{
+				"type": "string",
+			},
+		},
+		"examples": []any{"example1"},
+	}
+	tool := ToolParam{
+		Name:        "test_tool",
+		Description: "A tool with extra fields",
+		InputSchema: ToolInputSchema{
+			Type:        "object",
+			Properties:  map[string]any{"foo": map[string]any{"type": "string"}},
+			Required:    []string{"foo"},
+			ExtraFields: extraFields,
+		},
+	}
+
+	sdkTool := toolToSDK(tool, false)
+
+	if sdkTool.OfTool == nil {
+		t.Fatal("expected OfTool to be non-nil")
+	}
+
+	// Verify ExtraFields are populated on the SDK param
+	if len(sdkTool.OfTool.InputSchema.ExtraFields) != 2 {
+		t.Errorf("expected 2 extra fields, got %d", len(sdkTool.OfTool.InputSchema.ExtraFields))
+	}
+
+	if _, ok := sdkTool.OfTool.InputSchema.ExtraFields["$defs"]; !ok {
+		t.Error("expected $defs to be present in ExtraFields")
+	}
+
+	// Marshal to JSON to ensure it's serialized correctly
+	data, err := json.Marshal(sdkTool.OfTool)
+	if err != nil {
+		t.Fatalf("failed to marshal tool: %v", err)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal(data, &result); err != nil {
+		t.Fatalf("failed to unmarshal tool: %v", err)
+	}
+
+	inputSchema, ok := result["input_schema"].(map[string]any)
+	if !ok {
+		t.Fatal("input_schema not found in marshaled output")
+	}
+
+	if _, ok := inputSchema["$defs"]; !ok {
+		t.Error("$defs missing from serialized input_schema")
+	}
+	if _, ok := inputSchema["examples"]; !ok {
+		t.Error("examples missing from serialized input_schema")
+	}
+}
+
+func TestToolToSDK_EmptyProperties(t *testing.T) {
+	// AC2: Verify properties is non-null {} even if input properties is nil
+	tool := ToolParam{
+		Name:        "empty_tool",
+		Description: "A tool with no properties",
+		InputSchema: ToolInputSchema{
+			Type:       "object",
+			Properties: nil,
+			Required:   nil,
+		},
+	}
+
+	sdkTool := toolToSDK(tool, false)
+
+	if sdkTool.OfTool == nil {
+		t.Fatal("expected OfTool to be non-nil")
+	}
+
+	if sdkTool.OfTool.InputSchema.Properties == nil {
+		t.Fatal("expected Properties to be non-nil")
+	}
+
+	// Marshal to JSON to ensure it's {} and not null
+	data, err := json.Marshal(sdkTool.OfTool)
+	if err != nil {
+		t.Fatalf("failed to marshal tool: %v", err)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal(data, &result); err != nil {
+		t.Fatalf("failed to unmarshal tool: %v", err)
+	}
+
+	inputSchema, ok := result["input_schema"].(map[string]any)
+	if !ok {
+		t.Fatal("input_schema not found in marshaled output")
+	}
+
+	props, ok := inputSchema["properties"].(map[string]any)
+	if !ok {
+		t.Fatal("properties missing from serialized input_schema")
+	}
+	if len(props) != 0 {
+		t.Errorf("expected empty properties, got %d items", len(props))
+	}
+}
+
+
