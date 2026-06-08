@@ -9,7 +9,7 @@ package: internal/agent, internal/session
 gaps:
   - Queue-only filtering missing
   - Compaction boundaries missing
-  - --continue/--fork-session not implemented
+  - --continue not implemented
 defer_to: P3
 depends_on:
   - session-persistence

@@ -78,7 +78,7 @@ Implement in this order:
    - `--model` overrides `ANTHROPIC_MODEL`
    - `-r` wired for session resume
    - `--mcp-config` wired (AC2)
-   - **Deferred:** `--continue`, `--fork-session`, `--no-session-persistence` → P3
+   - **Deferred:** `--continue` → P3
 
 3. - [x] Anthropic API client — partial — [`anthropic-api-client.md`](./anthropic-api-client.md)
    - System prompt is a top-level parameter, not a `role: system` message
