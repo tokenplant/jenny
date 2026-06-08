@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/ipy/jenny/internal/api"
+	"github.com/ipy/jenny/internal/cli"
 	"github.com/ipy/jenny/internal/mcp"
 	"github.com/ipy/jenny/internal/session"
 	"github.com/ipy/jenny/internal/skills"
@@ -369,6 +370,23 @@ func RunStream(ctx context.Context, prompt string, tools []tool.Tool, cwd string
 	// Create QueryEngine - it handles API client creation, cost state restoration,
 	// tool parameter conversion, and the agent loop lifecycle
 	engine := NewQueryEngine(cfg, tools, model)
+
+	// Emit system/init line once at start of stream-json mode (AC1-AC6)
+	if cfg.Enabled {
+		toolNames := make([]string, len(tools))
+		for i, t := range tools {
+			toolNames[i] = t.Name()
+		}
+		initMsg := cli.StreamMessage{
+			Type:      "system",
+			Subtype:   "init",
+			SessionID: sessionID,
+			Model:     model,
+			CWD:       cwd,
+			Tools:     toolNames,
+		}
+		_ = cli.WriteStreamJSON(initMsg)
+	}
 
 	// AC4: Delegate to QueryEngine.SubmitMessage which handles:
 	// - Persist-before-API ordering (AC1)
