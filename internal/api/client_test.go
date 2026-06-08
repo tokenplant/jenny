@@ -522,14 +522,8 @@ func TestClient_NonStreaming_SendsPromptCachingBetaHeader(t *testing.T) {
 	}))
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key-0000000000000000")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key-0000000000000000")
 
 	client, _ := NewClientWithModel("m")
 	_, err := client.SendMessage(context.Background(), nil, nil, nil, "")
@@ -567,14 +561,8 @@ func TestClient_Streaming_SendsPromptCachingBetaHeader(t *testing.T) {
 	}))
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key-0000000000000000")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key-0000000000000000")
 
 	client, _ := NewClientWithModel("m")
 	blocksChan, _ := client.SendMessageStream(context.Background(), nil, nil, nil, "", 5*time.Second, 5*time.Second, nil)
@@ -603,14 +591,8 @@ func TestClient_SystemPrompt_HasCacheControl_Ephemeral(t *testing.T) {
 	}))
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key-0000000000000000")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key-0000000000000000")
 
 	client, _ := NewClientWithModel("m")
 	_, err := client.SendMessage(context.Background(), nil, nil, nil, "system prompt content")
@@ -656,14 +638,8 @@ func TestClient_Tools_LastEntryHasCacheControl_Ephemeral(t *testing.T) {
 	}))
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key-0000000000000000")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key-0000000000000000")
 
 	client, _ := NewClientWithModel("m")
 	tools := []ToolParam{
@@ -727,14 +703,8 @@ func TestClient_NoTools_NoToolsCacheControl_NoPanic(t *testing.T) {
 	}))
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key-0000000000000000")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key-0000000000000000")
 
 	client, _ := NewClientWithModel("m")
 	// Empty tools slice
@@ -769,14 +739,8 @@ func TestClient_NonStreaming_UsageTokensRegression(t *testing.T) {
 	}))
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key-0000000000000000")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key-0000000000000000")
 
 	client, _ := NewClientWithModel("m")
 	resp, err := client.SendMessage(context.Background(), nil, nil, nil, "")
