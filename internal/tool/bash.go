@@ -435,6 +435,9 @@ func (t *BashTool) executeBackground(command string, cwd string, input map[strin
 			if t.taskManager != nil {
 				_ = t.taskManager.WriteTaskResult(taskID, outputSnapshot, exitCode, duration)
 
+				// Cancel any pending SIGKILL timer since task completed gracefully
+				t.taskManager.CancelKillTimer(taskID)
+
 				// Update task state
 				t.taskManager.UpdateState(taskID, TaskStateCompleted)
 
@@ -451,10 +454,26 @@ func (t *BashTool) executeBackground(command string, cwd string, input map[strin
 			cmdOutput := outputSnapshot
 			var result *ToolResult
 			if cmd.ProcessState != nil && cmd.ProcessState.Exited() {
-				exitCode := cmd.ProcessState.ExitCode()
+				resultExitCode := cmd.ProcessState.ExitCode()
 				result = &ToolResult{
-					Content: fmt.Sprintf("%s\n(exit code: %d)", cmdOutput, exitCode),
-					IsError: exitCode != 0,
+					Content: fmt.Sprintf("%s\n(exit code: %d)", cmdOutput, resultExitCode),
+					IsError: resultExitCode != 0,
+				}
+			} else if cmd.ProcessState != nil {
+				// Process was killed by a signal (e.g., SIGTERM from TaskStop or timeout)
+				// AC3: Extract signal information for meaningful exit code
+				if waitStatus, ok := cmd.ProcessState.Sys().(syscall.WaitStatus); ok && waitStatus.Signaled() {
+					signal := waitStatus.Signal()
+					signalExitCode := 128 + int(signal)
+					result = &ToolResult{
+						Content: fmt.Sprintf("%s\n(exit code: %d, signal: %s)", cmdOutput, signalExitCode, signal),
+						IsError: true,
+					}
+				} else {
+					result = &ToolResult{
+						Content: cmdOutput,
+						IsError: false,
+					}
 				}
 			} else {
 				result = &ToolResult{
@@ -463,13 +482,13 @@ func (t *BashTool) executeBackground(command string, cwd string, input map[strin
 				}
 			}
 
-			// Signal completion BEFORE sending result (to avoid race with outer close)
-			// Fix resultch-send-close-race: atomic store must happen before close(done)
+			// AC4: Race-free channel ordering - send result BEFORE signaling completion.
+			// This establishes Go memory model happens-before: resultCh send happens-before
+			// atomic store, which happens-before outer loop reads cmdDone, which happens-before
+			// outer loop closes resultCh.
+			resultCh <- result
 			atomic.StoreInt32(&cmdDone, 1)
 			close(done)
-
-			// Now send result (after done is closed, so outer won't close resultCh yet)
-			resultCh <- result
 		}()
 
 		// AC2: Progress timer created BEFORE cmd.Start() so it fires concurrently with command

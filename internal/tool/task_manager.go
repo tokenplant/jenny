@@ -28,6 +28,7 @@ type TaskInfo struct {
 	StartTime  time.Time
 	Command    string
 	Process    *os.Process
+	KillTimer  *time.Timer
 }
 
 // TaskCompletion holds a completion notification for a background task.
@@ -141,8 +142,20 @@ func (tm *TaskManager) UpdateProcess(taskID string, process *os.Process) {
 	}
 }
 
+// CancelKillTimer cancels any pending SIGKILL timer for a task.
+// Called when a task exits gracefully before the 5s escalation timeout.
+func (tm *TaskManager) CancelKillTimer(taskID string) {
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
+	if info, ok := tm.tasks[taskID]; ok && info.KillTimer != nil {
+		info.KillTimer.Stop()
+		info.KillTimer = nil
+	}
+}
+
 // Stop terminates a running task using SIGTERM then SIGKILL after 5s.
-// This implements the AC5 requirement for graceful process termination.
+// AC1+AC2: SIGKILL timer is stored and cancellable; state remains Running
+// until timer fires so the escalation path is not blocked.
 func (tm *TaskManager) Stop(taskID string) error {
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
@@ -161,18 +174,20 @@ func (tm *TaskManager) Stop(taskID string) error {
 		_ = info.Process.Signal(syscall.SIGTERM)
 	}
 
-	// Give process 5 seconds to exit gracefully, then SIGKILL
-	time.AfterFunc(5*time.Second, func() {
+	// Schedule SIGKILL after 5 seconds if process doesn't exit gracefully.
+	// State remains TaskStateRunning so the timer closure can verify the
+	// process is still alive before sending SIGKILL.
+	info.KillTimer = time.AfterFunc(5*time.Second, func() {
 		tm.mu.Lock()
 		defer tm.mu.Unlock()
 		if info, ok := tm.tasks[taskID]; ok && info.State == TaskStateRunning {
 			if info.Process != nil {
 				_ = info.Process.Signal(syscall.SIGKILL)
 			}
+			info.State = TaskStateStopped
 		}
 	})
 
-	info.State = TaskStateStopped
 	return nil
 }
 
