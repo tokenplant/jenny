@@ -1073,16 +1073,20 @@ func toolToSDK(t ToolParam, isLast bool) anthropic.ToolUnionParam {
 		return anthropic.ToolUnionParam{OfWebSearchTool20250305: tool}
 	}
 
-	// Ensure Properties is non-null for MiniMax compatibility (AC2)
+	// Ensure Properties and Required are non-null for MiniMax compatibility (AC2)
 	props := t.InputSchema.Properties
 	if props == nil {
 		props = make(map[string]any)
+	}
+	required := t.InputSchema.Required
+	if required == nil {
+		required = []string{}
 	}
 
 	inputSchema := anthropic.ToolInputSchemaParam{
 		Type:       constant.Object("object"),
 		Properties: props,
-		Required:   t.InputSchema.Required,
+		Required:   required,
 	}
 
 	// Pass through extra fields ($defs, etc.) if present (AC3)

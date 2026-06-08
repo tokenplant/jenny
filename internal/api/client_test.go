@@ -914,5 +914,3 @@ func TestToolToSDK_EmptyProperties(t *testing.T) {
 		t.Errorf("expected empty properties, got %d items", len(props))
 	}
 }
-
-

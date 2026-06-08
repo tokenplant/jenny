@@ -201,14 +201,29 @@ func Run(ctx context.Context, prompt string, tools []tool.Tool, cwd string) (str
 		var required []string
 		if req, ok := schema["required"].([]string); ok {
 			required = req
+		} else if reqAny, ok := schema["required"].([]any); ok {
+			for _, r := range reqAny {
+				if s, ok := r.(string); ok {
+					required = append(required, s)
+				}
+			}
 		}
+		// Extract extra fields ($defs, $schema, etc.) for third-party API compatibility
+		extraFields := make(map[string]any)
+		for k, v := range schema {
+			if k != "type" && k != "properties" && k != "required" {
+				extraFields[k] = v
+			}
+		}
+
 		apiTools = append(apiTools, ToolParam{
 			Name:        t.Name(),
 			Description: t.Description(),
 			InputSchema: ToolInputSchema{
-				Type:       "object",
-				Properties: props,
-				Required:   required,
+				Type:        "object",
+				Properties:  props,
+				Required:    required,
+				ExtraFields: extraFields,
 			},
 		})
 	}

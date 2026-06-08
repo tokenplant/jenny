@@ -78,6 +78,12 @@ func NewQueryEngine(cfg StreamConfig, tools []tool.Tool, model string) *QueryEng
 		var required []string
 		if req, ok := schema["required"].([]string); ok {
 			required = req
+		} else if reqAny, ok := schema["required"].([]any); ok {
+			for _, r := range reqAny {
+				if s, ok := r.(string); ok {
+					required = append(required, s)
+				}
+			}
 		}
 
 		// Extract extra fields ($defs, $schema, etc.) for third-party API compatibility (AC1, AC3)
