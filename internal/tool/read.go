@@ -11,7 +11,11 @@ import (
 	"strings"
 )
 
-// ReadTool reads files and returns their contents with line numbers.
+const (
+	defaultMaxSizeBytes = 256 * 1024 // 256 KB
+	defaultMaxTokens    = 25000
+)
+
 type ReadTool struct {
 	skipPermissions bool
 	readCache       *ReadFileCache
@@ -66,6 +70,14 @@ func (t *ReadTool) InputSchema() map[string]any {
 			"limit": map[string]any{
 				"type":        "number",
 				"description": "The number of lines to read",
+			},
+			"max_size": map[string]any{
+				"type":        "number",
+				"description": "Maximum file size in bytes; rejects file pre-read if exceeded",
+			},
+			"max_tokens": map[string]any{
+				"type":        "number",
+				"description": "Maximum token budget; rejects content post-read if exceeded",
 			},
 		},
 		"required": []string{"file_path"},
@@ -147,17 +159,7 @@ func (t *ReadTool) Execute(ctx context.Context, input map[string]any, cwd string
 		}, nil
 	}
 
-	// Open the file
-	file, err := os.Open(absFilePath)
-	if err != nil {
-		return &ToolResult{
-			Content: fmt.Sprintf("Error opening file: %v", err),
-			IsError: true,
-		}, nil
-	}
-	defer file.Close()
-
-	// Determine offset and limit
+	// Determine offset and limit early (needed for isFullRead check)
 	offset := 1
 	offsetExplicit := false
 	if offsetVal, ok := input["offset"].(float64); ok {
@@ -173,6 +175,30 @@ func (t *ReadTool) Execute(ctx context.Context, input map[string]any, cwd string
 	}
 
 	isFullRead := !offsetExplicit && !limitExplicit
+
+	// maxSizeBytes check (pre-read, only for full reads)
+	if isFullRead {
+		maxSize := int64(defaultMaxSizeBytes)
+		if maxSizeVal, ok := input["max_size"].(float64); ok {
+			maxSize = int64(maxSizeVal)
+		}
+		if info.Size() > maxSize {
+			return &ToolResult{
+				Content: fmt.Sprintf("file exceeds maxSizeBytes limit (%d bytes)", info.Size()),
+				IsError: true,
+			}, nil
+		}
+	}
+
+	// Open the file
+	file, err := os.Open(absFilePath)
+	if err != nil {
+		return &ToolResult{
+			Content: fmt.Sprintf("Error opening file: %v", err),
+			IsError: true,
+		}, nil
+	}
+	defer file.Close()
 
 	// Read and process the file
 	scanner := bufio.NewScanner(file)
@@ -195,6 +221,22 @@ func (t *ReadTool) Execute(ctx context.Context, input map[string]any, cwd string
 			Content: fmt.Sprintf("Error reading file: %v", err),
 			IsError: true,
 		}, nil
+	}
+
+	// maxTokens check (post-read)
+	{
+		maxTokens := defaultMaxTokens
+		if maxTokensVal, ok := input["max_tokens"].(float64); ok {
+			maxTokens = int(maxTokensVal)
+		}
+		// Estimate tokens: ~4 characters per token
+		estimatedTokens := len(strings.Join(lines, "\n")) / 4
+		if estimatedTokens > maxTokens {
+			return &ToolResult{
+				Content: fmt.Sprintf("content exceeds maxTokens limit (estimated %d tokens)", estimatedTokens),
+				IsError: true,
+			}, nil
+		}
 	}
 
 	// Format output with line numbers (matching cat -n format)

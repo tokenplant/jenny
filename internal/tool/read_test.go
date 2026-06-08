@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -204,6 +205,151 @@ func TestReadTool_NameAndDescription(t *testing.T) {
 	schema := tool.InputSchema()
 	if schema["type"] != "object" {
 		t.Errorf("expected type 'object', got %v", schema["type"])
+	}
+}
+
+func TestReadTool_SizeLimits(t *testing.T) {
+	tmpDir := t.TempDir()
+	tool := NewReadTool(false, nil)
+
+	// Create a small file (under all limits)
+	smallFile := filepath.Join(tmpDir, "small.txt")
+	err := os.WriteFile(smallFile, []byte("line 1\nline 2\nline 3\n"), 0644)
+	if err != nil {
+		t.Fatalf("failed to create small file: %v", err)
+	}
+
+	// Create a medium file (between 128KB and 256KB)
+	// Use lines with newlines so bufio.Scanner can handle it
+	// Need to be >128KB to test maxSizeBytes rejection with128KB limit
+	// Also need to test maxTokens with custom max_tokens parameter
+	mediumFile := filepath.Join(tmpDir, "medium.txt")
+	var mediumLines []string
+	for range 1000 {
+		mediumLines = append(mediumLines, strings.Repeat("x", 150))
+	}
+	mediumContent := []byte(strings.Join(mediumLines, "\n") + "\n")
+	err = os.WriteFile(mediumFile, mediumContent, 0644)
+	if err != nil {
+		t.Fatalf("failed to create medium file: %v", err)
+	}
+
+	// Create a large file (>256KB)
+	largeFile := filepath.Join(tmpDir, "large.txt")
+	var largeLines []string
+	for range 3000 {
+		largeLines = append(largeLines, strings.Repeat("y", 100))
+	}
+	largeContent := []byte(strings.Join(largeLines, "\n") + "\n")
+	err = os.WriteFile(largeFile, largeContent, 0644)
+	if err != nil {
+		t.Fatalf("failed to create large file: %v", err)
+	}
+
+	// Create a file with content that exceeds maxTokens (>100KB of text)
+	hugeFile := filepath.Join(tmpDir, "huge.txt")
+	var hugeLines []string
+	for range 1500 {
+		hugeLines = append(hugeLines, strings.Repeat("z", 100))
+	}
+	hugeContent := []byte(strings.Join(hugeLines, "\n") + "\n")
+	err = os.WriteFile(hugeFile, hugeContent, 0644)
+	if err != nil {
+		t.Fatalf("failed to create huge file: %v", err)
+	}
+
+	tests := []struct {
+		name        string
+		input       map[string]any
+		cwd         string
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name: "small file under default maxSizeBytes succeeds",
+			input: map[string]any{
+				"file_path": smallFile,
+			},
+			cwd:     tmpDir,
+			wantErr: false,
+		},
+		{
+			name: "large file exceeds default maxSizeBytes rejected pre-read",
+			input: map[string]any{
+				"file_path": largeFile,
+			},
+			cwd:         tmpDir,
+			wantErr:     true,
+			errContains: "maxSizeBytes",
+		},
+		{
+			name: "medium file with max_size 128KB rejected",
+			input: map[string]any{
+				"file_path": mediumFile,
+				"max_size":  float64(128 * 1024),
+			},
+			cwd:         tmpDir,
+			wantErr:     true,
+			errContains: "maxSizeBytes",
+		},
+		{
+			name: "medium file with max_size 256KB and high max_tokens succeeds",
+			input: map[string]any{
+				"file_path":  mediumFile,
+				"max_size":   float64(256 * 1024),
+				"max_tokens": float64(50000),
+			},
+			cwd:     tmpDir,
+			wantErr: false,
+		},
+		{
+			name: "partial read of large file succeeds (skips size check)",
+			input: map[string]any{
+				"file_path": largeFile,
+				"offset":    float64(1),
+				"limit":     float64(10),
+			},
+			cwd:     tmpDir,
+			wantErr: false,
+		},
+		{
+			name: "huge file content exceeds default maxTokens rejected post-read",
+			input: map[string]any{
+				"file_path": hugeFile,
+			},
+			cwd:         tmpDir,
+			wantErr:     true,
+			errContains: "maxTokens",
+		},
+		{
+			name: "huge file with high max_tokens succeeds",
+			input: map[string]any{
+				"file_path":  hugeFile,
+				"max_tokens": float64(50000),
+			},
+			cwd:     tmpDir,
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := tool.Execute(context.Background(), tt.input, tt.cwd)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if tt.wantErr {
+				if !result.IsError {
+					t.Errorf("expected error containing %q, got success: %q", tt.errContains, result.Content)
+				} else if tt.errContains != "" && !contains(result.Content, tt.errContains) {
+					t.Errorf("expected error containing %q, got %q", tt.errContains, result.Content)
+				}
+			} else {
+				if result.IsError {
+					t.Errorf("expected success, got error: %q", result.Content)
+				}
+			}
+		})
 	}
 }
 

@@ -8,7 +8,6 @@ code: partial
 package: internal/tool
 gaps:
   - Naive line scan
-  - No size/token limits
   - No images/PDF/notebooks
   - No file_unchanged dedup
   - No block device guard
