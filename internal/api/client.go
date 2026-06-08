@@ -238,13 +238,6 @@ func countMediaInContent(content string) (count int, largestSize int, err error)
 	const dataURIPrefix = "data:image/"
 	const base64Marker = ";base64,"
 
-	// Track processed ranges to avoid double-counting when raw headers
-	// like "iVBOR" appear inside data URI payloads
-	type processedRange struct {
-		start, end int
-	}
-	var processed []processedRange
-
 	// Find all data URIs and count them, extracting size when possible
 	// A data URI is identified by "data:image/<fmt>;base64,<payload>"
 	for {
@@ -281,6 +274,10 @@ func countMediaInContent(content string) (count int, largestSize int, err error)
 		base64EndInPayload := 0
 		for i := 0; i < len(payload); i++ {
 			c := rune(payload[i])
+			// Skip whitespace; allow newlines in MIME-formatted base64
+			if c == '\n' || c == '\r' || c == '\t' || c == ' ' {
+				continue
+			}
 			if !isBase64Char(c) {
 				base64EndInPayload = i
 				break
@@ -298,7 +295,6 @@ func countMediaInContent(content string) (count int, largestSize int, err error)
 		// Calculate absolute positions in original string
 		payloadStart := idx + len(dataURIPrefix) + payloadStartInRest
 		payloadEnd := payloadStart + base64EndInPayload
-		processed = append(processed, processedRange{start: payloadStart, end: payloadEnd})
 
 		if base64EndInPayload > 0 {
 			decoded := make([]byte, base64.StdEncoding.DecodedLen(base64EndInPayload))
@@ -323,25 +319,16 @@ func countMediaInContent(content string) (count int, largestSize int, err error)
 			}
 			absPos := idx + pos
 
-			// Check if this header falls inside a processed data URI range
-			inProcessedRange := false
-			for _, pr := range processed {
-				if absPos >= pr.start && absPos < pr.end {
-					inProcessedRange = true
-					break
-				}
-			}
-			if inProcessedRange {
-				idx = absPos + 1
-				continue
-			}
-
 			after := content[absPos+len(header):]
 
 			// Extract base64 after header - also stop at "data:image/" inside base64
 			base64End := 0
 			for i := 0; i < len(after); i++ {
 				c := rune(after[i])
+				// Skip whitespace; allow newlines in MIME-formatted base64
+				if c == '\n' || c == '\r' || c == '\t' || c == ' ' {
+					continue
+				}
 				if !isBase64Char(c) {
 					base64End = i
 					break
@@ -356,7 +343,7 @@ func countMediaInContent(content string) (count int, largestSize int, err error)
 				base64End = len(after)
 			}
 
-			if base64End > 0 {
+			if base64End >= 20 {
 				decoded := make([]byte, base64.StdEncoding.DecodedLen(base64End))
 				_, decodeErr := base64.StdEncoding.Decode(decoded, []byte(after[:base64End]))
 				if decodeErr == nil {
@@ -364,9 +351,9 @@ func countMediaInContent(content string) (count int, largestSize int, err error)
 					if len(decoded) > largestSize {
 						largestSize = len(decoded)
 					}
-				} else {
-					// Decode failed; estimate size from base64 char count
-					// Each base64 char encodes 6 bits; 4 chars encode 3 bytes
+				} else if base64End > 20 {
+					// Decode failed but we have a substantial base64 fragment.
+					// Estimate size: each base64 char encodes 6 bits; 4 chars encode 3 bytes.
 					estimatedSize := (base64End * 3) / 4
 					if estimatedSize > largestSize {
 						largestSize = estimatedSize

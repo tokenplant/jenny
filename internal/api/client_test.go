@@ -428,6 +428,60 @@ func TestValidateMessagesMedia_RawBase64Headers(t *testing.T) {
 	}
 }
 
+func TestValidateMessagesMedia_ProseTextWithMagicBytes(t *testing.T) {
+	// AC1: Prose text containing a raw image header sequence followed by
+	// alphanumeric text does NOT produce a false positive error
+	messages := []Message{
+		{
+			Role:    "user",
+			Content: "Please analyze the image at /9j/4AAQSkZJR and tell me what it shows",
+		},
+	}
+	err := ValidateMessagesMedia(messages)
+	if err != nil {
+		t.Fatalf("expected no error for prose text with magic byte sequence, got %v", err)
+	}
+}
+
+func TestValidateMessagesMedia_MultilineRawBase64(t *testing.T) {
+	// AC2: A multiline (MIME-formatted with \n separators) raw-base64 image
+	// is correctly detected as one image item
+	messages := []Message{
+		{
+			Role: "user",
+			ToolResults: []ToolResultBlock{
+				{
+					ToolUseID: "toolu_1",
+					Content:   "/9j/AAAABJRU\n5ErkJggg==", // JPEG header with newline
+				},
+			},
+		},
+	}
+	err := ValidateMessagesMedia(messages)
+	if err != nil {
+		t.Fatalf("expected no error for multiline raw base64, got %v", err)
+	}
+}
+
+func TestValidateMessagesMedia_MultilineDataURI(t *testing.T) {
+	// AC3: Data URIs with multiline base64 payloads are counted and sized correctly
+	messages := []Message{
+		{
+			Role: "user",
+			ToolResults: []ToolResultBlock{
+				{
+					ToolUseID: "toolu_1",
+					Content:   "data:image/png;base64,iVBORw0KGgo\nAAAANSUhEUgAAAAEAAAAB\nCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+				},
+			},
+		},
+	}
+	err := ValidateMessagesMedia(messages)
+	if err != nil {
+		t.Fatalf("expected no error for multiline data URI, got %v", err)
+	}
+}
+
 func TestMaxMediaItemsPerRequestConstant(t *testing.T) {
 	if MaxMediaItemsPerRequest != 100 {
 		t.Errorf("expected MaxMediaItemsPerRequest to be 100, got %d", MaxMediaItemsPerRequest)
