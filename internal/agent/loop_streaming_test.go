@@ -544,11 +544,14 @@ func TestStreamEvent_ThinkingAndSignature(t *testing.T) {
 		t.Error("AC2 FAIL: signature content not found in stream_event output")
 	}
 
-	// AC5: engine loop should include thinking content in assistant message result
-	// The result text should be concatenation of thinking + text
-	expectedResult := "thinking about itHello"
+	// AC5: engine loop should return only the text content as the result.
+	// Iteration 108 fixes the doc-code-thinking-mismatch: thinking content
+	// is now emitted as its own `type: "thinking"` block (visible in the
+	// stream_event/assistant envelopes) and is NOT concatenated into the
+	// text result. The result should therefore equal the text content only.
+	expectedResult := "Hello"
 	if result != expectedResult {
-		t.Errorf("AC5 FAIL: expected result %q, got %q", expectedResult, result)
+		t.Errorf("AC5 FAIL: expected result %q (text only; thinking goes to its own block), got %q", expectedResult, result)
 	}
 }
 

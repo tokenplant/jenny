@@ -531,6 +531,15 @@ func (c *Client) doSendMessage(ctx context.Context, messages []Message, tools []
 				Type: "text",
 				Text: block.Text,
 			})
+		case "thinking":
+			// Pass thinking + signature through so the non-streaming
+			// fallback path emits an assistant envelope with its own
+			// `type: "thinking"` block (AC6).
+			response.Content = append(response.Content, ContentBlock{
+				Type:      "thinking",
+				Thinking:  block.Thinking,
+				Signature: block.Signature,
+			})
 		case "tool_use":
 			// Parse the input JSON
 			var input map[string]any

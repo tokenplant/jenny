@@ -482,6 +482,7 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 		var textOutput strings.Builder
 		var toolResults []api.ToolResult
 		var toolUseBlocks []api.ToolUseBlock
+		var thinkingBlocks []thinkingBlock
 
 		// Process blocks as they arrive
 		for block := range blocksChan {
@@ -505,7 +506,7 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 			case "text":
 				textOutput.WriteString(block.Block.Text)
 			case "thinking":
-				textOutput.WriteString(block.Block.Thinking)
+				thinkingBlocks = append(thinkingBlocks, thinkingBlock{Text: block.Block.Thinking, Signature: block.Block.Signature})
 			case "tool_use":
 				// Collect tool_use blocks for the assistant message
 				toolUseBlocks = append(toolUseBlocks, api.ToolUseBlock{
@@ -528,23 +529,7 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 
 		// Emit ONE consolidated assistant message for all collected content from streaming
 		// (AC1-AC4: one assistant event per API turn, not per tool_use block)
-		if e.streamCfg.Enabled && (textOutput.Len() > 0 || len(toolUseBlocks) > 0) {
-			assistantContent := []map[string]any{}
-			if textOutput.Len() > 0 {
-				assistantContent = append(assistantContent, map[string]any{"type": "text", "text": textOutput.String()})
-			}
-			for _, tb := range toolUseBlocks {
-				assistantContent = append(assistantContent, map[string]any{"type": "tool_use", "id": tb.ID, "name": tb.Name, "input": tb.Input})
-			}
-			msg := StreamMessage{
-				Type:      "assistant",
-				SessionID: sessionID,
-				Uuid:      GenerateUUID(),
-				Message:   map[string]any{"role": "assistant", "content": assistantContent},
-			}
-			data, _ := json.Marshal(msg)
-			fmt.Fprintln(os.Stdout, string(data))
-		}
+		e.emitConsolidatedAssistant(sessionID, thinkingBlocks, &textOutput, toolUseBlocks)
 
 		// Check if streaming completed with error
 		if streamResult.Error != "" && len(streamResult.Blocks) == 0 {
@@ -580,7 +565,7 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 				case "text":
 					textOutput.WriteString(block.Text)
 				case "thinking":
-					textOutput.WriteString(block.Thinking)
+					thinkingBlocks = append(thinkingBlocks, thinkingBlock{Text: block.Thinking, Signature: block.Signature})
 				case "tool_use":
 					// Collect tool_use blocks for the assistant message
 					toolUseBlocks = append(toolUseBlocks, api.ToolUseBlock{
@@ -602,23 +587,7 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 			}
 
 			// AC4: Emit ONE consolidated assistant message for all collected content
-			if e.streamCfg.Enabled && (textOutput.Len() > 0 || len(toolUseBlocks) > 0) {
-				assistantContent := []map[string]any{}
-				if textOutput.Len() > 0 {
-					assistantContent = append(assistantContent, map[string]any{"type": "text", "text": textOutput.String()})
-				}
-				for _, tb := range toolUseBlocks {
-					assistantContent = append(assistantContent, map[string]any{"type": "tool_use", "id": tb.ID, "name": tb.Name, "input": tb.Input})
-				}
-				msg := StreamMessage{
-					Type:      "assistant",
-					SessionID: sessionID,
-					Uuid:      GenerateUUID(),
-					Message:   map[string]any{"role": "assistant", "content": assistantContent},
-				}
-				data, _ := json.Marshal(msg)
-				fmt.Fprintln(os.Stdout, string(data))
-			}
+			e.emitConsolidatedAssistant(sessionID, thinkingBlocks, &textOutput, toolUseBlocks)
 
 			// AC4: Emit user message wrappers for web search tool results
 			for _, result := range pendingWebSearchResults {
@@ -1237,4 +1206,68 @@ func seedReadFileCacheFromTranscript(cache *tool.ReadFileCache, sessionManager *
 	}
 
 	return nil
+}
+
+// thinkingBlock holds the text and optional signature of a thinking block
+// collected during streaming or fallback processing. Used as the unit of
+// emission by emitConsolidatedAssistant.
+type thinkingBlock struct {
+	Text      string
+	Signature string
+}
+
+// emitConsolidatedAssistant writes ONE `type: "assistant"` envelope to stdout
+// containing every collected block for the current API turn, in spec order:
+// thinking blocks first (with omitempty signature), then the text block
+// (omitted when empty), then tool_use blocks. The 17-line emission logic was
+// previously duplicated at the streaming-path and fallback-path call sites;
+// this helper consolidates them so envelope-shape changes only happen once.
+func (e *QueryEngine) emitConsolidatedAssistant(
+	sessionID string,
+	thinkingBlocks []thinkingBlock,
+	textOutput *strings.Builder,
+	toolUseBlocks []api.ToolUseBlock,
+) {
+	if !e.streamCfg.Enabled {
+		return
+	}
+	if len(thinkingBlocks) == 0 && textOutput.Len() == 0 && len(toolUseBlocks) == 0 {
+		return
+	}
+
+	assistantContent := make([]map[string]any, 0, len(thinkingBlocks)+1+len(toolUseBlocks))
+	// Spec order: thinking → text → tool_use.
+	for _, tb := range thinkingBlocks {
+		block := map[string]any{
+			"type":     "thinking",
+			"thinking": tb.Text,
+		}
+		if tb.Signature != "" {
+			block["signature"] = tb.Signature
+		}
+		assistantContent = append(assistantContent, block)
+	}
+	if textOutput.Len() > 0 {
+		assistantContent = append(assistantContent, map[string]any{
+			"type": "text",
+			"text": textOutput.String(),
+		})
+	}
+	for _, tb := range toolUseBlocks {
+		assistantContent = append(assistantContent, map[string]any{
+			"type":  "tool_use",
+			"id":    tb.ID,
+			"name":  tb.Name,
+			"input": tb.Input,
+		})
+	}
+
+	msg := StreamMessage{
+		Type:      "assistant",
+		SessionID: sessionID,
+		Uuid:      GenerateUUID(),
+		Message:   map[string]any{"role": "assistant", "content": assistantContent},
+	}
+	data, _ := json.Marshal(msg)
+	fmt.Fprintln(os.Stdout, string(data))
 }

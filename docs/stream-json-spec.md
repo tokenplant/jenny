@@ -50,7 +50,28 @@ Emitted when an assistant turn completes. Contains the full history of thinking,
 
 **One event per API turn**: Exactly ONE `assistant` event is emitted per API turn. Its `message.content` array contains ALL content blocks for that turn in order (thinking, text, tool_use). Implementations MUST NOT emit one `assistant` event per tool_use block.
 
+**Content block ordering rule**: Thinking blocks appear before text blocks in `message.content` and MUST NOT be merged into the text block. A thinking block is always emitted as its own object with `type: "thinking"`.
+
+**Signature field rule**: When the API returns a thinking block with a non-empty `signature`, the emitted block MUST include `"signature": "<value>"`. When `signature` is empty/absent, the `"signature"` key MUST be omitted (omitempty).
+
 **Correct pattern (one event):**
+```json
+{
+  "type": "assistant",
+  "session_id": "...",
+  "uuid": "...",
+  "message": {
+    "role": "assistant",
+    "content": [
+      { "type": "thinking", "thinking": "Let me look at the files...", "signature": "abc123" },
+      { "type": "text", "text": "I've analyzed the logs." },
+      { "type": "tool_use", "id": "call_02", "name": "ls", "input": { "path": "src/" } }
+    ]
+  }
+}
+```
+
+A second correct example showing the text-only and tool-only variants (each still one `assistant` event per turn):
 ```json
 {
   "type": "assistant",
@@ -68,22 +89,6 @@ Emitted when an assistant turn completes. Contains the full history of thinking,
 ```
 
 **Incorrect pattern (duplication — do not use):** Emitting one `assistant` per `tool_use` causes text to be repeated across events when a turn contains text followed by multiple tool calls. The above turn must produce exactly ONE `assistant` line.
-
-```json
-{
-  "type": "assistant",
-  "session_id": "...",
-  "uuid": "...",
-  "message": {
-    "role": "assistant",
-    "content": [
-      { "type": "thinking", "thinking": "Let me look at the files...", "signature": "..." },
-      { "type": "text", "text": "I've analyzed the logs." },
-      { "type": "tool_use", "id": "call_02", "name": "ls", "input": { "path": "src/" } }
-    ]
-  }
-}
-```
 
 ### 3.3 Streaming Event (`type: "stream_event"`)
 Emitted for incremental updates. `event` field contains a standard Anthropic stream event.
