@@ -1001,7 +1001,7 @@ func TestAC1_MemdirCreatedAtPromptBuild(t *testing.T) {
 }
 
 // TestAC1_DenyRuleStructuredOutput tests that when StructuredOutput is denied
-// via StructuredDenyRules but a schema is configured, NewQueryEngine returns nil.
+// via StructuredDenyRules but a schema is configured, NewQueryEngine panics.
 // This verifies the startup error for AC1 deny-rule checking.
 func TestAC1_DenyRuleStructuredOutput(t *testing.T) {
 	cfg := StreamConfig{
@@ -1010,12 +1010,17 @@ func TestAC1_DenyRuleStructuredOutput(t *testing.T) {
 		StructuredDenyRules: []string{"StructuredOutput"},
 	}
 
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("AC1 FAIL: expected panic when StructuredOutput is denied but schema is set")
+		} else {
+			t.Log("AC1 PASS: panic occurred as expected")
+		}
+	}()
+
 	engine := NewQueryEngine(cfg, nil, "test-model")
-	if engine != nil {
-		t.Error("AC1 FAIL: engine should be nil when StructuredOutput is denied but schema is set")
-	} else {
-		t.Log("AC1 PASS: engine correctly returns nil when StructuredOutput is denied")
-	}
+	// If we get here without panic, fail
+	t.Errorf("AC1 FAIL: expected panic but got engine: %v", engine)
 }
 
 // TestAC4_InteractiveModeNoStructuredOutput tests that when Enabled=false

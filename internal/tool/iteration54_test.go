@@ -97,7 +97,7 @@ func TestAC2_SwarmModeDisabled_NameParameterReturnsError(t *testing.T) {
 
 func TestAC2_SwarmModeEnabled_NameParameterAccepted(t *testing.T) {
 	// Create an AgentTool with swarms ENABLED
-	mockRunner := &mockSubagentRunnerForAC1{}
+	mockRunner := &mockSubagentRunnerForAC3{}
 	agentTool := NewAgentToolWithSwarms(mockRunner, nil, true)
 
 	// Input with name should be accepted (will fail on execution since mock has no real tools)
@@ -114,6 +114,12 @@ func TestAC2_SwarmModeEnabled_NameParameterAccepted(t *testing.T) {
 	// Should not be "swarm mode not enabled" error - that means name was accepted
 	if result.Content == "swarm mode not enabled" {
 		t.Fatalf("name parameter should be accepted when swarm mode is enabled")
+	}
+	// Verify Name was captured in mock runner params
+	if mockRunner.capturedParams.Name != "worker1" {
+		t.Errorf("AC2 FAIL: expected Name='worker1', got Name='%s'", mockRunner.capturedParams.Name)
+	} else {
+		t.Log("AC2 PASS: Name='worker1' was captured in mock runner params")
 	}
 }
 
@@ -174,6 +180,12 @@ func TestAC3_NamedAgentHasAccessToParentTools(t *testing.T) {
 	// We verify this by checking that the result is not the nested agent error
 	if result.Content == "nested named agents not allowed" {
 		t.Fatalf("named agent should be able to execute (flat delegation)")
+	}
+	// Verify Name was captured in mock runner params
+	if mockRunner.capturedParams.Name != "worker1" {
+		t.Errorf("AC3 FAIL: expected Name='worker1', got Name='%s'", mockRunner.capturedParams.Name)
+	} else {
+		t.Log("AC3 PASS: Name='worker1' was captured in mock runner params")
 	}
 }
 

@@ -211,11 +211,11 @@ Implement in this order:
 
 - [x] Subagent types — [`subagent-types.md`](./subagent-types.md)
 - [x] Task (subagent) — [`task-subagent.md`](./task-subagent.md)
-- [ ] Agent resume / fork — [`agent-resume-fork.md`](./agent-resume-fork.md)
-- [ ] Background tasks — [`background-tasks.md`](./background-tasks.md)
-- [ ] Skills framework — [`skills-framework.md`](./skills-framework.md)
-- [ ] Structured SDK output — [`structured-sdk-output.md`](./structured-sdk-output.md)
-- [ ] Swarm — [`swarm.md`](./swarm.md)
+- [x] Agent resume / fork — [`agent-resume-fork.md`](./agent-resume-fork.md)
+- [x] Background tasks — [`background-tasks.md`](./background-tasks.md)
+- [x] Skills framework — [`skills-framework.md`](./skills-framework.md)
+- [x] Structured SDK output — [`structured-sdk-output.md`](./structured-sdk-output.md)
+- [x] Swarm — [`swarm.md`](./swarm.md)
 
 #### Tools
 

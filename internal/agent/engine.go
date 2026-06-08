@@ -58,10 +58,9 @@ func NewQueryEngine(cfg StreamConfig, tools []tool.Tool, model string) *QueryEng
 	// AC1/AC4: Inject StructuredOutputTool for non-interactive sessions with schema
 	var structuredTool *tool.StructuredOutputTool
 	if cfg.StructuredSchema != nil && cfg.Enabled {
-		// AC1: Check deny rules - if StructuredOutput is explicitly denied, return error
+		// AC1: Check deny rules - if StructuredOutput is explicitly denied, panic (unrecoverable config)
 		if slices.Contains(cfg.StructuredDenyRules, "StructuredOutput") {
-			log.Error("StructuredOutput tool denied but schema is configured")
-			return nil
+			panic("StructuredOutput tool denied but schema is configured")
 		}
 		// Create the structured output tool
 		structuredTool = tool.NewStructuredOutputTool(cfg.StructuredSchema)
@@ -579,12 +578,6 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 		execResults, err := executor.Execute(ctx, execBlocks)
 		if err != nil {
 			return "", fmt.Errorf("executing tools: %w", err)
-		}
-
-		// Build map of tool use ID to block name for correlation
-		toolUseIDToName := make(map[string]string)
-		for _, tb := range toolUseBlocks {
-			toolUseIDToName[tb.ID] = tb.Name
 		}
 
 		// Process results and collect for API response

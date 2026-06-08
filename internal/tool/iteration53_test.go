@@ -171,6 +171,17 @@ func TestAC1_InputSchema_DynamicUserSchema(t *testing.T) {
 	} else {
 		t.Log("AC1 PASS: 'value' property has type 'object'")
 	}
+
+	// AC1: The value property should have required: ["value"]
+	if req, ok := valueProp["required"].([]any); ok {
+		if len(req) != 1 || req[0] != "value" {
+			t.Errorf("AC1 FAIL: 'value.required' should be [\"value\"], got %v", req)
+		} else {
+			t.Log("AC1 PASS: 'value.required' is [\"value\"]")
+		}
+	} else {
+		t.Error("AC1 FAIL: 'value.required' should exist and be [\"value\"]")
+	}
 }
 
 func TestAC1_StructuredOutputTool_Reset(t *testing.T) {

@@ -155,8 +155,6 @@ func run() error {
 	}
 	localRunner := agent.NewLocalSubagentRunner(tools, denyRulesMap)
 	asyncRunner := agent.NewAsyncSubagentRunner(tools, denyRulesMap)
-	localRunner.SetSwarmsEnabled(flags.SwarmsEnabled)
-	asyncRunner.SetSwarmsEnabled(flags.SwarmsEnabled)
 	agentTool := tool.NewAgentToolWithSwarms(localRunner, asyncRunner, flags.SwarmsEnabled)
 	tools = append(tools, agentTool)
 
@@ -181,7 +179,6 @@ func run() error {
 		MCPConfig:       mcpConfig,
 		ReadFileCache:   readFileCache,
 		Skills:          discoveredSkills,
-		SwarmsEnabled:   flags.SwarmsEnabled,
 	}
 
 	// AC3-streamconfig-inheritance: Set parent config on runner for named agent inheritance

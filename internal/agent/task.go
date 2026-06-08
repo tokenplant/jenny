@@ -187,11 +187,10 @@ func ResolveModel(alias string) string {
 
 // LocalSubagentRunner runs subagents in the local process.
 type LocalSubagentRunner struct {
-	tools         []tool.Tool
-	denyRules     map[string]bool
-	sessionMgr    *session.Manager
-	swarmsEnabled bool
-	parentConfig  StreamConfig // Parent's StreamConfig for inheritance when Name is set (AC3)
+	tools        []tool.Tool
+	denyRules    map[string]bool
+	sessionMgr   *session.Manager
+	parentConfig StreamConfig // Parent's StreamConfig for inheritance when Name is set (AC3)
 }
 
 // NewLocalSubagentRunner creates a new LocalSubagentRunner.
@@ -208,11 +207,6 @@ func NewLocalSubagentRunner(tools []tool.Tool, denyRules map[string]bool) *Local
 // SetSessionManager sets the session manager for transcript persistence.
 func (r *LocalSubagentRunner) SetSessionManager(mgr *session.Manager) {
 	r.sessionMgr = mgr
-}
-
-// SetSwarmsEnabled sets whether swarm mode is enabled for subagent delegation.
-func (r *LocalSubagentRunner) SetSwarmsEnabled(enabled bool) {
-	r.swarmsEnabled = enabled
 }
 
 // SetParentConfig sets the parent StreamConfig for inheritance when Name is set (AC3).
@@ -296,11 +290,10 @@ func (r *LocalSubagentRunner) RunSubagent(ctx context.Context, params tool.Subag
 
 	// Build stream config for the subagent
 	streamCfg := StreamConfig{
-		Enabled:       false, // Subagent runs without streaming
-		Verbose:       false,
-		IsForkChild:   true,              // Mark as fork child for recursive fork detection
-		IsNamedAgent:  params.Name != "", // Mark as named agent for nested name blocking (AC1)
-		SwarmsEnabled: r.swarmsEnabled,   // Propagate swarm mode flag to child for nested checks (AC2)
+		Enabled:      false, // Subagent runs without streaming
+		Verbose:      false,
+		IsForkChild:  true,              // Mark as fork child for recursive fork detection
+		IsNamedAgent: params.Name != "", // Mark as named agent for nested name blocking (AC1)
 	}
 
 	// AC3-streamconfig-inheritance: Named agents inherit parent config fields
@@ -310,6 +303,14 @@ func (r *LocalSubagentRunner) RunSubagent(ctx context.Context, params tool.Subag
 		streamCfg.MemoryContent = r.parentConfig.MemoryContent
 		streamCfg.ReadFileCache = r.parentConfig.ReadFileCache
 		streamCfg.Skills = r.parentConfig.Skills
+		streamCfg.MaxBudgetUSD = r.parentConfig.MaxBudgetUSD
+		streamCfg.MaxBudgetCNY = r.parentConfig.MaxBudgetCNY
+		streamCfg.MaxTurns = r.parentConfig.MaxTurns
+		streamCfg.CustomSystemPrompt = r.parentConfig.CustomSystemPrompt
+		streamCfg.AppendSystemPrompt = r.parentConfig.AppendSystemPrompt
+		streamCfg.OverrideSystemPrompt = r.parentConfig.OverrideSystemPrompt
+		streamCfg.StructuredSchema = r.parentConfig.StructuredSchema
+		streamCfg.StructuredDenyRules = r.parentConfig.StructuredDenyRules
 	}
 
 	// Ensure cleanup of worktree on exit (AC2)
@@ -358,11 +359,6 @@ func NewAsyncSubagentRunner(tools []tool.Tool, denyRules map[string]bool) *Async
 func (r *AsyncSubagentRunner) SetSessionManager(mgr *session.Manager) {
 	r.sessionMgr = mgr
 	r.runner.sessionMgr = mgr
-}
-
-// SetSwarmsEnabled sets whether swarm mode is enabled for subagent delegation.
-func (r *AsyncSubagentRunner) SetSwarmsEnabled(enabled bool) {
-	r.runner.swarmsEnabled = enabled
 }
 
 // SetParentConfig sets the parent StreamConfig for inheritance when Name is set (AC3).

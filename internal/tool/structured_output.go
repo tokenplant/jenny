@@ -52,9 +52,9 @@ func (t *StructuredOutputTool) InputSchema() map[string]any {
 	valueSchema := map[string]any{
 		"description": "The structured output value conforming to the schema",
 	}
-	// Copy user schema properties into value schema
+	// Copy user schema properties into value schema (except type, description, required)
 	for k, v := range t.schema {
-		if k != "type" && k != "description" {
+		if k != "type" && k != "description" && k != "required" {
 			valueSchema[k] = v
 		}
 	}
@@ -62,6 +62,8 @@ func (t *StructuredOutputTool) InputSchema() map[string]any {
 	if _, hasType := valueSchema["type"]; !hasType {
 		valueSchema["type"] = "object"
 	}
+	// AC1: value.required is always ["value"] - the value field itself is required
+	valueSchema["required"] = []any{"value"}
 
 	return map[string]any{
 		"type": "object",

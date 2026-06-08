@@ -130,7 +130,6 @@ type StreamConfig struct {
 	IsForkChild          bool                        // True when this session is a fork child (subagent spawned another agent)
 	StructuredSchema     map[string]any              // JSON schema for structured output (AC1, AC4: non-interactive only)
 	StructuredDenyRules  []string                    // Tool names to deny; checked by engine to enforce AC1
-	SwarmsEnabled        bool                        // When true, enables named agent delegation (swarm mode)
 	IsNamedAgent         bool                        // True when this session is a named swarm agent
 }
 
