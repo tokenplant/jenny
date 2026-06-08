@@ -6,9 +6,7 @@ status: partial
 spec: complete
 code: partial
 package: internal/tool
-gaps:
-  - "Todo v2 / TodoWrite disable (AC2) deferred to P4"
-  - "System prompt tool-list wiring (AC5) not yet wired"
+gaps: []
 depends_on:
   - agent-loop
 ---
