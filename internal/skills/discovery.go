@@ -61,6 +61,16 @@ func matchDoubleStar(path, pattern string) bool {
 			// Strip leading / from suffix
 			suffix := strings.TrimPrefix(path[i:], "/")
 			if suffix == "" {
+				// For paths with no '/' (e.g., "main.go"), try matching the filename
+				// This handles ** matching zero directories
+				filename := path
+				if idx := strings.LastIndex(filename, "/"); idx >= 0 {
+					filename = filename[idx+1:]
+				}
+				matched, _ := filepath.Match(remaining, filename)
+				if matched {
+					return true
+				}
 				continue
 			}
 			if matchDoubleStar(suffix, remaining) {

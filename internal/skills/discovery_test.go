@@ -235,49 +235,55 @@ A test skill for deduplication.
 }
 
 func TestSkill_MatchesPath_WithinRoot(t *testing.T) {
+	tmpDir := t.TempDir()
+	skillRoot := filepath.Join(tmpDir, ".jenny", "skills", "test-skill")
 	skill := Skill{
 		Name:     "test-skill",
-		RootPath: "/Users/sin/work/agents/jenny/.jenny/skills/test-skill",
+		RootPath: skillRoot,
 	}
 
 	// Path within skill root should match
-	if !skill.MatchesPath("/Users/sin/work/agents/jenny/.jenny/skills/test-skill/SKILL.md") {
+	if !skill.MatchesPath(filepath.Join(skillRoot, "SKILL.md")) {
 		t.Error("expected path within skill root to match")
 	}
 
 	// Path outside skill root should not match
-	if skill.MatchesPath("/Users/sin/work/agents/jenny/other/path.go") {
+	if skill.MatchesPath(filepath.Join(tmpDir, "other", "path.go")) {
 		t.Error("expected path outside skill root to not match")
 	}
 }
 
 func TestSkill_MatchesPath_WithActivationGlob(t *testing.T) {
+	tmpDir := t.TempDir()
+	skillRoot := filepath.Join(tmpDir, ".jenny", "skills", "go-helper")
 	skill := Skill{
 		Name:           "go-helper",
-		RootPath:       "/Users/sin/work/agents/jenny/.jenny/skills/go-helper",
+		RootPath:       skillRoot,
 		ActivationGlob: "**/*.go",
 	}
 
 	// Path matching the glob should match even if outside root
-	if !skill.MatchesPath("/Users/sin/work/agents/jenny/other/path.go") {
+	if !skill.MatchesPath(filepath.Join(tmpDir, "other", "path.go")) {
 		t.Error("expected path matching activation_glob to match")
 	}
 
 	// Path not matching the glob should not match
-	if skill.MatchesPath("/Users/sin/work/agents/jenny/other/path.md") {
+	if skill.MatchesPath(filepath.Join(tmpDir, "other", "path.md")) {
 		t.Error("expected path not matching activation_glob to not match")
 	}
 }
 
 func TestSkill_MatchesPath_NoActivationGlob(t *testing.T) {
+	tmpDir := t.TempDir()
+	skillRoot := filepath.Join(tmpDir, ".jenny", "skills", "no-glob-skill")
 	skill := Skill{
 		Name:     "no-glob-skill",
-		RootPath: "/Users/sin/work/agents/jenny/.jenny/skills/no-glob-skill",
+		RootPath: skillRoot,
 		// No ActivationGlob set
 	}
 
 	// Path outside root should not match when no activation glob
-	if skill.MatchesPath("/Users/sin/work/agents/jenny/other/path.go") {
+	if skill.MatchesPath(filepath.Join(tmpDir, "other", "path.go")) {
 		t.Error("expected path outside skill root to not match when no activation_glob")
 	}
 }

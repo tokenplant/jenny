@@ -1,6 +1,7 @@
 package tool
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -44,7 +45,7 @@ A test skill.
 	}
 
 	// Test activation outside skill directory (no glob set)
-	activated = activator.ActivateForPath("/Users/sin/work/agents/jenny/other/path.txt")
+	activated = activator.ActivateForPath(filepath.Join(tmpDir, "other", "path.txt"))
 	if len(activated) != 0 {
 		t.Errorf("expected no activation for path outside skill dir without glob, got %v", activated)
 	}
@@ -86,13 +87,13 @@ activation_glob: "**/*.md"
 	activator := skills.NewPathSkillActivator(skillList)
 
 	// Test activation for markdown file outside skill directory
-	activated := activator.ActivateForPath("/Users/sin/work/agents/jenny/README.md")
+	activated := activator.ActivateForPath(filepath.Join(tmpDir, "docs", "README.md"))
 	if len(activated) != 1 || activated[0] != "markdown-helper" {
 		t.Errorf("expected markdown-helper to be activated for .md path, got %v", activated)
 	}
 
 	// Test no activation for non-matching file
-	activated = activator.ActivateForPath("/Users/sin/work/agents/jenny/main.go")
+	activated = activator.ActivateForPath(filepath.Join(tmpDir, "main.go"))
 	if len(activated) != 0 {
 		t.Errorf("expected no activation for .go path, got %v", activated)
 	}
@@ -233,13 +234,21 @@ func (a *mockSkillActivator) ActivateForPath(path string) []string {
 	return activated
 }
 
+// mockMCPTool implements Tool interface for testing MCP exclusion
+type mockMCPTool struct {
+	name string
+}
+
+func (m *mockMCPTool) Name() string                { return m.name }
+func (m *mockMCPTool) Description() string         { return "An MCP prompt tool" }
+func (m *mockMCPTool) InputSchema() map[string]any { return map[string]any{"type": "object"} }
+func (m *mockMCPTool) Execute(ctx context.Context, input map[string]any, cwd string) (*ToolResult, error) {
+	return &ToolResult{Content: "mcp tool result"}, nil
+}
+
 // TestSkillTool_MCPExclusion verifies MCP tools are not in skills list
 func TestSkillTool_MCPExclusion(t *testing.T) {
-	// This test verifies that MCP prompts cannot be activated as skills
-	// Since MCP prompts don't have SKILL.md files, they are never discovered
-	// as skills. This test documents the invariant.
-
-	// Create a skill
+	// Create a local skill
 	tmpDir := t.TempDir()
 	skillDir := filepath.Join(tmpDir, "local-skill")
 	if err := os.MkdirAll(skillDir, 0755); err != nil {
@@ -253,10 +262,57 @@ A local skill.
 		t.Fatalf("failed to write SKILL.md: %v", err)
 	}
 
-	// Discover skills - only local-skill should be found
-	// MCP prompts are discovered through a different mechanism (mcp.ListMcpResourcesTool)
-	// and are not part of skills.Discover
+	// Discover the local skill
+	discoveredSkills, err := skills.Discover(tmpDir)
+	if err != nil {
+		t.Fatalf("discover error: %v", err)
+	}
+	if len(discoveredSkills) != 1 {
+		t.Fatalf("expected 1 discovered skill, got %d", len(discoveredSkills))
+	}
 
-	// This test documents that the architecture naturally excludes MCP prompts from skills
-	// because they don't have SKILL.md files and are discovered through a different path
+	// Create a mock MCP tool
+	mcpTools := []Tool{
+		&mockMCPTool{name: "mcp-prompt"},
+	}
+
+	// Build registry with base tools, MCP tools, and discovered skills
+	registry := NewRegistry().
+		WithBaseTools().
+		WithReadFileCache(NewReadFileCache()).
+		WithMCPTools(mcpTools).
+		WithSkills(discoveredSkills)
+
+	tools := registry.Build()
+
+	// Find the Skill tool
+	var skillTool *SkillTool
+	for _, tool := range tools {
+		if st, ok := tool.(*SkillTool); ok {
+			skillTool = st
+			break
+		}
+	}
+	if skillTool == nil {
+		t.Fatal("SkillTool not found in registry")
+	}
+
+	// Verify MCP tool name is NOT in the skills list
+	for _, skill := range skillTool.skills {
+		if skill.Name == "mcp-prompt" {
+			t.Error("MCP tool should not appear in skills list")
+		}
+	}
+
+	// Verify local skill IS in the skills list
+	foundLocalSkill := false
+	for _, skill := range skillTool.skills {
+		if skill.Name == "local-skill" {
+			foundLocalSkill = true
+			break
+		}
+	}
+	if !foundLocalSkill {
+		t.Error("local skill should appear in skills list")
+	}
 }
