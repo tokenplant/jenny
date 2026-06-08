@@ -353,3 +353,63 @@ func (m *Manager) RegisterShutdownFlush() {
 		os.Exit(0)
 	}()
 }
+
+// ListSessions returns session IDs sorted by modification time (most recent first).
+// Only returns sessions with .jsonl transcript files.
+func (m *Manager) ListSessions() ([]string, error) {
+	if m.Disabled {
+		return nil, fmt.Errorf("session persistence is disabled")
+	}
+
+	entries, err := os.ReadDir(m.transcriptDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("reading transcript directory: %w", err)
+	}
+
+	var sessions []struct {
+		id        string
+		mtimeNano int64
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		if filepath.Ext(entry.Name()) != ".jsonl" {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		sessionID := strings.TrimSuffix(entry.Name(), ".jsonl")
+		sessions = append(sessions, struct {
+			id        string
+			mtimeNano int64
+		}{
+			id:        sessionID,
+			mtimeNano: info.ModTime().UnixNano(),
+		})
+	}
+
+	if len(sessions) == 0 {
+		return nil, nil
+	}
+
+	// Sort by mtime descending (most recent first)
+	for i := 0; i < len(sessions); i++ {
+		for j := i + 1; j < len(sessions); j++ {
+			if sessions[j].mtimeNano > sessions[i].mtimeNano {
+				sessions[i], sessions[j] = sessions[j], sessions[i]
+			}
+		}
+	}
+
+	ids := make([]string, len(sessions))
+	for i, s := range sessions {
+		ids[i] = s.id
+	}
+	return ids, nil
+}

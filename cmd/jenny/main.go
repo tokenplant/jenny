@@ -50,6 +50,18 @@ func run() error {
 		sessionManager.RegisterShutdownFlush()
 	}
 
+	// Handle --continue flag: find most recent session
+	if flags.Continue {
+		sessions, err := sessionManager.ListSessions()
+		if err != nil {
+			return fmt.Errorf("listing sessions: %w", err)
+		}
+		if len(sessions) == 0 {
+			return fmt.Errorf("no sessions to continue")
+		}
+		flags.SessionResume = sessions[0]
+	}
+
 	// Determine session ID: use -r flag value if provided, otherwise generate new
 	sessionID := flags.SessionResume
 	var historyMessages []agent.Message

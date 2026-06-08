@@ -20,6 +20,7 @@ type Flags struct {
 	SessionResume          string
 	NoSessionPersistence   bool
 	ForkSession            bool
+	Continue               bool
 	MCPConfig              []string
 	StrictMCP              bool
 	DeniedTools            []string
@@ -78,6 +79,9 @@ func Parse() (*Flags, error) {
 	var forkSession bool
 	flags.BoolVar(&forkSession, "fork-session", false, "Fork resumed session to new ID")
 
+	var continueFlag bool
+	flags.BoolVar(&continueFlag, "continue", false, "Resume most recent session")
+
 	var mcpPaths = []string{}
 
 	flags.Var((*StringSlice)(&mcpPaths), "mcp-config", "MCP configuration file path(s) (can be specified multiple times)")
@@ -124,6 +128,16 @@ func Parse() (*Flags, error) {
 		return nil, fmt.Errorf("--fork-session requires -r/--resume")
 	}
 
+	// Validate: --continue is mutually exclusive with -r/--resume
+	if continueFlag && sessionResume != "" {
+		return nil, fmt.Errorf("--continue is mutually exclusive with -r/--resume")
+	}
+
+	// Validate: --continue requires session persistence
+	if continueFlag && noSessionPersistence {
+		return nil, fmt.Errorf("--continue requires session persistence")
+	}
+
 	return &Flags{
 		Prompt:                 prompt,
 		Model:                  model,
@@ -134,6 +148,7 @@ func Parse() (*Flags, error) {
 		SessionResume:          sessionResume,
 		NoSessionPersistence:   noSessionPersistence,
 		ForkSession:            forkSession,
+		Continue:               continueFlag,
 		MCPConfig:              mcpPaths,
 		StrictMCP:              strictMCP,
 		DeniedTools:            deniedTools,

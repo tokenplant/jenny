@@ -6,8 +6,7 @@ status: partial
 spec: complete
 code: partial
 package: internal/cli
-gaps:
-  - --continue missing
+gaps: []
 defer_to: P3
 depends_on:
   []
@@ -77,7 +76,7 @@ Help (`-h`) exits 0.
 |---------|--------|
 | `-r` resume | Wired |
 | `--mcp-config` | Wired |
-| `--continue` | Not implemented |
+| `--continue` | Wired |
 | `--no-session-persistence` | Wired |
 | `--fork-session` | Wired |
 | stream-json stdout guard | Not implemented |
