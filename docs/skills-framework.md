@@ -2,9 +2,9 @@
 title: Skills Framework
 slug: skills-framework
 priority: P4
-status: not_started
+status: done
 spec: complete
-code: not_started
+code: done
 package: internal/skills
 gaps:
   []

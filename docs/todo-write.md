@@ -2,9 +2,9 @@
 title: TodoWrite Tool
 slug: todo-write
 priority: P4
-status: not_started
+status: done
 spec: complete
-code: not_started
+code: done
 package: internal/tool
 gaps:
   []

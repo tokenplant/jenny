@@ -2,9 +2,9 @@
 title: Background Tasks
 slug: background-tasks
 priority: P4
-status: not_started
+status: done
 spec: complete
-code: not_started
+code: done
 package: internal/agent
 gaps:
   []
