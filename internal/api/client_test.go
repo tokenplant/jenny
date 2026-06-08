@@ -2,6 +2,7 @@ package api
 
 import (
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -291,5 +292,150 @@ func TestToolToSDK_WebSearchWithoutMaxUses(t *testing.T) {
 	}
 	if sdkTool.OfWebSearchTool20250305 != nil {
 		t.Error("expected OfWebSearchTool20250305 to be nil for web_search without MaxUses")
+	}
+}
+
+func TestValidateMessagesMedia_NoMedia(t *testing.T) {
+	// AC6: Pass trivially when no image data is present (backward compat)
+	messages := []Message{
+		{Role: "user", Content: "Hello, world!"},
+		{Role: "assistant", Content: "Hi there!"},
+	}
+	err := ValidateMessagesMedia(messages)
+	if err != nil {
+		t.Fatalf("expected no error for messages without media, got %v", err)
+	}
+}
+
+func TestValidateMessagesMedia_DataURI(t *testing.T) {
+	// AC7: data URI detection
+	messages := []Message{
+		{
+			Role: "user",
+			ToolResults: []ToolResultBlock{
+				{
+					ToolUseID: "toolu_1",
+					Content:   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+				},
+			},
+		},
+	}
+	err := ValidateMessagesMedia(messages)
+	if err != nil {
+		t.Fatalf("expected no error for valid data URI, got %v", err)
+	}
+}
+
+func TestValidateMessagesMedia_TooManyImages(t *testing.T) {
+	// AC3: Returns CannotRetryError when total media items exceed 100
+	messages := []Message{
+		{
+			Role: "user",
+			ToolResults: []ToolResultBlock{
+				{
+					ToolUseID: "toolu_1",
+					Content:   strings.Repeat("data:image/png;base64,iVBORw0KGgo=", 101),
+				},
+			},
+		},
+	}
+	err := ValidateMessagesMedia(messages)
+	if err == nil {
+		t.Fatal("expected error for too many images")
+	}
+	cannotRetry, ok := err.(*CannotRetryError)
+	if !ok {
+		t.Fatalf("expected CannotRetryError, got %T", err)
+	}
+	if !strings.Contains(cannotRetry.Message, "too many media items") {
+		t.Errorf("expected message about too many media items, got %q", cannotRetry.Message)
+	}
+}
+
+func TestValidateMessagesMedia_OversizedImage(t *testing.T) {
+	// AC4: Returns CannotRetryError when any base64 image exceeds 5 MB
+	// Create a SINGLE large base64 image (one PNG header, one long data line)
+	// 5 MB =5,242,880 bytes; in base64 that needs ~6,990,507 characters
+	// Use a PNG header followed by ~7MB of 'A' chars (valid base64)
+	header := "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+	// Create a single-line base64 string that exceeds 5 MB when decoded
+	// Each base64 char represents 6 bits; 4 chars represent 3 bytes
+	// So7M base64 chars ≈ 5.25 MB
+	padding := strings.Repeat("A", 7*1024*1024)
+	largeBase64 := header + padding
+	messages := []Message{
+		{
+			Role: "user",
+			ToolResults: []ToolResultBlock{
+				{
+					ToolUseID: "toolu_1",
+					Content:   largeBase64,
+				},
+			},
+		},
+	}
+	err := ValidateMessagesMedia(messages)
+	if err == nil {
+		t.Fatal("expected error for oversized image")
+	}
+	cannotRetry, ok := err.(*CannotRetryError)
+	if !ok {
+		t.Fatalf("expected CannotRetryError, got %T", err)
+	}
+	if !strings.Contains(cannotRetry.Message, "exceeds maximum allowed size") {
+		t.Errorf("expected message about image size, got %q", cannotRetry.Message)
+	}
+}
+
+func TestValidateMessagesMedia_MixedContent(t *testing.T) {
+	// AC7: Mixed content with text, tool results, and images
+	messages := []Message{
+		{Role: "user", Content: "What do you see?"},
+		{
+			Role:    "assistant",
+			Content: "I see an image",
+			ToolResults: []ToolResultBlock{
+				{
+					ToolUseID: "toolu_1",
+					Content:   "Here is the result: data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+				},
+			},
+		},
+		{Role: "user", Content: "Thanks!"},
+	}
+	err := ValidateMessagesMedia(messages)
+	if err != nil {
+		t.Fatalf("expected no error for mixed content with valid image, got %v", err)
+	}
+}
+
+func TestValidateMessagesMedia_RawBase64Headers(t *testing.T) {
+	// Test detection of raw base64 image headers without data URI prefix
+	messages := []Message{
+		{
+			Role: "user",
+			ToolResults: []ToolResultBlock{
+				{
+					ToolUseID: "toolu_1",
+					Content:   "/9j/AAAABJRU5ErkJggg==", // JPEG header
+				},
+			},
+		},
+	}
+	err := ValidateMessagesMedia(messages)
+	if err != nil {
+		t.Fatalf("expected no error for raw JPEG header, got %v", err)
+	}
+}
+
+func TestMaxMediaItemsPerRequestConstant(t *testing.T) {
+	if MaxMediaItemsPerRequest != 100 {
+		t.Errorf("expected MaxMediaItemsPerRequest to be 100, got %d", MaxMediaItemsPerRequest)
+	}
+}
+
+func TestMaxBase64ImageSizeConstant(t *testing.T) {
+	if MaxBase64ImageSize != 5*1024*1024 {
+		t.Errorf("expected MaxBase64ImageSize to be 5*1024*1024, got %d", MaxBase64ImageSize)
 	}
 }

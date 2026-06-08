@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ipy/jenny/internal/log"
@@ -15,6 +16,12 @@ import (
 	"github.com/anthropics/anthropic-sdk-go/packages/param"
 	"github.com/anthropics/anthropic-sdk-go/shared/constant"
 )
+
+// MaxMediaItemsPerRequest is the maximum number of media items allowed per request.
+const MaxMediaItemsPerRequest = 100
+
+// MaxBase64ImageSize is the maximum size in bytes for a base64-encoded image.
+const MaxBase64ImageSize = 5 * 1024 * 1024
 
 // DefaultIdleTimeout is the default timeout for idle watchdog (30 seconds).
 const DefaultIdleTimeout = 30 * time.Second
@@ -186,6 +193,92 @@ func (c *Client) SendMessage(ctx context.Context, messages []Message, tools []To
 	}, c.isBackground)
 }
 
+// ValidateMessagesMedia validates media in messages before sending to the API.
+// It checks for data URIs and raw base64 image headers, enforcing:
+// - Maximum100 media items per request
+// - Maximum 5 MB per base64-encoded image
+// Returns a CannotRetryError if validation fails.
+func ValidateMessagesMedia(messages []Message) error {
+	totalMedia := 0
+	for _, msg := range messages {
+		for _, tr := range msg.ToolResults {
+			count, maxSize, err := countMediaInContent(tr.Content)
+			if err != nil {
+				return &CannotRetryError{
+					Message:    err.Error(),
+					StatusCode: 400,
+				}
+			}
+			totalMedia += count
+			if maxSize > MaxBase64ImageSize {
+				return &CannotRetryError{
+					Message:    "image exceeds maximum allowed size of 5 MB",
+					StatusCode: 400,
+				}
+			}
+		}
+	}
+	if totalMedia > MaxMediaItemsPerRequest {
+		return &CannotRetryError{
+			Message:    "request contains too many media items (max 100)",
+			StatusCode: 400,
+		}
+	}
+	return nil
+}
+
+// countMediaInContent counts media items and finds the largest size in content.
+// Returns count, largest base64 size found, and any error.
+func countMediaInContent(content string) (count int, largestSize int, err error) {
+	// Check for data:image/...;base64,... data URIs
+	dataURICount := strings.Count(content, "data:image/")
+	for range dataURICount {
+		count++
+	}
+
+	// Check for raw base64 image headers
+	// JPEG: /9j/ (start of base64 JPEG)
+	// PNG: iVBOR (start of base64 PNG)
+	// GIF: R0lGOD (start of base64 GIF)
+	// WebP: UklGR (start of base64 WebP)
+	rawHeaders := []string{"/9j/", "iVBOR", "R0lGOD", "UklGR"}
+	for _, header := range rawHeaders {
+		count += strings.Count(content, header)
+	}
+
+	// Find the largest base64 image by estimating from content
+	// Each base64 character represents 6 bits, so divide by 4 for bytes (approx)
+	// This is an estimate; actual decoding would be more accurate but expensive
+	lines := strings.SplitSeq(content, "\n")
+	for line := range lines {
+		line = strings.TrimSpace(line)
+		if len(line) > 100 { // Skip short lines that aren't real base64
+			// Check if line looks like base64 (alphanumeric + +, /, =)
+			isBase64 := true
+			base64Count := 0
+			for _, c := range line {
+				if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '+' || c == '/' || c == '=' {
+					base64Count++
+				} else {
+					isBase64 = false
+					break
+				}
+			}
+			if isBase64 && base64Count > largestSize {
+				largestSize = base64Count
+			}
+		}
+	}
+
+	// Convert base64 length to approximate byte size
+	if largestSize > 0 {
+		// Each base64 char encodes 6 bits; 4 chars encode 3 bytes
+		largestSize = (largestSize * 3) / 4
+	}
+
+	return count, largestSize, nil
+}
+
 // doSendMessage performs the actual message sending (used by retry logic).
 func (c *Client) doSendMessage(ctx context.Context, messages []Message, tools []ToolParam, toolResults []ToolResult, systemPrompt string) (*Response, error) {
 	log.Debug("Sending message", "model", c.model)
@@ -193,6 +286,11 @@ func (c *Client) doSendMessage(ctx context.Context, messages []Message, tools []
 	log.Debug("Number of tools", "count", len(tools))
 	for _, t := range tools {
 		log.Debug("Tool registered", "name", t.Name, "description", t.Description)
+	}
+
+	// Validate media before sending
+	if err := ValidateMessagesMedia(messages); err != nil {
+		return nil, err
 	}
 
 	// Convert messages to SDK format
@@ -503,6 +601,12 @@ func (c *Client) SendMessageStream(
 	// Run streaming in a goroutine
 	go func() {
 		defer close(blocksChan)
+
+		// Validate media before sending
+		if err := ValidateMessagesMedia(messages); err != nil {
+			result.Error = err.Error()
+			return
+		}
 
 		// Convert messages to SDK format (same as SendMessage)
 		sdkMessages := make([]anthropic.MessageParam, 0, len(messages))

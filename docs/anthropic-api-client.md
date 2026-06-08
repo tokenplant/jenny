@@ -2,13 +2,11 @@
 title: Anthropic API Client
 slug: anthropic-api-client
 priority: P0
-status: partial
+status: done
 spec: complete
-code: partial
+code: done
 package: internal/api
-gaps:
-  - No image count validation
-  - No oversize media error mapping
+gaps: []
 defer_to: P3
 depends_on:
   []
