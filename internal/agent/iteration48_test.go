@@ -269,6 +269,10 @@ func TestAC3_AsyncOutputFile_WrittenOnCompletion(t *testing.T) {
 	// AC3: After async subagent completes, the output file should exist and contain
 	// valid JSONL with the result/error information.
 
+	if os.Getenv("ANTHROPIC_BASE_URL") == "" || os.Getenv("ANTHROPIC_AUTH_TOKEN") == "" {
+		t.Skip("skipping: ANTHROPIC_BASE_URL or ANTHROPIC_AUTH_TOKEN not set")
+	}
+
 	readTool := tool.NewReadTool(false, nil)
 	tools := []tool.Tool{readTool}
 	runner := NewAsyncSubagentRunner(tools, nil)
