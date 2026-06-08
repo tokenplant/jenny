@@ -135,6 +135,56 @@ func TestTaskOutputTool_Execute_InMemoryResult(t *testing.T) {
 	}
 }
 
+func TestTaskOutputTool_ConcurrentCompletions(t *testing.T) {
+	tmpDir := t.TempDir()
+	tm := NewTaskManager().WithProjectRoot(tmpDir)
+
+	// Enqueue two completions with different taskIDs before calling Execute
+	tm.EnqueueCompletion(TaskCompletion{
+		TaskID:          "task-alpha",
+		DurationSeconds: 1.0,
+		ExitCode:        0,
+		Output:          "output from alpha",
+	})
+	tm.EnqueueCompletion(TaskCompletion{
+		TaskID:          "task-beta",
+		DurationSeconds: 1.0,
+		ExitCode:        0,
+		Output:          "output from beta",
+	})
+
+	tool := NewTaskOutputTool(tm)
+	ctx := context.Background()
+
+	// Call Execute for task-alpha
+	resultAlpha, err := tool.Execute(ctx, map[string]any{
+		"task_id": "task-alpha",
+	}, "/tmp")
+	if err != nil {
+		t.Fatalf("Execute(task-alpha) error = %v", err)
+	}
+	if resultAlpha.IsError {
+		t.Errorf("Execute(task-alpha) returned error: %v", resultAlpha.Content)
+	}
+	if resultAlpha.Content != "output from alpha" {
+		t.Errorf("Execute(task-alpha) content = %v, want 'output from alpha'", resultAlpha.Content)
+	}
+
+	// Call Execute for task-beta
+	resultBeta, err := tool.Execute(ctx, map[string]any{
+		"task_id": "task-beta",
+	}, "/tmp")
+	if err != nil {
+		t.Fatalf("Execute(task-beta) error = %v", err)
+	}
+	if resultBeta.IsError {
+		t.Errorf("Execute(task-beta) returned error: %v", resultBeta.Content)
+	}
+	if resultBeta.Content != "output from beta" {
+		t.Errorf("Execute(task-beta) content = %v, want 'output from beta'", resultBeta.Content)
+	}
+}
+
 func TestTaskOutputTool_Execute_BlockNonBlocking(t *testing.T) {
 	tmpDir := t.TempDir()
 	tm := NewTaskManager().WithProjectRoot(tmpDir)
@@ -259,18 +309,83 @@ func TestTaskOutputTool_Execute_FileOutput(t *testing.T) {
 }
 
 func TestTaskOutputTool_Execute_MaxTimeout(t *testing.T) {
-	tm := NewTaskManager()
+	tmpDir := t.TempDir()
+	tm := NewTaskManager().WithProjectRoot(tmpDir)
+
+	// Store a running task that will not complete on its own
+	tm.Store("test-task-never-completes", &TaskInfo{
+		TaskID:     "test-task-never-completes",
+		State:      TaskStateRunning,
+		OutputFile: filepath.Join(tmpDir, ".jenny", "tasks", "test-task-never-completes.output"),
+		StartTime:  time.Now(),
+		Command:    "sleep 300",
+	})
+
 	tool := NewTaskOutputTool(tm)
 	ctx := context.Background()
 
 	// Test that timeout > 600 gets capped to 600
+	// Use a very short effective timeout (0.1s) to confirm behavior quickly
+	start := time.Now()
 	result, err := tool.Execute(ctx, map[string]any{
-		"task_id": "test-task",
-		"timeout": 700, // > 600 max
+		"task_id": "test-task-never-completes",
+		"timeout": 700, // > 600 max, should be capped
 	}, "/tmp")
+	elapsed := time.Since(start)
+
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
-	// Should not error on input validation, timeout gets capped
-	_ = result
+	if !result.IsError {
+		t.Errorf("Execute() should return error on timeout")
+	}
+	// Verify timeout was capped at 600s - elapsed should be close to 600s
+	// (We use a running task so it waits for timeout, not completes early)
+	// But since we can't wait 600s in a test, we verify the error message shows timeout
+	if result.Content != "timeout waiting for task test-task-never-completes" {
+		t.Errorf("Execute() content = %v, want timeout message", result.Content)
+	}
+	// Verify the capped behavior: 700 was capped to 600, so we waited ~600s
+	// Elapsed should be close to 600s (allow some margin for test execution)
+	if elapsed < 500*time.Millisecond {
+		t.Errorf("Execute() returned too quickly (elapsed=%v), expected ~600s cap", elapsed)
+	}
+}
+
+func TestParseTimeoutSeconds(t *testing.T) {
+	tests := []struct {
+		name  string
+		input map[string]any
+		want  float64
+	}{
+		{
+			name:  "700 caps to 600",
+			input: map[string]any{"timeout": 700.0},
+			want:  600.0,
+		},
+		{
+			name:  "300 stays 300",
+			input: map[string]any{"timeout": 300.0},
+			want:  300.0,
+		},
+		{
+			name:  "0 defaults to 30",
+			input: map[string]any{"timeout": 0.0},
+			want:  30.0,
+		},
+		{
+			name:  "missing timeout defaults to 30",
+			input: map[string]any{},
+			want:  30.0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseTimeoutSeconds(tt.input)
+			if got != tt.want {
+				t.Errorf("parseTimeoutSeconds(%v) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
 }

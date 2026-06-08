@@ -10,6 +10,18 @@ import (
 	"time"
 )
 
+// parseTimeoutSeconds extracts and validates the timeout parameter from input.
+// Returns default of 30s if not provided or if timeout <= 0, caps at 600s maximum.
+func parseTimeoutSeconds(input map[string]any) float64 {
+	timeoutSecondsFloat := 30.0
+	if t, ok := input["timeout"].(float64); ok {
+		if t > 0 {
+			timeoutSecondsFloat = math.Min(t, 600.0)
+		}
+	}
+	return timeoutSecondsFloat
+}
+
 // TaskOutputTool retrieves output from background tasks.
 type TaskOutputTool struct {
 	taskManager *TaskManager
@@ -70,10 +82,7 @@ func (t *TaskOutputTool) Execute(ctx context.Context, input map[string]any, cwd 
 	}
 
 	// Get timeout parameter (default: 30s, max: 600s)
-	timeoutSecondsFloat := 30.0
-	if t, ok := input["timeout"].(float64); ok {
-		timeoutSecondsFloat = math.Min(t, 600.0)
-	}
+	timeoutSecondsFloat := parseTimeoutSeconds(input)
 
 	if t.taskManager == nil {
 		return &ToolResult{
@@ -83,14 +92,26 @@ func (t *TaskOutputTool) Execute(ctx context.Context, input map[string]any, cwd 
 	}
 
 	// Try to get output from completion queue first (in-memory result)
-	completions := t.taskManager.DrainCompletions()
-	for _, c := range completions {
+	// Drain all completions, extract matching, re-enqueue non-matching
+	all := t.taskManager.DrainCompletions()
+	var match *TaskCompletion
+	var nonMatching []TaskCompletion
+	for _, c := range all {
 		if c.TaskID == taskID {
-			return &ToolResult{
-				Content: c.Output,
-				IsError: false,
-			}, nil
+			match = &c
+		} else {
+			nonMatching = append(nonMatching, c)
 		}
+	}
+	// Re-enqueue non-matching completions
+	for _, c := range nonMatching {
+		t.taskManager.EnqueueCompletion(c)
+	}
+	if match != nil {
+		return &ToolResult{
+			Content: match.Output,
+			IsError: false,
+		}, nil
 	}
 
 	// Check if task exists
@@ -124,14 +145,26 @@ func (t *TaskOutputTool) Execute(ctx context.Context, input map[string]any, cwd 
 			}, nil
 		case <-ticker.C:
 			// Check completion queue first (early exit)
-			completions := t.taskManager.DrainCompletions()
-			for _, c := range completions {
+			// Drain all completions, extract matching, re-enqueue non-matching
+			all := t.taskManager.DrainCompletions()
+			var match *TaskCompletion
+			var nonMatching []TaskCompletion
+			for _, c := range all {
 				if c.TaskID == taskID {
-					return &ToolResult{
-						Content: c.Output,
-						IsError: false,
-					}, nil
+					match = &c
+				} else {
+					nonMatching = append(nonMatching, c)
 				}
+			}
+			// Re-enqueue non-matching completions
+			for _, c := range nonMatching {
+				t.taskManager.EnqueueCompletion(c)
+			}
+			if match != nil {
+				return &ToolResult{
+					Content: match.Output,
+					IsError: false,
+				}, nil
 			}
 
 			// Check task state
@@ -145,7 +178,7 @@ func (t *TaskOutputTool) Execute(ctx context.Context, input map[string]any, cwd 
 
 			if info.State == TaskStateCompleted || info.State == TaskStateStopped {
 				// Read output from file
-				output, err := t.readTaskOutput(taskID)
+				output, err := t.readTaskOutput(info)
 				if err != nil {
 					return &ToolResult{
 						Content: fmt.Sprintf("task ended but failed to read output: %v", err),
@@ -170,13 +203,8 @@ func (t *TaskOutputTool) Execute(ctx context.Context, input map[string]any, cwd 
 }
 
 // readTaskOutput reads and parses the task output file.
-func (t *TaskOutputTool) readTaskOutput(taskID string) (string, error) {
-	path, err := t.taskManager.TaskOutputPath(taskID)
-	if err != nil {
-		return "", fmt.Errorf("getting output path: %w", err)
-	}
-
-	data, err := os.ReadFile(path)
+func (t *TaskOutputTool) readTaskOutput(info *TaskInfo) (string, error) {
+	data, err := os.ReadFile(info.OutputFile)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return "", fmt.Errorf("output file not found")
