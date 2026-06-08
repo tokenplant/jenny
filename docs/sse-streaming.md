@@ -2,9 +2,9 @@
 title: SSE Streaming from API
 slug: sse-streaming
 priority: P0
-status: partial
+status: done
 spec: complete
-code: partial
+code: done
 package: internal/api
 gaps:
   []
