@@ -1217,10 +1217,11 @@ func TestAC3_ResultExtraction(t *testing.T) {
 	}
 }
 
-// TestAC1_ToolCallEvents verifies that when stream-json mode is enabled and
+// TestToolCallEvents verifies that when stream-json mode is enabled and
 // the model requests tool use, the engine emits tool_call started events before
 // execution and tool_call completed events after each tool completes.
-func TestAC1_ToolCallEvents(t *testing.T) {
+// This covers AC1 (started event), AC2 (completed event), and AC4 (both event types).
+func TestToolCallEvents(t *testing.T) {
 	tmpDir := t.TempDir()
 	sessMgr, err := session.NewManager(tmpDir, false)
 	if err != nil {
@@ -1321,5 +1322,84 @@ func TestAC1_ToolCallEvents(t *testing.T) {
 		t.Error("AC1 FAIL: stdout does not contain tool_use_id in tool_call event")
 	} else {
 		t.Log("AC1 PASS: stdout contains tool_use_id in tool_call event")
+	}
+}
+
+// TestToolCallEvents_Negative verifies that when stream-json mode is DISABLED
+// (Enabled=false), no tool_call events are emitted on stdout. This is the AC3
+// negative path - verifying the absence of events when the feature is off.
+func TestToolCallEvents_Negative(t *testing.T) {
+	tmpDir := t.TempDir()
+	sessMgr, err := session.NewManager(tmpDir, false)
+	if err != nil {
+		t.Fatalf("NewManager error: %v", err)
+	}
+
+	sessionID := "sess_tool_call_negative"
+
+	// Server that returns a single tool_use then end_turn
+	server := makeTestMockStreamServer([]string{
+		testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
+		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tool_1","name":"bash","input":{}}}`),
+		testSseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
+		testSseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":1}}`),
+		testSseLine("message_stop", `{"type":"message_stop"}`),
+	})
+	defer server.Close()
+
+	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
+	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
+	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	os.Setenv("ANTHROPIC_API_KEY", "test-key")
+	defer func() {
+		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
+		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
+	}()
+
+	// Save original stdout
+	oldStdout := os.Stdout
+
+	// Create pipe to capture stdout
+	stdoutR, stdoutW, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe() error: %v", err)
+	}
+
+	// Redirect stdout to our pipe
+	os.Stdout = stdoutW
+
+	cfg := StreamConfig{
+		Enabled:        false, // Stream-json mode DISABLED
+		SessionManager: sessMgr,
+		SessionID:      sessionID,
+	}
+
+	engine := NewQueryEngine(cfg, nil, "")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, err = engine.SubmitMessage(ctx, "test prompt")
+
+	// Close write end to signal EOF on read end
+	stdoutW.Close()
+
+	// Restore original stdout BEFORE checking output
+	os.Stdout = oldStdout
+
+	if err != nil {
+		t.Fatalf("SubmitMessage error: %v", err)
+	}
+
+	// Read captured stdout
+	var stdoutBuf bytes.Buffer
+	io.Copy(&stdoutBuf, stdoutR)
+	stdoutOutput := stdoutBuf.String()
+
+	// AC3 negative: Verify NO tool_call events appear when stream-json is disabled
+	if strings.Contains(stdoutOutput, `"type":"tool_call"`) {
+		t.Error("AC3 FAIL: stdout contains tool_call event even though stream-json mode is disabled")
+	} else {
+		t.Log("AC3 PASS: no tool_call events emitted when stream-json mode is disabled")
 	}
 }

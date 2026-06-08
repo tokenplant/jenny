@@ -275,6 +275,10 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 	}
 
 	for range MaxIterations {
+		// Check if context is already cancelled/timed out before attempting API call
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
 		e.mu.Lock()
 		// AC2: maxTurns enforcement - check before each API call
 		if e.maxTurns > 0 && e.turnCount >= e.maxTurns {
