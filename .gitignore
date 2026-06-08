@@ -43,3 +43,6 @@ dist/
 **/fake-mcp-server
 
 references/
+
+# Agent transcripts
+internal/agent/transcripts/*.jsonl

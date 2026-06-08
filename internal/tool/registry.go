@@ -28,6 +28,8 @@ type Registry struct {
 	taskOutputEnabled      bool
 	skillsFrameworkEnabled bool
 	skillActivator         SkillActivator
+	enterWorktreeEnabled   bool
+	exitWorktreeEnabled    bool
 }
 
 // NewRegistry creates a new Registry.
@@ -153,6 +155,18 @@ func (r *Registry) WithTaskOutputEnabled(enabled bool) *Registry {
 	return r
 }
 
+// WithEnterWorktreeEnabled enables the EnterWorktree tool for creating isolated git worktree sessions.
+func (r *Registry) WithEnterWorktreeEnabled(enabled bool) *Registry {
+	r.enterWorktreeEnabled = enabled
+	return r
+}
+
+// WithExitWorktreeEnabled enables the ExitWorktree tool for exiting git worktree sessions.
+func (r *Registry) WithExitWorktreeEnabled(enabled bool) *Registry {
+	r.exitWorktreeEnabled = enabled
+	return r
+}
+
 // Build returns the final ordered tool list.
 // Built-in tools appear first, then MCP tools. Deny rules and enabled flags
 // filter the output. On name collision, the built-in tool wins.
@@ -239,6 +253,14 @@ func (r *Registry) Build() []Tool {
 		// Add Skill tool if skills are discovered (P3).
 		if len(r.skills) > 0 {
 			r.baseTools = append(r.baseTools, NewSkillTool(r.skills))
+		}
+
+		// Add EnterWorktree and ExitWorktree tools if enabled (P4).
+		if r.enterWorktreeEnabled {
+			r.baseTools = append(r.baseTools, NewEnterWorktreeTool())
+		}
+		if r.exitWorktreeEnabled {
+			r.baseTools = append(r.baseTools, NewExitWorktreeTool())
 		}
 	}
 
