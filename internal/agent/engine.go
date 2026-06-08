@@ -40,6 +40,9 @@ type QueryEngine struct {
 
 	// Memory extraction
 	memExtractor *MemoryExtractor
+
+	// Structured output (AC3)
+	structuredOutputTool *tool.StructuredOutputTool
 }
 
 // NewQueryEngine creates a new QueryEngine with the given configuration.
@@ -48,6 +51,14 @@ func NewQueryEngine(cfg StreamConfig, tools []tool.Tool, model string) *QueryEng
 	if err != nil {
 		// Client creation error will be reported on first API call
 		log.Debug("QueryEngine: API client creation warning", "error", err)
+	}
+
+	// AC1/AC4: Inject StructuredOutputTool for non-interactive sessions with schema
+	var structuredTool *tool.StructuredOutputTool
+	if cfg.StructuredSchema != nil && cfg.Enabled {
+		// Create the structured output tool
+		structuredTool = tool.NewStructuredOutputTool(cfg.StructuredSchema)
+		tools = append(tools, structuredTool)
 	}
 
 	// Derive tool params from tool list
@@ -104,17 +115,18 @@ func NewQueryEngine(cfg StreamConfig, tools []tool.Tool, model string) *QueryEng
 	}
 
 	engine := &QueryEngine{
-		client:           client,
-		sessionManager:   cfg.SessionManager,
-		costState:        costState,
-		tools:            tools,
-		toolParams:       toolParams,
-		streamCfg:        cfg,
-		model:            model,
-		turnCount:        0,
-		maxTurns:         0, // 0 means unlimited
-		compactConfig:    newCompactConfig(),
-		compactFailCount: compactFailCount,
+		client:               client,
+		sessionManager:       cfg.SessionManager,
+		costState:            costState,
+		tools:                tools,
+		toolParams:           toolParams,
+		streamCfg:            cfg,
+		model:                model,
+		turnCount:            0,
+		maxTurns:             0, // 0 means unlimited
+		compactConfig:        newCompactConfig(),
+		compactFailCount:     compactFailCount,
+		structuredOutputTool: structuredTool,
 	}
 
 	// Wire ReadFileCache from StreamConfig into tools that support it
@@ -287,6 +299,11 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 		budgetUSD := e.streamCfg.MaxBudgetUSD
 		budgetCNY := e.streamCfg.MaxBudgetCNY
 		e.mu.Unlock()
+
+		// AC3: Reset structured output tool at start of each turn
+		if e.structuredOutputTool != nil {
+			e.structuredOutputTool.Reset()
+		}
 
 		// AC2: Budget enforcement - check before each API call
 		// Use CNY budget if currency is CNY, otherwise use USD budget
@@ -613,6 +630,10 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 		// Handle stop reason
 		switch resp.StopReason {
 		case api.StopReasonEndTurn:
+			// AC3: Enforce structured output at end of turn
+			if e.structuredOutputTool != nil && !e.structuredOutputTool.IsEmitted() {
+				return "", fmt.Errorf("structured output not emitted")
+			}
 			if len(toolResults) > 0 {
 				// Send tool results back to model before ending
 				userMsg := api.Message{

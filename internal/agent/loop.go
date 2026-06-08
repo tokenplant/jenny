@@ -128,6 +128,7 @@ type StreamConfig struct {
 	MemoryContent        string                      // Memory content to inject into system prompt
 	Skills               []skills.Skill              // Discovered skills for manifest
 	IsForkChild          bool                        // True when this session is a fork child (subagent spawned another agent)
+	StructuredSchema     map[string]any              // JSON schema for structured output (AC1, AC4: non-interactive only)
 }
 
 // ToolParam represents a tool parameter for the API.
