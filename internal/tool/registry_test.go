@@ -337,3 +337,88 @@ func TestAC4_ReadFileCacheWireToTools(t *testing.T) {
 
 	t.Log("AC4 PASS: ReadTool created with ReadFileCache support")
 }
+
+// TestAC3_TaskCreateAppearsWhenTodoV2Enabled verifies that when TodoV2Enabled
+// is true and TaskCreateEnabled is true, the TaskCreate tool appears in the
+// registry.
+func TestAC3_TaskCreateAppearsWhenTodoV2Enabled(t *testing.T) {
+	tools := NewRegistry().
+		WithBaseTools().
+		WithTodoV2Enabled(true).
+		WithTaskCreateEnabled(true).
+		Build()
+
+	names := make(map[string]bool)
+	for _, t := range tools {
+		names[t.Name()] = true
+	}
+
+	if !names["TaskCreate"] {
+		t.Error("expected 'TaskCreate' tool when TodoV2Enabled and TaskCreateEnabled")
+	}
+
+	t.Log("AC3 PASS: TaskCreate tool appears when TodoV2Enabled and TaskCreateEnabled")
+}
+
+// TestAC3_TodoWriteExcludedWhenTodoV2Enabled verifies that when TodoV2Enabled
+// is true, the TodoWrite tool is NOT included in the registry, even if
+// TodoWriteEnabled would normally be true.
+func TestAC3_TodoWriteExcludedWhenTodoV2Enabled(t *testing.T) {
+	tools := NewRegistry().
+		WithBaseTools().
+		WithTodoV2Enabled(true).
+		WithTaskCreateEnabled(true).
+		WithTodoWriteEnabled(true). // Would add TodoWrite if v2 was not enabled
+		Build()
+
+	names := make(map[string]bool)
+	for _, t := range tools {
+		names[t.Name()] = true
+	}
+
+	if names["TodoWrite"] {
+		t.Error("'TodoWrite' should not appear when TodoV2Enabled is true")
+	}
+
+	t.Log("AC3 PASS: TodoWrite excluded when TodoV2Enabled is true")
+}
+
+// TestAC3_TaskCreateNotAppearsWithoutTodoV2Enabled verifies that TaskCreate
+// does not appear when TodoV2Enabled is false.
+func TestAC3_TaskCreateNotAppearsWithoutTodoV2Enabled(t *testing.T) {
+	tools := NewRegistry().
+		WithBaseTools().
+		WithTaskCreateEnabled(true). // Enabled but TodoV2Enabled is false
+		Build()
+
+	names := make(map[string]bool)
+	for _, t := range tools {
+		names[t.Name()] = true
+	}
+
+	if names["TaskCreate"] {
+		t.Error("'TaskCreate' should not appear when TodoV2Enabled is false")
+	}
+
+	t.Log("AC3 PASS: TaskCreate does not appear without TodoV2Enabled")
+}
+
+// TestAC3_TodoWriteAppearsWithoutTodoV2Enabled verifies that TodoWrite appears
+// normally when TodoV2Enabled is false and TodoWriteEnabled is true.
+func TestAC3_TodoWriteAppearsWithoutTodoV2Enabled(t *testing.T) {
+	tools := NewRegistry().
+		WithBaseTools().
+		WithTodoWriteEnabled(true).
+		Build()
+
+	names := make(map[string]bool)
+	for _, t := range tools {
+		names[t.Name()] = true
+	}
+
+	if !names["TodoWrite"] {
+		t.Error("expected 'TodoWrite' tool when TodoV2Enabled is false and TodoWriteEnabled is true")
+	}
+
+	t.Log("AC3 PASS: TodoWrite appears normally without TodoV2Enabled")
+}
