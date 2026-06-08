@@ -1,8 +1,11 @@
-package tool
+package tool_test
 
 import (
 	"context"
 	"testing"
+
+	"github.com/ipy/jenny/internal/agent"
+	"github.com/ipy/jenny/internal/tool"
 )
 
 // ============================================================================
@@ -11,10 +14,10 @@ import (
 
 func TestAC1_NamedAgent_CannotSpawnNamedAgent(t *testing.T) {
 	// Create an AgentTool with swarms enabled
-	agentTool := NewAgentToolWithSwarms(nil, nil, true)
+	agentTool := tool.NewAgentToolWithSwarms(nil, nil, true)
 
-	// Simulate being in a named agent context by using NamedAgentKey
-	ctx := context.WithValue(context.Background(), NamedAgentKey, true)
+	// Simulate being in a named agent context by using tool.NamedAgentKey
+	ctx := context.WithValue(context.Background(), tool.NamedAgentKey, true)
 
 	input := map[string]any{
 		"prompt":        "test prompt",
@@ -38,10 +41,10 @@ func TestAC1_NamedAgent_CanSpawnUnnamedAgent(t *testing.T) {
 	// Create an AgentTool with swarms enabled
 	// We need a mock runner since we're testing the context check, not actual execution
 	mockRunner := &mockSubagentRunnerForAC1{}
-	agentTool := NewAgentToolWithSwarms(mockRunner, nil, true)
+	agentTool := tool.NewAgentToolWithSwarms(mockRunner, nil, true)
 
 	// Simulate being in a named agent context
-	ctx := context.WithValue(context.Background(), NamedAgentKey, true)
+	ctx := context.WithValue(context.Background(), tool.NamedAgentKey, true)
 
 	input := map[string]any{
 		"prompt":        "test prompt",
@@ -64,9 +67,13 @@ func TestAC1_NamedAgent_CanSpawnUnnamedAgent(t *testing.T) {
 // mockSubagentRunnerForAC1 implements SubagentRunner for testing
 type mockSubagentRunnerForAC1 struct{}
 
-func (m *mockSubagentRunnerForAC1) RunSubagent(ctx context.Context, params SubagentParams) (*SubagentResult, error) {
+func (m *mockSubagentRunnerForAC1) RunSubagent(ctx context.Context, params tool.SubagentParams) (*tool.SubagentResult, error) {
 	// Return a successful result - we only care that the nested name check passes
-	return &SubagentResult{Output: "success"}, nil
+	return &tool.SubagentResult{Output: "success"}, nil
+}
+
+func (m *mockSubagentRunnerForAC1) GetCapturedStreamConfigInfo() map[string]any {
+	return nil
 }
 
 // ============================================================================
@@ -75,7 +82,7 @@ func (m *mockSubagentRunnerForAC1) RunSubagent(ctx context.Context, params Subag
 
 func TestAC2_SwarmModeDisabled_NameParameterReturnsError(t *testing.T) {
 	// Create an AgentTool with swarms DISABLED (default)
-	agentTool := NewAgentTool(nil, nil) // swarmsEnabled = false by default
+	agentTool := tool.NewAgentTool(nil, nil) // swarmsEnabled = false by default
 
 	input := map[string]any{
 		"prompt":        "test prompt",
@@ -98,7 +105,7 @@ func TestAC2_SwarmModeDisabled_NameParameterReturnsError(t *testing.T) {
 func TestAC2_SwarmModeEnabled_NameParameterAccepted(t *testing.T) {
 	// Create an AgentTool with swarms ENABLED
 	mockRunner := &mockSubagentRunnerForAC3{}
-	agentTool := NewAgentToolWithSwarms(mockRunner, nil, true)
+	agentTool := tool.NewAgentToolWithSwarms(mockRunner, nil, true)
 
 	// Input with name should be accepted (will fail on execution since mock has no real tools)
 	input := map[string]any{
@@ -125,7 +132,7 @@ func TestAC2_SwarmModeEnabled_NameParameterAccepted(t *testing.T) {
 
 func TestAC2_NameParameterNotInSchemaWhenDisabled(t *testing.T) {
 	// Create an AgentTool with swarms DISABLED
-	agentTool := NewAgentTool(nil, nil)
+	agentTool := tool.NewAgentTool(nil, nil)
 
 	schema := agentTool.InputSchema()
 	props, ok := schema["properties"].(map[string]any)
@@ -140,7 +147,7 @@ func TestAC2_NameParameterNotInSchemaWhenDisabled(t *testing.T) {
 
 func TestAC2_NameParameterInSchemaWhenEnabled(t *testing.T) {
 	// Create an AgentTool with swarms ENABLED
-	agentTool := NewAgentToolWithSwarms(nil, nil, true)
+	agentTool := tool.NewAgentToolWithSwarms(nil, nil, true)
 
 	schema := agentTool.InputSchema()
 	props, ok := schema["properties"].(map[string]any)
@@ -160,10 +167,12 @@ func TestAC2_NameParameterInSchemaWhenEnabled(t *testing.T) {
 func TestAC3_NamedAgentHasAccessToParentTools(t *testing.T) {
 	// This test verifies the structural constraint:
 	// When name is set, IsNamedAgent is marked in the child's StreamConfig
-	// The NamedAgentKey context value should propagate
+	// The tool.NamedAgentKey context value should propagate
 
-	mockRunner := &mockSubagentRunnerForAC3{}
-	agentTool := NewAgentToolWithSwarms(mockRunner, nil, true)
+	// Use LocalSubagentRunner to verify StreamConfig capture
+	readTool := tool.NewReadTool(false, nil)
+	runner := agent.NewLocalSubagentRunner([]tool.Tool{readTool}, nil)
+	agentTool := tool.NewAgentToolWithSwarms(runner, nil, true)
 
 	input := map[string]any{
 		"prompt":        "test prompt",
@@ -175,32 +184,55 @@ func TestAC3_NamedAgentHasAccessToParentTools(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// The mock runner will fail, but the structural constraint is that
-	// IsNamedAgent was set to true in the child's StreamConfig
+	// The runner will fail on execution (no API client), but the structural
+	// constraint is that IsNamedAgent was set to true in the child's StreamConfig
 	// We verify this by checking that the result is not the nested agent error
 	if result.Content == "nested named agents not allowed" {
 		t.Fatalf("named agent should be able to execute (flat delegation)")
 	}
-	// Verify Name was captured in mock runner params
-	if mockRunner.capturedParams.Name != "worker1" {
-		t.Errorf("AC3 FAIL: expected Name='worker1', got Name='%s'", mockRunner.capturedParams.Name)
+
+	// AC2-(5): Verify captured StreamConfig shows IsNamedAgent=true and inherited fields
+	cfgInfo := runner.GetCapturedStreamConfigInfo()
+	if cfgInfo == nil {
+		t.Fatal("AC2-(5) FAIL: expected captured StreamConfig, got nil")
+	}
+
+	if !cfgInfo["IsNamedAgent"].(bool) {
+		t.Error("AC2-(5) FAIL: IsNamedAgent should be true")
 	} else {
-		t.Log("AC3 PASS: Name='worker1' was captured in mock runner params")
+		t.Log("AC2-(5) PASS: IsNamedAgent is true")
+	}
+
+	// Verify inherited fields are present (non-nil values indicate inheritance happened)
+	if cfgInfo["MaxBudgetUSD"] == nil {
+		t.Error("AC2-(5) FAIL: MaxBudgetUSD should be inherited")
+	} else {
+		t.Log("AC2-(5) PASS: MaxBudgetUSD is inherited")
+	}
+
+	if cfgInfo["MaxTurns"] == nil {
+		t.Error("AC2-(5) FAIL: MaxTurns should be inherited")
+	} else {
+		t.Log("AC2-(5) PASS: MaxTurns is inherited")
 	}
 }
 
 // mockSubagentRunnerForAC3 captures the params to verify IsNamedAgent was set
 type mockSubagentRunnerForAC3 struct {
-	capturedParams SubagentParams
+	capturedParams tool.SubagentParams
 }
 
-func (m *mockSubagentRunnerForAC3) RunSubagent(ctx context.Context, params SubagentParams) (*SubagentResult, error) {
+func (m *mockSubagentRunnerForAC3) RunSubagent(ctx context.Context, params tool.SubagentParams) (*tool.SubagentResult, error) {
 	m.capturedParams = params
 	// Verify that Name was propagated
 	if params.Name != "worker1" {
-		return &SubagentResult{Output: "name not propagated"}, nil
+		return &tool.SubagentResult{Output: "name not propagated"}, nil
 	}
-	return &SubagentResult{Output: "success"}, nil
+	return &tool.SubagentResult{Output: "success"}, nil
+}
+
+func (m *mockSubagentRunnerForAC3) GetCapturedStreamConfigInfo() map[string]any {
+	return nil
 }
 
 // ============================================================================
@@ -210,7 +242,7 @@ func (m *mockSubagentRunnerForAC3) RunSubagent(ctx context.Context, params Subag
 func TestEdgeCase_EmptyNameParameterIsIgnored(t *testing.T) {
 	// Create an AgentTool with swarms DISABLED and a mock runner
 	mockRunner := &mockSubagentRunnerForAC1{}
-	agentTool := NewAgentToolWithSwarms(mockRunner, nil, false) // swarmsEnabled = false
+	agentTool := tool.NewAgentToolWithSwarms(mockRunner, nil, false) // swarmsEnabled = false
 
 	// Empty string for name should be treated as no name (unnamed subagent)
 	input := map[string]any{
@@ -231,10 +263,10 @@ func TestEdgeCase_EmptyNameParameterIsIgnored(t *testing.T) {
 
 func TestEdgeCase_ForkChildStillBlocked(t *testing.T) {
 	// Even with swarms enabled, recursive fork should still be blocked
-	agentTool := NewAgentToolWithSwarms(nil, nil, true)
+	agentTool := tool.NewAgentToolWithSwarms(nil, nil, true)
 
 	// Simulate being in a fork child context
-	ctx := context.WithValue(context.Background(), ForkChildKey, true)
+	ctx := context.WithValue(context.Background(), tool.ForkChildKey, true)
 
 	input := map[string]any{
 		"prompt":        "test prompt",

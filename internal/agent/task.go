@@ -221,6 +221,23 @@ func (r *LocalSubagentRunner) GetCapturedStreamConfig() StreamConfig {
 	return r.capturedStreamCfg
 }
 
+// GetCapturedStreamConfigInfo returns info about the captured StreamConfig as a map.
+// Implements tool.SubagentRunner.GetCapturedStreamConfigInfo.
+func (r *LocalSubagentRunner) GetCapturedStreamConfigInfo() map[string]any {
+	cfg := r.capturedStreamCfg
+	return map[string]any{
+		"IsNamedAgent":         cfg.IsNamedAgent,
+		"MaxBudgetUSD":         cfg.MaxBudgetUSD,
+		"MaxBudgetCNY":         cfg.MaxBudgetCNY,
+		"MaxTurns":             cfg.MaxTurns,
+		"CustomSystemPrompt":   cfg.CustomSystemPrompt,
+		"AppendSystemPrompt":   cfg.AppendSystemPrompt,
+		"OverrideSystemPrompt": cfg.OverrideSystemPrompt,
+		"StructuredSchema":     cfg.StructuredSchema,
+		"StructuredDenyRules":  cfg.StructuredDenyRules,
+	}
+}
+
 // RunSubagent runs a subagent with the given parameters.
 func (r *LocalSubagentRunner) RunSubagent(ctx context.Context, params tool.SubagentParams) (*tool.SubagentResult, error) {
 	// Validate subagent type

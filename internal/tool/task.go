@@ -35,6 +35,9 @@ type SubagentResult struct {
 // SubagentRunner runs subagents with typed tool allowlists.
 type SubagentRunner interface {
 	RunSubagent(ctx context.Context, params SubagentParams) (*SubagentResult, error)
+	// GetCapturedStreamConfigInfo returns info about the StreamConfig most recently
+	// constructed in RunSubagent, for test verification. Returns nil if unavailable.
+	GetCapturedStreamConfigInfo() map[string]any
 }
 
 // AsyncRunner can launch subagents asynchronously.
