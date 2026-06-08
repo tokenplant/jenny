@@ -2,9 +2,9 @@
 title: CLI
 slug: cli
 priority: P0
-status: partial
+status: done
 spec: complete
-code: partial
+code: done
 package: internal/cli
 gaps: []
 defer_to: P3
@@ -79,7 +79,7 @@ Help (`-h`) exits 0.
 | `--continue` | Wired |
 | `--no-session-persistence` | Wired |
 | `--fork-session` | Wired |
-| stream-json stdout guard | Not implemented |
+| stream-json stdout guard | Wired |
 
 ## Acceptance Criteria
 

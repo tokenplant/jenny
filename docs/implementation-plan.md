@@ -201,7 +201,7 @@ Implement in this order:
 - [x] WebSearch — [`web-search.md`](./web-search.md)
 - [x] LSP — [`lsp.md`](./lsp.md)
 - [x] Skill — [`skill.md`](./skill.md)
-- [ ] Sleep / Await — [`sleep-await.md`](./sleep-await.md)
+- [x] Sleep / Await — [`sleep-await.md`](./sleep-await.md)
 
 ---
 
