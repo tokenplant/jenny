@@ -191,6 +191,7 @@ type LocalSubagentRunner struct {
 	denyRules     map[string]bool
 	sessionMgr    *session.Manager
 	swarmsEnabled bool
+	parentConfig  StreamConfig // Parent's StreamConfig for inheritance when Name is set (AC3)
 }
 
 // NewLocalSubagentRunner creates a new LocalSubagentRunner.
@@ -214,6 +215,11 @@ func (r *LocalSubagentRunner) SetSwarmsEnabled(enabled bool) {
 	r.swarmsEnabled = enabled
 }
 
+// SetParentConfig sets the parent StreamConfig for inheritance when Name is set (AC3).
+func (r *LocalSubagentRunner) SetParentConfig(cfg StreamConfig) {
+	r.parentConfig = cfg
+}
+
 // RunSubagent runs a subagent with the given parameters.
 func (r *LocalSubagentRunner) RunSubagent(ctx context.Context, params tool.SubagentParams) (*tool.SubagentResult, error) {
 	// Validate subagent type
@@ -232,15 +238,22 @@ func (r *LocalSubagentRunner) RunSubagent(ctx context.Context, params tool.Subag
 		denyList = append(denyList, name)
 	}
 
-	// Get filtered tool allowlist for this subagent type
-	allowedToolNames := subagentType.FilterTools(denyList)
-
 	// Build the tool list for the subagent
 	var subagentTools []tool.Tool
-	for _, toolName := range allowedToolNames {
-		t := tool.FindTool(r.tools, toolName)
-		if t != nil {
-			subagentTools = append(subagentTools, t)
+
+	// AC3-tool-inheritance: Named agents (params.Name != "") get the parent's full tool registry
+	// Unnamed subagents get the subagent-type-filtered tool list
+	if params.Name != "" {
+		// Named agent: inherit parent's full tool registry (no filtering)
+		subagentTools = r.tools
+	} else {
+		// Unnamed subagent: filter by subagent type
+		allowedToolNames := subagentType.FilterTools(denyList)
+		for _, toolName := range allowedToolNames {
+			t := tool.FindTool(r.tools, toolName)
+			if t != nil {
+				subagentTools = append(subagentTools, t)
+			}
 		}
 	}
 
@@ -288,6 +301,15 @@ func (r *LocalSubagentRunner) RunSubagent(ctx context.Context, params tool.Subag
 		IsForkChild:   true,              // Mark as fork child for recursive fork detection
 		IsNamedAgent:  params.Name != "", // Mark as named agent for nested name blocking (AC1)
 		SwarmsEnabled: r.swarmsEnabled,   // Propagate swarm mode flag to child for nested checks (AC2)
+	}
+
+	// AC3-streamconfig-inheritance: Named agents inherit parent config fields
+	if params.Name != "" {
+		streamCfg.MCPConfig = r.parentConfig.MCPConfig
+		streamCfg.AutoMemoryEnabled = r.parentConfig.AutoMemoryEnabled
+		streamCfg.MemoryContent = r.parentConfig.MemoryContent
+		streamCfg.ReadFileCache = r.parentConfig.ReadFileCache
+		streamCfg.Skills = r.parentConfig.Skills
 	}
 
 	// Ensure cleanup of worktree on exit (AC2)
@@ -341,6 +363,11 @@ func (r *AsyncSubagentRunner) SetSessionManager(mgr *session.Manager) {
 // SetSwarmsEnabled sets whether swarm mode is enabled for subagent delegation.
 func (r *AsyncSubagentRunner) SetSwarmsEnabled(enabled bool) {
 	r.runner.swarmsEnabled = enabled
+}
+
+// SetParentConfig sets the parent StreamConfig for inheritance when Name is set (AC3).
+func (r *AsyncSubagentRunner) SetParentConfig(cfg StreamConfig) {
+	r.runner.parentConfig = cfg
 }
 
 // RunSubagentAsync launches a subagent asynchronously.

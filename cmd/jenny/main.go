@@ -184,6 +184,10 @@ func run() error {
 		SwarmsEnabled:   flags.SwarmsEnabled,
 	}
 
+	// AC3-streamconfig-inheritance: Set parent config on runner for named agent inheritance
+	localRunner.SetParentConfig(streamCfg)
+	asyncRunner.SetParentConfig(streamCfg)
+
 	// Run agent
 	result, _, err := agent.RunStream(ctx, flags.Prompt, tools, cwd, streamCfg, flags.Model)
 	if err != nil {
