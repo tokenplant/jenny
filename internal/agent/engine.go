@@ -571,6 +571,9 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 
 		// Fallback block processing: if blocksChan was empty but streamResult.Blocks has content
 		if textOutput.Len() == 0 && len(toolUseBlocks) == 0 && len(streamResult.Blocks) > 0 {
+			// Collect pending web search results to emit user wrappers after assistant
+			var pendingWebSearchResults []api.ContentBlock
+
 			for _, block := range streamResult.Blocks {
 				switch block.Type {
 				case "text":
@@ -584,25 +587,6 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 						Name:  block.ToolName,
 						Input: block.ToolInput,
 					})
-
-					if e.streamCfg.Enabled {
-						// AC4: assistant and user message wrapper lines are emitted in fallback scenario
-						assistantContent := []map[string]any{
-							{"type": "tool_use", "id": block.ToolID, "name": block.ToolName, "input": block.ToolInput},
-						}
-						// If there's preceding text, prepend it
-						if textOutput.Len() > 0 {
-							assistantContent = append([]map[string]any{{"type": "text", "text": textOutput.String()}}, assistantContent...)
-						}
-						msg := StreamMessage{
-							Type:      "assistant",
-							SessionID: sessionID,
-							Uuid:      GenerateUUID(),
-							Message:   map[string]any{"role": "assistant", "content": assistantContent},
-						}
-						data, _ := json.Marshal(msg)
-						fmt.Fprintln(os.Stdout, string(data))
-					}
 				case "web_search_tool_result":
 					// AC5: Process web search results and surface error codes in fallback
 					if block.WebSearchResult != nil && block.WebSearchResult.IsError {
@@ -612,7 +596,52 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 							IsError:   true,
 						})
 					}
+					pendingWebSearchResults = append(pendingWebSearchResults, block)
 				}
+			}
+
+			// AC4: Emit ONE consolidated assistant message for all collected content
+			if e.streamCfg.Enabled && (textOutput.Len() > 0 || len(toolUseBlocks) > 0) {
+				assistantContent := []map[string]any{}
+				if textOutput.Len() > 0 {
+					assistantContent = append(assistantContent, map[string]any{"type": "text", "text": textOutput.String()})
+				}
+				for _, tb := range toolUseBlocks {
+					assistantContent = append(assistantContent, map[string]any{"type": "tool_use", "id": tb.ID, "name": tb.Name, "input": tb.Input})
+				}
+				msg := StreamMessage{
+					Type:      "assistant",
+					SessionID: sessionID,
+					Uuid:      GenerateUUID(),
+					Message:   map[string]any{"role": "assistant", "content": assistantContent},
+				}
+				data, _ := json.Marshal(msg)
+				fmt.Fprintln(os.Stdout, string(data))
+			}
+
+			// AC4: Emit user message wrappers for web search tool results
+			for _, result := range pendingWebSearchResults {
+				if result.WebSearchResult == nil {
+					continue
+				}
+				var toolResultContent any
+				if result.WebSearchResult.IsError {
+					toolResultContent = fmt.Sprintf("web search error: %s", result.WebSearchResult.ErrorCode)
+				} else {
+					// Non-error case: pass through the block's text content if present
+					toolResultContent = result.Text
+				}
+				userContent := []map[string]any{
+					{"type": "tool_result", "tool_use_id": result.WebSearchResult.ToolUseID, "content": toolResultContent},
+				}
+				userMsg := StreamMessage{
+					Type:      "user",
+					SessionID: sessionID,
+					Uuid:      GenerateUUID(),
+					Message:   map[string]any{"role": "user", "content": userContent},
+				}
+				data, _ := json.Marshal(userMsg)
+				fmt.Fprintln(os.Stdout, string(data))
 			}
 		}
 
