@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"regexp"
+	"strings"
 
 	"github.com/ipy/jenny/internal/git"
 )
@@ -72,7 +73,14 @@ func (t *EnterWorktreeTool) Execute(ctx context.Context, input map[string]any, c
 		}
 	} else {
 		// Generate random 8-char hex slug
-		slug = generateRandomSlug()
+		var err error
+		slug, err = generateRandomSlug()
+		if err != nil {
+			return &ToolResult{
+				Content: fmt.Sprintf("failed to generate random slug: %v", err),
+				IsError: true,
+			}, nil
+		}
 	}
 
 	// Resolve to canonical git root first
@@ -96,7 +104,10 @@ func (t *EnterWorktreeTool) Execute(ctx context.Context, input map[string]any, c
 	// Get branch name
 	branch, err := git.GetBranch(worktreePath)
 	if err != nil {
-		branch = "unknown"
+		return &ToolResult{
+			Content: fmt.Sprintf("failed to resolve branch: %v", err),
+			IsError: true,
+		}, nil
 	}
 
 	// Mark as in worktree session
@@ -130,8 +141,8 @@ func validateSlug(slug string) error {
 	}
 
 	// Check each segment length
-	segments := splitSlug(slug)
-	for _, seg := range segments {
+	segments := strings.SplitSeq(slug, "/")
+	for seg := range segments {
 		if len(seg) > 64 {
 			return fmt.Errorf("segment %q exceeds 64 characters", seg)
 		}
@@ -140,27 +151,12 @@ func validateSlug(slug string) error {
 	return nil
 }
 
-// splitSlug splits a slug by '/'.
-func splitSlug(slug string) []string {
-	var segments []string
-	start := 0
-	for i := 0; i < len(slug); i++ {
-		if slug[i] == '/' {
-			if start < i {
-				segments = append(segments, slug[start:i])
-			}
-			start = i + 1
-		}
-	}
-	if start < len(slug) {
-		segments = append(segments, slug[start:])
-	}
-	return segments
-}
-
 // generateRandomSlug generates a random 8-character hex string.
-func generateRandomSlug() string {
+func generateRandomSlug() (string, error) {
 	b := make([]byte, 4)
-	rand.Read(b)
-	return fmt.Sprintf("%x", b)
+	_, err := rand.Read(b)
+	if err != nil {
+		return "", fmt.Errorf("generating slug: %w", err)
+	}
+	return fmt.Sprintf("%x", b), nil
 }

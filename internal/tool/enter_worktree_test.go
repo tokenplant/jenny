@@ -202,7 +202,10 @@ func TestValidateSlug_SegmentLength(t *testing.T) {
 }
 
 func TestGenerateRandomSlug(t *testing.T) {
-	slug := generateRandomSlug()
+	slug, err := generateRandomSlug()
+	if err != nil {
+		t.Fatalf("generateRandomSlug() error = %v", err)
+	}
 	if len(slug) != 8 {
 		t.Errorf("generateRandomSlug() len = %d, want 8", len(slug))
 	}
@@ -215,9 +218,22 @@ func TestGenerateRandomSlug(t *testing.T) {
 	}
 
 	// Should generate different values
-	slug2 := generateRandomSlug()
+	slug2, err := generateRandomSlug()
+	if err != nil {
+		t.Fatalf("generateRandomSlug() second call error = %v", err)
+	}
 	if slug == slug2 {
 		t.Error("generateRandomSlug() generated same slug twice")
+	}
+}
+
+func TestGenerateRandomSlug_EntropyFailure(t *testing.T) {
+	// Test that generateRandomSlug handles errors properly
+	// We can't easily simulate entropy failure, but we verify the function signature
+	_, err := generateRandomSlug()
+	if err != nil {
+		// On a正常工作 system this should not fail, but error handling must work
+		t.Logf("generateRandomSlug() returned error (expected on some systems): %v", err)
 	}
 }
 
@@ -260,7 +276,7 @@ func CreateWorktreeForTest(t *testing.T, repoRoot, branch string) string {
 
 	_, err = runGitCommandTest(repoRoot, "worktree", "add", "-b", branch, worktreePath)
 	if err != nil {
-		t.Skip("git worktree not available or not supported")
+		t.Fatalf("git worktree add failed: %v", err)
 	}
 
 	return worktreePath

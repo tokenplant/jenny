@@ -3,7 +3,6 @@ package tool
 import (
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 )
@@ -276,15 +275,4 @@ func TestIsWorktreeDirty(t *testing.T) {
 	if !dirty {
 		t.Error("worktree with uncommitted file should be dirty")
 	}
-}
-
-// Helper: run a git command for tests
-func runGitCommandForTest(dir string, args ...string) (string, error) {
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", err
-	}
-	return string(out), nil
 }
