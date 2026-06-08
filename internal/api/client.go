@@ -3,6 +3,7 @@ package api
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"os"
@@ -227,56 +228,161 @@ func ValidateMessagesMedia(messages []Message) error {
 	return nil
 }
 
-// countMediaInContent counts media items and finds the largest size in content.
-// Returns count, largest base64 size found, and any error.
+// countMediaInContent counts media items and finds the largest decoded size in content.
+// Returns count, largest decoded size found, and any error.
 func countMediaInContent(content string) (count int, largestSize int, err error) {
-	// Check for data:image/...;base64,... data URIs
-	dataURICount := strings.Count(content, "data:image/")
-	for range dataURICount {
-		count++
+	if content == "" {
+		return 0, 0, nil
 	}
 
-	// Check for raw base64 image headers
-	// JPEG: /9j/ (start of base64 JPEG)
-	// PNG: iVBOR (start of base64 PNG)
-	// GIF: R0lGOD (start of base64 GIF)
-	// WebP: UklGR (start of base64 WebP)
+	const dataURIPrefix = "data:image/"
+	const base64Marker = ";base64,"
+
+	// Track processed ranges to avoid double-counting when raw headers
+	// like "iVBOR" appear inside data URI payloads
+	type processedRange struct {
+		start, end int
+	}
+	var processed []processedRange
+
+	// Find all data URIs and count them, extracting size when possible
+	// A data URI is identified by "data:image/<fmt>;base64,<payload>"
+	for {
+		idx := strings.Index(content, dataURIPrefix)
+		if idx == -1 {
+			break
+		}
+
+		count++
+
+		rest := content[idx+len(dataURIPrefix):]
+		// Find where the MIME type ends (semicolon before "base64,")
+		semiIdx := strings.Index(rest, ";")
+		if semiIdx == -1 {
+			// Malformed; skip past this prefix
+			content = content[idx+len(dataURIPrefix):]
+			continue
+		}
+
+		base64Idx := strings.Index(rest[semiIdx:], base64Marker)
+		if base64Idx == -1 {
+			// Malformed; skip past this prefix
+			content = content[idx+len(dataURIPrefix):]
+			continue
+		}
+
+		// Start of base64 payload in rest
+		payloadStartInRest := semiIdx + base64Idx + len(base64Marker)
+		payload := rest[payloadStartInRest:]
+
+		// Find end of base64 - look for either:
+		// 1. A non-base64 character, OR
+		// 2. The start of another "data:image/" (which would be inside the base64 as text)
+		base64EndInPayload := 0
+		for i := 0; i < len(payload); i++ {
+			c := rune(payload[i])
+			if !isBase64Char(c) {
+				base64EndInPayload = i
+				break
+			}
+			// Check if this could be the start of "data:image/" inside the base64
+			if i+11 <= len(payload) && strings.HasPrefix(payload[i:i+11], "data:image/") {
+				base64EndInPayload = i
+				break
+			}
+		}
+		if base64EndInPayload == 0 {
+			base64EndInPayload = len(payload)
+		}
+
+		// Calculate absolute positions in original string
+		payloadStart := idx + len(dataURIPrefix) + payloadStartInRest
+		payloadEnd := payloadStart + base64EndInPayload
+		processed = append(processed, processedRange{start: payloadStart, end: payloadEnd})
+
+		if base64EndInPayload > 0 {
+			decoded := make([]byte, base64.StdEncoding.DecodedLen(base64EndInPayload))
+			_, decodeErr := base64.StdEncoding.Decode(decoded, []byte(payload[:base64EndInPayload]))
+			if decodeErr == nil && len(decoded) > largestSize {
+				largestSize = len(decoded)
+			}
+		}
+
+		// Move past this data URI for next search
+		content = content[payloadEnd:]
+	}
+
+	// Scan for raw image headers in remaining content (not inside data URIs)
 	rawHeaders := []string{"/9j/", "iVBOR", "R0lGOD", "UklGR"}
 	for _, header := range rawHeaders {
-		count += strings.Count(content, header)
-	}
+		idx := 0
+		for {
+			pos := strings.Index(content[idx:], header)
+			if pos == -1 {
+				break
+			}
+			absPos := idx + pos
 
-	// Find the largest base64 image by estimating from content
-	// Each base64 character represents 6 bits, so divide by 4 for bytes (approx)
-	// This is an estimate; actual decoding would be more accurate but expensive
-	lines := strings.SplitSeq(content, "\n")
-	for line := range lines {
-		line = strings.TrimSpace(line)
-		if len(line) > 100 { // Skip short lines that aren't real base64
-			// Check if line looks like base64 (alphanumeric + +, /, =)
-			isBase64 := true
-			base64Count := 0
-			for _, c := range line {
-				if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '+' || c == '/' || c == '=' {
-					base64Count++
-				} else {
-					isBase64 = false
+			// Check if this header falls inside a processed data URI range
+			inProcessedRange := false
+			for _, pr := range processed {
+				if absPos >= pr.start && absPos < pr.end {
+					inProcessedRange = true
 					break
 				}
 			}
-			if isBase64 && base64Count > largestSize {
-				largestSize = base64Count
+			if inProcessedRange {
+				idx = absPos + 1
+				continue
 			}
+
+			after := content[absPos+len(header):]
+
+			// Extract base64 after header - also stop at "data:image/" inside base64
+			base64End := 0
+			for i := 0; i < len(after); i++ {
+				c := rune(after[i])
+				if !isBase64Char(c) {
+					base64End = i
+					break
+				}
+				// Check for embedded data URI start
+				if i+11 <= len(after) && strings.HasPrefix(after[i:i+11], "data:image/") {
+					base64End = i
+					break
+				}
+			}
+			if base64End == 0 {
+				base64End = len(after)
+			}
+
+			if base64End > 0 {
+				decoded := make([]byte, base64.StdEncoding.DecodedLen(base64End))
+				_, decodeErr := base64.StdEncoding.Decode(decoded, []byte(after[:base64End]))
+				if decodeErr == nil {
+					count++
+					if len(decoded) > largestSize {
+						largestSize = len(decoded)
+					}
+				} else {
+					// Decode failed; estimate size from base64 char count
+					// Each base64 char encodes 6 bits; 4 chars encode 3 bytes
+					estimatedSize := (base64End * 3) / 4
+					if estimatedSize > largestSize {
+						largestSize = estimatedSize
+					}
+				}
+			}
+
+			idx = absPos + len(header)
 		}
 	}
 
-	// Convert base64 length to approximate byte size
-	if largestSize > 0 {
-		// Each base64 char encodes 6 bits; 4 chars encode 3 bytes
-		largestSize = (largestSize * 3) / 4
-	}
-
 	return count, largestSize, nil
+}
+
+func isBase64Char(c rune) bool {
+	return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '+' || c == '/' || c == '='
 }
 
 // doSendMessage performs the actual message sending (used by retry logic).
