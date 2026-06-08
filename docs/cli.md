@@ -7,7 +7,7 @@ spec: complete
 code: partial
 package: internal/cli
 gaps:
-  - --continue, --fork-session missing
+  - --continue missing
 defer_to: P3
 depends_on:
   []
@@ -79,7 +79,7 @@ Help (`-h`) exits 0.
 | `--mcp-config` | Wired |
 | `--continue` | Not implemented |
 | `--no-session-persistence` | Wired |
-| `--fork-session` | Not implemented |
+| `--fork-session` | Wired |
 | stream-json stdout guard | Not implemented |
 | Flat tool_use `parameters` | Should use `parameters` not `tool_input` |
 

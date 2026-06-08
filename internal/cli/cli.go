@@ -19,6 +19,7 @@ type Flags struct {
 	SkipPermissions        bool
 	SessionResume          string
 	NoSessionPersistence   bool
+	ForkSession            bool
 	MCPConfig              []string
 	StrictMCP              bool
 	DeniedTools            []string
@@ -74,6 +75,9 @@ func Parse() (*Flags, error) {
 	var noSessionPersistence bool
 	flags.BoolVar(&noSessionPersistence, "no-session-persistence", false, "Disable session persistence")
 
+	var forkSession bool
+	flags.BoolVar(&forkSession, "fork-session", false, "Fork resumed session to new ID")
+
 	var mcpPaths = []string{}
 
 	flags.Var((*StringSlice)(&mcpPaths), "mcp-config", "MCP configuration file path(s) (can be specified multiple times)")
@@ -115,6 +119,11 @@ func Parse() (*Flags, error) {
 		return nil, fmt.Errorf("no prompt provided")
 	}
 
+	// Validate: --fork-session requires -r/--resume
+	if forkSession && sessionResume == "" {
+		return nil, fmt.Errorf("--fork-session requires -r/--resume")
+	}
+
 	return &Flags{
 		Prompt:                 prompt,
 		Model:                  model,
@@ -124,6 +133,7 @@ func Parse() (*Flags, error) {
 		SkipPermissions:        skipPerms,
 		SessionResume:          sessionResume,
 		NoSessionPersistence:   noSessionPersistence,
+		ForkSession:            forkSession,
 		MCPConfig:              mcpPaths,
 		StrictMCP:              strictMCP,
 		DeniedTools:            deniedTools,

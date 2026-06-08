@@ -82,6 +82,24 @@ func run() error {
 		}
 
 		historyMessages = agent.RebuildMessages(entries)
+
+		// Fork session if --fork-session flag is set
+		if flags.ForkSession {
+			newSessionID, err := session.NewSessionID()
+			if err != nil {
+				return fmt.Errorf("generating new session ID for fork: %w", err)
+			}
+
+			// Write all loaded entries to the new session
+			for _, entry := range entries {
+				if err := sessionManager.AppendEntry(newSessionID, entry); err != nil {
+					return fmt.Errorf("forking transcript entry: %w", err)
+				}
+			}
+
+			// Use the new session ID for the remainder of the run
+			sessionID = newSessionID
+		}
 	}
 
 	// Load MCP configuration if paths are provided
