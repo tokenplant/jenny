@@ -55,7 +55,7 @@ func TestEnsureToolResultPairing_Forward_MissingToolResult(t *testing.T) {
 			Role:    "assistant",
 			Content: "I'll help",
 			ToolUse: []api.ToolUseBlock{
-				{ID: "tool_1", Name: "read", Input: map[string]any{"file_path": "test.txt"}},
+				{ID: "tool_1", Name: "Read", Input: map[string]any{"file_path": "test.txt"}},
 			},
 		},
 		{
@@ -111,8 +111,8 @@ func TestEnsureToolResultPairing_DuplicateIDs(t *testing.T) {
 			Role:    "assistant",
 			Content: "Using tools",
 			ToolUse: []api.ToolUseBlock{
-				{ID: "tool_1", Name: "read", Input: map[string]any{"file_path": "a.txt"}},
-				{ID: "tool_1", Name: "read", Input: map[string]any{"file_path": "b.txt"}}, // duplicate
+				{ID: "tool_1", Name: "Read", Input: map[string]any{"file_path": "a.txt"}},
+				{ID: "tool_1", Name: "Read", Input: map[string]any{"file_path": "b.txt"}}, // duplicate
 			},
 		},
 		{
@@ -258,7 +258,7 @@ func TestNormalizeMessages_ThinkingNormalization(t *testing.T) {
 			Role:    "assistant",
 			Content: "", // will need placeholder after empty
 			ToolUse: []api.ToolUseBlock{
-				{ID: "tool_1", Name: "bash", Input: map[string]any{"command": "ls"}},
+				{ID: "tool_1", Name: "Bash", Input: map[string]any{"command": "ls"}},
 			},
 		},
 		{

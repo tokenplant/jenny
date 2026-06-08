@@ -476,7 +476,15 @@ func (c *Client) doSendMessage(ctx context.Context, messages []Message, tools []
 	}
 
 	// Build request
-	maxTokens := 8192
+	//
+	// The Anthropic SDK requires streaming for any request whose
+	// expected wall-time exceeds 10 minutes
+	// (maxTokens * 1h / 128000 > 10m). For a 64000-token budget that
+	// is ~30 minutes, which the SDK rejects for non-streaming calls.
+	// The non-streaming path is reserved for short internal requests
+	// (memory extraction, summarisation, fallback), where 64000 is
+	// the reference parity target.
+	maxTokens := 64000
 	if c.maxTokensOverride > 0 {
 		maxTokens = c.maxTokensOverride
 	}
@@ -820,7 +828,7 @@ func (c *Client) SendMessageStream(
 		}
 
 		// Build request
-		maxTokens := 8192
+		maxTokens := 64000
 		if c.maxTokensOverride > 0 {
 			maxTokens = c.maxTokensOverride
 		}

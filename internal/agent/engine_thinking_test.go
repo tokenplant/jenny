@@ -300,7 +300,7 @@ func TestAC2_ThinkingSignatureOmittedWhenEmpty(t *testing.T) {
 // contains thinking, text, and tool_use, the assistant envelope's content
 // array lists them in that order.
 func TestAC3_ContentOrdering_ThinkingTextToolUse(t *testing.T) {
-	server := makeTestMockStreamServer(thinkingTextToolUseEvents("reasoning", "sig", "summary", "tool_1", "bash"))
+	server := makeTestMockStreamServer(thinkingTextToolUseEvents("reasoning", "sig", "summary", "tool_1", "Bash"))
 	defer server.Close()
 
 	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
@@ -410,7 +410,7 @@ func TestAC4_TextOnlyUnaffected(t *testing.T) {
 func TestAC5_ToolUseOnlyNoEmptyText(t *testing.T) {
 	server := makeTestMockStreamServer([]string{
 		testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
-		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tool_1","name":"bash","input":{}}}`),
+		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tool_1","name":"Bash","input":{}}}`),
 		testSseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
 		testSseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":1}}`),
 		testSseLine("message_stop", `{"type":"message_stop"}`),

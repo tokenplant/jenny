@@ -27,6 +27,7 @@ functions under `jenny_test/`. No live API access is required.
 jenny_test/
 ├── cli_flags_test.go          # --version, --help smoke tests
 ├── stream_json_test.go        # stream-json + cassette replay smoke
+├── api_protocol_test.go       # outbound /v1/messages request conformance
 ├── harness/                   # internal helper package
 │   ├── mock_api.go            # mock Anthropic API server
 │   └── runner.go              # jenny binary builder + spawner
@@ -147,6 +148,31 @@ server extracts `echo-hello` from the path prefix and streams the
 matching cassette. This requires no changes to jenny's own code; the
 cassette id is encoded entirely in the base URL.
 
+## API Protocol Conformance
+
+`jenny_test/api_protocol_test.go` is a blackbox conformance suite for the
+outbound `/v1/messages` request body. Each test starts the mock server,
+runs jenny with `--output-format stream-json -p "echo hello"` against
+the `echo-hello` cassette, and asserts on the captured request body.
+The response cassette is irrelevant — the request structure is fixed by
+the test scenario.
+
+Four properties are checked:
+
+1. **`max_tokens`** — the top-level `max_tokens` numeric field equals
+   `64000`. The lower default of 8192 caused silent truncation of long
+   agent responses; 64000 is the reference parity target.
+2. **`system` prompt** — the top-level `system` field is present
+   (string or array), its concatenated text is at least 500 characters,
+   and it contains the absolute path of the jenny subprocess working
+   directory (inherited from the test process via `os.Getwd()`).
+3. **`tools` array** — the top-level `tools` field is a non-empty JSON
+   array. Each tool has a non-empty `name`, a non-empty `description`,
+   and an `input_schema` object with `"type": "object"`.
+4. **Core tools present** — the `tools` array always includes tools
+   named `"Bash"` and `"Read"`, which are required for agentic
+   compatibility.
+
 ## Running the Suite
 
 From the repo root:
@@ -190,6 +216,33 @@ explicitly with its own opt-in path; none exist today.
   `jenny_test/fixtures/cassettes/echo-hello.sse`.
 - **AC8 — Doc present:** This file.
 
+### API protocol conformance (api_protocol_test.go)
+
+These acceptance criteria are enforced by `jenny_test/api_protocol_test.go`.
+They run against the same `echo-hello` cassette; only the request body is
+inspected.
+
+- **AC9 — `max_tokens` is 64000:** the captured request has a numeric
+  `max_tokens` field equal to 64000. (Out of parity when set lower; the
+  lower default of 8192 caused silent truncation of long responses.)
+- **AC10 — `system` field is present and substantial:** the request body
+  has a top-level `system` field. When it is a string, length ≥ 500
+  characters. When it is an array, the array is non-empty and the
+  concatenated text of all text-type blocks is ≥ 500 characters.
+- **AC11 — `system` prompt includes the working directory:** the system
+  prompt content (string or concatenated block text) contains the
+  absolute path of the directory from which the jenny subprocess is
+  spawned. The harness inherits the test process cwd, so `os.Getwd()`
+  in the test yields the expected path.
+- **AC12 — `tools` array is present and non-empty:** the request body
+  has a `tools` key whose value is a JSON array with at least one
+  element.
+- **AC13 — each tool is well-formed:** every tool has a non-empty
+  `name`, a non-empty `description`, and an `input_schema` object with
+  `"type": "object"`.
+- **AC14 — core tools present by name:** the `tools` array always
+  includes tools named `"Bash"` and `"Read"`.
+
 ## Out of Scope
 
 - Recording mode (capturing cassettes from a live API).
@@ -201,6 +254,9 @@ explicitly with its own opt-in path; none exist today.
 - `jenny_test/cases/` subdirectory hierarchy.
 - CI / Makefile / Docker isolation.
 - More than the three test functions in this iteration.
+  (Subsequent iterations may add `api_protocol_test.go` and other
+  targeted conformance files; see the "API protocol conformance"
+  subsection above.)
 
 ## Related
 
@@ -208,4 +264,4 @@ explicitly with its own opt-in path; none exist today.
 - [`stream-json-spec.md`](./stream-json-spec.md) — NDJSON event format
   asserted in `stream_json_test.go`.
 - [`anthropic-api-client.md`](./anthropic-api-client.md) — outbound
-  request shape asserted by AC5.
+  request shape asserted by AC5 and by `api_protocol_test.go`.

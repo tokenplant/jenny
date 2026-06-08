@@ -62,7 +62,7 @@ func (t *BashTool) GetTaskManager() *TaskManager {
 
 // Name returns the tool name.
 func (t *BashTool) Name() string {
-	return "bash"
+	return "Bash"
 }
 
 // Description returns a description of the tool.

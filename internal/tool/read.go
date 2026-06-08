@@ -29,7 +29,7 @@ func NewReadTool(skipPermissions bool, readCache *ReadFileCache) *ReadTool {
 
 // Name returns the tool name.
 func (t *ReadTool) Name() string {
-	return "read"
+	return "Read"
 }
 
 // WithReadFileCache sets the read cache for read-before-write validation.

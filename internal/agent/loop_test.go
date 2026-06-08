@@ -34,11 +34,11 @@ func TestToolUseBlockCollection(t *testing.T) {
 	readTool := tool.NewReadTool(false, nil)
 
 	// Verify tools have correct names
-	if bashTool.Name() != "bash" {
-		t.Errorf("expected bash tool name 'bash', got %q", bashTool.Name())
+	if bashTool.Name() != "Bash" {
+		t.Errorf("expected bash tool name 'Bash', got %q", bashTool.Name())
 	}
-	if readTool.Name() != "read" {
-		t.Errorf("expected read tool name 'read', got %q", readTool.Name())
+	if readTool.Name() != "Read" {
+		t.Errorf("expected read tool name 'Read', got %q", readTool.Name())
 	}
 }
 
@@ -49,20 +49,20 @@ func TestFindTool(t *testing.T) {
 	tools := []tool.Tool{bashTool, readTool}
 
 	// Test finding existing tools
-	found := tool.FindTool(tools, "bash")
+	found := tool.FindTool(tools, "Bash")
 	if found == nil {
 		t.Error("expected to find bash tool")
 	}
-	if found.Name() != "bash" {
-		t.Errorf("expected bash tool, got %q", found.Name())
+	if found.Name() != "Bash" {
+		t.Errorf("expected Bash tool, got %q", found.Name())
 	}
 
-	found = tool.FindTool(tools, "read")
+	found = tool.FindTool(tools, "Read")
 	if found == nil {
 		t.Error("expected to find read tool")
 	}
-	if found.Name() != "read" {
-		t.Errorf("expected read tool, got %q", found.Name())
+	if found.Name() != "Read" {
+		t.Errorf("expected Read tool, got %q", found.Name())
 	}
 
 	// Test finding non-existent tool
@@ -93,7 +93,7 @@ func TestMessageBuilding(t *testing.T) {
 		ToolUse: []api.ToolUseBlock{
 			{
 				ID:    "tool_123",
-				Name:  "bash",
+				Name:  "Bash",
 				Input: map[string]any{"command": "ls"},
 			},
 		},
@@ -102,8 +102,8 @@ func TestMessageBuilding(t *testing.T) {
 	if len(msgWithToolUse.ToolUse) != 1 {
 		t.Errorf("expected 1 tool use block, got %d", len(msgWithToolUse.ToolUse))
 	}
-	if msgWithToolUse.ToolUse[0].Name != "bash" {
-		t.Errorf("expected tool name 'bash', got %q", msgWithToolUse.ToolUse[0].Name)
+	if msgWithToolUse.ToolUse[0].Name != "Bash" {
+		t.Errorf("expected tool name 'Bash', got %q", msgWithToolUse.ToolUse[0].Name)
 	}
 
 	// Test message with tool results
@@ -336,7 +336,7 @@ func TestRebuildMessages(t *testing.T) {
 			entries: []session.TranscriptEntry{
 				{Type: "user", Content: "List files"},
 				{Type: "assistant", Content: "", ToolUse: []session.ToolUse{
-					{ID: "tool_1", Name: "bash", Input: map[string]any{"command": "ls"}},
+					{ID: "tool_1", Name: "Bash", Input: map[string]any{"command": "ls"}},
 				}},
 			},
 			wantLen: 2,
@@ -344,8 +344,8 @@ func TestRebuildMessages(t *testing.T) {
 				if len(msgs[1].ToolUse) != 1 {
 					t.Errorf("expected 1 tool use, got %d", len(msgs[1].ToolUse))
 				}
-				if msgs[1].ToolUse[0].Name != "bash" {
-					t.Errorf("expected tool name 'bash', got %q", msgs[1].ToolUse[0].Name)
+				if msgs[1].ToolUse[0].Name != "Bash" {
+					t.Errorf("expected tool name 'Bash', got %q", msgs[1].ToolUse[0].Name)
 				}
 			},
 		},
@@ -354,7 +354,7 @@ func TestRebuildMessages(t *testing.T) {
 			entries: []session.TranscriptEntry{
 				{Type: "user", Content: "List files"},
 				{Type: "assistant", Content: "", ToolUse: []session.ToolUse{
-					{ID: "tool_1", Name: "bash", Input: map[string]any{"command": "ls"}},
+					{ID: "tool_1", Name: "Bash", Input: map[string]any{"command": "ls"}},
 				}},
 				{Type: "tool_result", ToolID: "tool_1", Content: "file1.txt\nfile2.txt"},
 			},
@@ -454,7 +454,7 @@ func TestResumeWithToolCalls(t *testing.T) {
 	entries := []session.TranscriptEntry{
 		{Type: "user", Content: "List files in /tmp"},
 		{Type: "assistant", Content: "", ToolUse: []session.ToolUse{
-			{ID: "tool_1", Name: "bash", Input: map[string]any{"command": "ls /tmp"}},
+			{ID: "tool_1", Name: "Bash", Input: map[string]any{"command": "ls /tmp"}},
 		}},
 		{Type: "tool_result", ToolID: "tool_1", Content: "file1.txt\nfile2.txt"},
 		{Type: "assistant", Content: "I found 2 files: file1.txt and file2.txt"},
@@ -510,8 +510,8 @@ func TestResumeWithToolCalls(t *testing.T) {
 	if len(msgs[1].ToolUse) != 1 {
 		t.Errorf("msgs[1] has %d tool_use blocks, want 1", len(msgs[1].ToolUse))
 	}
-	if msgs[1].ToolUse[0].Name != "bash" {
-		t.Errorf("msgs[1] tool_use[0] name = %q, want %q", msgs[1].ToolUse[0].Name, "bash")
+	if msgs[1].ToolUse[0].Name != "Bash" {
+		t.Errorf("msgs[1] tool_use[0] name = %q, want %q", msgs[1].ToolUse[0].Name, "Bash")
 	}
 	// CRITICAL: assistant should NOT have tool_results attached
 	if len(msgs[1].ToolResults) != 0 {

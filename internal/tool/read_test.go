@@ -194,8 +194,8 @@ func TestReadTool_PathTraversal(t *testing.T) {
 func TestReadTool_NameAndDescription(t *testing.T) {
 	tool := NewReadTool(false, nil)
 
-	if tool.Name() != "read" {
-		t.Errorf("expected name 'read', got %q", tool.Name())
+	if tool.Name() != "Read" {
+		t.Errorf("expected name 'Read', got %q", tool.Name())
 	}
 
 	desc := tool.Description()

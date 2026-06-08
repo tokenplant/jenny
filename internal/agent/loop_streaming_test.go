@@ -677,11 +677,11 @@ func multiTurnTextPlusToolUsesServer() *httptest.Server {
 		sseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}`),
 		sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
 		// index 1: tool_use t1 Read
-		sseLine("content_block_start", `{"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"t1","name":"read","input":{}}}`),
+		sseLine("content_block_start", `{"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"t1","name":"Read","input":{}}}`),
 		sseLine("content_block_delta", `{"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{}"}}`),
 		sseLine("content_block_stop", `{"type":"content_block_stop","index":1}`),
 		// index 2: tool_use t2 Bash
-		sseLine("content_block_start", `{"type":"content_block_start","index":2,"content_block":{"type":"tool_use","id":"t2","name":"bash","input":{}}}`),
+		sseLine("content_block_start", `{"type":"content_block_start","index":2,"content_block":{"type":"tool_use","id":"t2","name":"Bash","input":{}}}`),
 		sseLine("content_block_delta", `{"type":"content_block_delta","index":2,"delta":{"type":"input_json_delta","partial_json":"{}"}}`),
 		sseLine("content_block_stop", `{"type":"content_block_stop","index":2}`),
 		sseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"tool_use","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":3}}`),
@@ -737,8 +737,8 @@ func TestStreamingEmitsOneAssistantPerTurn(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "test-key-00000")
 
 	tools := []tool.Tool{
-		&fastTool{name: "read", content: "file-contents"},
-		&fastTool{name: "bash", content: "bash-ok"},
+		&fastTool{name: "Read", content: "file-contents"},
+		&fastTool{name: "Bash", content: "bash-ok"},
 	}
 
 	var runErr error
@@ -807,7 +807,7 @@ func TestStreamingEmitsOneAssistantPerTurn(t *testing.T) {
 	if tu1["id"] != "t1" {
 		t.Errorf("AC1 FAIL: content[1].id = %v, want 't1'", tu1["id"])
 	}
-	if tu1["name"] != "read" {
+	if tu1["name"] != "Read" {
 		t.Errorf("AC1 FAIL: content[1].name = %v, want 'read'", tu1["name"])
 	}
 
@@ -822,7 +822,7 @@ func TestStreamingEmitsOneAssistantPerTurn(t *testing.T) {
 	if tu2["id"] != "t2" {
 		t.Errorf("AC1 FAIL: content[2].id = %v, want 't2'", tu2["id"])
 	}
-	if tu2["name"] != "bash" {
+	if tu2["name"] != "Bash" {
 		t.Errorf("AC1 FAIL: content[2].name = %v, want 'bash'", tu2["name"])
 	}
 	t.Log("AC1 PASS: content array order is [text, tool_use t1 read, tool_use t2 bash]")
@@ -859,8 +859,8 @@ func TestStreamingNoTextDuplication(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "test-key-00000")
 
 	tools := []tool.Tool{
-		&fastTool{name: "read", content: "ok"},
-		&fastTool{name: "bash", content: "ok"},
+		&fastTool{name: "Read", content: "ok"},
+		&fastTool{name: "Bash", content: "ok"},
 	}
 
 	var runErr error
@@ -1000,7 +1000,7 @@ func TestStreamingToolUseOnlyTurn(t *testing.T) {
 	turn1 := []string{
 		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
 		// index 0: tool_use t1 read (no preceding text)
-		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"t1","name":"read","input":{}}}`),
+		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"t1","name":"Read","input":{}}}`),
 		sseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{}"}}`),
 		sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
 		sseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"tool_use","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":2}}`),
@@ -1046,7 +1046,7 @@ func TestStreamingToolUseOnlyTurn(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "test-key-00000")
 
 	tools := []tool.Tool{
-		&fastTool{name: "read", content: "ok"},
+		&fastTool{name: "Read", content: "ok"},
 	}
 
 	var runErr error

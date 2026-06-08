@@ -81,13 +81,13 @@ func (e *ToolExecutor) Execute(ctx context.Context, toolUseBlocks []toolUseBlock
 func (e *ToolExecutor) partitionGroups(toolUseBlocks []toolUseBlock) []toolGroup {
 	var groups []toolGroup
 	var currentBatch []toolUseWithIndex
-	var currentBatchType string // "bash", "readonly", or "" for empty
+	var currentBatchType string // "Bash", "readonly", or "" for empty
 
 	flushBatch := func() {
 		if len(currentBatch) > 0 {
 			groups = append(groups, toolGroup{
 				tools:  currentBatch,
-				serial: currentBatchType == "bash",
+				serial: currentBatchType == "Bash",
 			})
 		}
 		currentBatch = nil
@@ -127,10 +127,10 @@ func (e *ToolExecutor) partitionGroups(toolUseBlocks []toolUseBlock) []toolGroup
 				serial: true,
 			})
 		} else if isBashTool(block.Name) {
-			if currentBatchType != "" && currentBatchType != "bash" {
+			if currentBatchType != "" && currentBatchType != "Bash" {
 				flushBatch()
 			}
-			currentBatchType = "bash"
+			currentBatchType = "Bash"
 			currentBatch = append(currentBatch, toolUseWithIndex{
 				block: block,
 				index: i,
@@ -289,7 +289,7 @@ func (e *ToolExecutor) executeSerial(parentCtx context.Context, batch []toolUseW
 // isReadOnlyTool returns true if the tool is read-only (read, glob, grep).
 func isReadOnlyTool(toolName string) bool {
 	switch toolName {
-	case "read", "Read", "Glob", "grep", "Grep":
+	case "Read", "Glob", "Grep":
 		return true
 	default:
 		return false
@@ -308,7 +308,7 @@ func isSerialTool(toolName string) bool {
 
 // isBashTool returns true if the tool is a bash tool.
 func isBashTool(toolName string) bool {
-	return toolName == "bash" || toolName == "Bash"
+	return toolName == "Bash"
 }
 
 // toolResult represents a tool execution result.

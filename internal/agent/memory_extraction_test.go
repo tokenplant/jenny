@@ -367,7 +367,7 @@ func TestAC4_EditScopedToAutoMem(t *testing.T) {
 	}
 
 	// Verify required tools are present
-	if !toolMap["read"] {
+	if !toolMap["Read"] {
 		t.Error("AC4 FAIL: Read tool should be present")
 	} else {
 		t.Log("AC4 PASS: Read tool present")
@@ -435,7 +435,7 @@ func TestAC4_EditScopedToAutoMem(t *testing.T) {
 
 	// Bash should NOT be present (AC4 says read-only bash, but we should verify no bash at all for safety)
 	for _, name := range toolNames {
-		if name == "bash" {
+		if name == "Bash" {
 			t.Error("AC4 FAIL: bash should NOT be present in extraction tools")
 		}
 	}

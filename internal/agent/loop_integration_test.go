@@ -34,7 +34,7 @@ func TestResumeSessionIntegration(t *testing.T) {
 	entries := []session.TranscriptEntry{
 		{Type: "user", Content: "List files in /tmp"},
 		{Type: "assistant", Content: "", ToolUse: []session.ToolUse{
-			{ID: "tool_1", Name: "bash", Input: map[string]any{"command": "ls /tmp"}},
+			{ID: "tool_1", Name: "Bash", Input: map[string]any{"command": "ls /tmp"}},
 		}},
 		{Type: "tool_result", ToolID: "tool_1", Content: "file1.txt\nfile2.txt"},
 		{Type: "assistant", Content: "I found 2 files: file1.txt and file2.txt"},
@@ -88,8 +88,8 @@ func TestResumeSessionIntegration(t *testing.T) {
 	if len(msgs[1].ToolUse) != 1 {
 		t.Errorf("msgs[1] has %d tool_use blocks, want 1", len(msgs[1].ToolUse))
 	}
-	if msgs[1].ToolUse[0].Name != "bash" {
-		t.Errorf("msgs[1] tool_use[0] name = %q, want %q", msgs[1].ToolUse[0].Name, "bash")
+	if msgs[1].ToolUse[0].Name != "Bash" {
+		t.Errorf("msgs[1] tool_use[0] name = %q, want %q", msgs[1].ToolUse[0].Name, "Bash")
 	}
 	if len(msgs[1].ToolResults) != 0 {
 		t.Errorf("msgs[1] has %d tool_results, want 0 (tool_results must be in separate user message)", len(msgs[1].ToolResults))

@@ -130,7 +130,7 @@ func TestAC2_MaxTurnsEnforcement(t *testing.T) {
 	// Server that returns tool_use to keep the loop going
 	server := makeTestMockStreamServer([]string{
 		testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
-		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tool_1","name":"bash","input":{}}}`),
+		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tool_1","name":"Bash","input":{}}}`),
 		testSseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
 		testSseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"tool_use","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":1}}`),
 		testSseLine("message_stop", `{"type":"message_stop"}`),
@@ -505,7 +505,7 @@ func TestAC3_CostFlushOnMaxTurnsError(t *testing.T) {
 	// Server that returns tool_use to keep the loop going, hitting maxTurns
 	server := makeTestMockStreamServer([]string{
 		testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test-model","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
-		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tool_1","name":"bash","input":{}}}`),
+		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tool_1","name":"Bash","input":{}}}`),
 		testSseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
 		testSseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"tool_use","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":1}}`),
 		testSseLine("message_stop", `{"type":"message_stop"}`),
@@ -1235,7 +1235,7 @@ func TestToolCallEvents(t *testing.T) {
 	// Server that returns a single tool_use then end_turn
 	server := makeTestMockStreamServer([]string{
 		testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
-		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tool_1","name":"bash","input":{}}}`),
+		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tool_1","name":"Bash","input":{}}}`),
 		testSseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
 		testSseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":1}}`),
 		testSseLine("message_stop", `{"type":"message_stop"}`),
@@ -1313,7 +1313,7 @@ func TestToolCallEvents(t *testing.T) {
 	}
 
 	// Verify tool_name is present
-	if !strings.Contains(stdoutOutput, `"tool_name":"bash"`) {
+	if !strings.Contains(stdoutOutput, `"tool_name":"Bash"`) {
 		t.Error("AC1 FAIL: stdout does not contain tool_name in tool_call event")
 	} else {
 		t.Log("AC1 PASS: stdout contains tool_name in tool_call event")
@@ -1356,9 +1356,9 @@ func TestInterruptSyntheticToolResults_AC5(t *testing.T) {
 	// which lets one finish before cancellation reaches the blocker.
 	turn1Events := []string{
 		testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
-		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tool_fast","name":"read","input":{}}}`),
+		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tool_fast","name":"Read","input":{}}}`),
 		testSseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
-		testSseLine("content_block_start", `{"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"tool_slow","name":"grep","input":{}}}`),
+		testSseLine("content_block_start", `{"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"tool_slow","name":"Grep","input":{}}}`),
 		testSseLine("content_block_stop", `{"type":"content_block_stop","index":1}`),
 		testSseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"tool_use","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":1}}`),
 		testSseLine("message_stop", `{"type":"message_stop"}`),
@@ -1411,8 +1411,8 @@ func TestInterruptSyntheticToolResults_AC5(t *testing.T) {
 
 	// One fast tool (completes immediately, exercises AC2) and one blocking
 	// tool that only returns when the context is cancelled (exercises AC1).
-	fast := &fastTool{name: "read", content: "fast-tool-real-content"}
-	slow := &blockingTool{name: "grep", blockDuration: 5 * time.Second}
+	fast := &fastTool{name: "Read", content: "fast-tool-real-content"}
+	slow := &blockingTool{name: "Grep", blockDuration: 5 * time.Second}
 	tools := []tool.Tool{fast, slow}
 
 	cfg := StreamConfig{
@@ -1516,11 +1516,11 @@ func TestEngine_InterruptedField_TriggersSynthetic(t *testing.T) {
 	// Multi-turn mock: first call returns tool_use (loop continues), second returns end_turn
 	turn1Events := []string{
 		testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
-		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tool_1","name":"read","input":{}}}`),
+		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tool_1","name":"Read","input":{}}}`),
 		testSseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
-		testSseLine("content_block_start", `{"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"tool_2","name":"bash","input":{}}}`),
+		testSseLine("content_block_start", `{"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"tool_2","name":"Bash","input":{}}}`),
 		testSseLine("content_block_stop", `{"type":"content_block_stop","index":1}`),
-		testSseLine("content_block_start", `{"type":"content_block_start","index":2,"content_block":{"type":"tool_use","id":"tool_3","name":"bash","input":{}}}`),
+		testSseLine("content_block_start", `{"type":"content_block_start","index":2,"content_block":{"type":"tool_use","id":"tool_3","name":"Bash","input":{}}}`),
 		testSseLine("content_block_stop", `{"type":"content_block_stop","index":2}`),
 		testSseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"tool_use","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":1}}`),
 		testSseLine("message_stop", `{"type":"message_stop"}`),
@@ -1573,10 +1573,10 @@ func TestEngine_InterruptedField_TriggersSynthetic(t *testing.T) {
 	// Three tools: fast (completes), blocking (gets interrupted), failing (triggers abort)
 	// read is concurrency-safe and runs in parallel with bash tools
 	// bash tools are serial, so tool1 runs first, then tool2 starts, then tool3 fails and aborts tool2
-	fast := &fastTool{name: "read", content: "fast-completed"}
-	blocker := &blockingTool{name: "bash", blockDuration: 10 * time.Second}
+	fast := &fastTool{name: "Read", content: "fast-completed"}
+	blocker := &blockingTool{name: "Bash", blockDuration: 10 * time.Second}
 	failing := &execMockTool{
-		name:    "bash",
+		name:    "Bash",
 		delay:   0,
 		isSafe:  false,
 		err:     fmt.Errorf("exit 1"),
@@ -1640,7 +1640,7 @@ func TestEngine_BenignContent_NotInterpretedAsInterrupt(t *testing.T) {
 	// Server returns a single tool_use then end_turn
 	server := makeTestMockStreamServer([]string{
 		testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
-		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tool_1","name":"bash","input":{}}}`),
+		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tool_1","name":"Bash","input":{}}}`),
 		testSseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
 		testSseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":1}}`),
 		testSseLine("message_stop", `{"type":"message_stop"}`),
@@ -1746,7 +1746,7 @@ type benignAbortedTool struct {
 	isError bool
 }
 
-func (b *benignAbortedTool) Name() string                { return "bash" }
+func (b *benignAbortedTool) Name() string                { return "Bash" }
 func (b *benignAbortedTool) Description() string         { return "A tool that returns benign aborted content" }
 func (b *benignAbortedTool) InputSchema() map[string]any { return map[string]any{} }
 func (b *benignAbortedTool) Execute(ctx context.Context, input map[string]any, cwd string) (*tool.ToolResult, error) {
@@ -1768,7 +1768,7 @@ func TestToolCallEvents_Negative(t *testing.T) {
 	// Server that returns a single tool_use then end_turn
 	server := makeTestMockStreamServer([]string{
 		testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
-		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tool_1","name":"bash","input":{}}}`),
+		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tool_1","name":"Bash","input":{}}}`),
 		testSseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
 		testSseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":1}}`),
 		testSseLine("message_stop", `{"type":"message_stop"}`),
@@ -2035,7 +2035,7 @@ func TestRunLoop_UnknownStopReason_TerminatesAsEndTurn(t *testing.T) {
 // executing the tool. The second turn returns end_turn with text "done".
 func TestRunLoop_EmptyStopReason_WithToolUse_TreatsAsToolUse(t *testing.T) {
 	var calls atomic.Int32
-	server := stopReasonTestServer(t, &calls, "", "hello", "bash")
+	server := stopReasonTestServer(t, &calls, "", "hello", "Bash")
 	defer server.Close()
 	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
 	t.Setenv("ANTHROPIC_API_KEY", "test-key")

@@ -29,11 +29,11 @@ func TestRegistry_WithBaseTools(t *testing.T) {
 		names[t.Name()] = true
 	}
 
-	if !names["read"] {
-		t.Error("expected 'read' tool")
+	if !names["Read"] {
+		t.Error("expected 'Read' tool")
 	}
-	if !names["bash"] {
-		t.Error("expected 'bash' tool")
+	if !names["Bash"] {
+		t.Error("expected 'Bash' tool")
 	}
 	if !names["Glob"] {
 		t.Error("expected 'Glob' tool")
@@ -46,11 +46,11 @@ func TestRegistry_WithBaseTools(t *testing.T) {
 func TestRegistry_WithDenyRules(t *testing.T) {
 	tools := NewRegistry().
 		WithBaseTools().
-		WithDenyRules([]string{"read"}).
+		WithDenyRules([]string{"Read"}).
 		Build()
 
 	if len(tools) != 3 {
-		t.Errorf("expected 3 tools after denying 'read', got %d", len(tools))
+		t.Errorf("expected 3 tools after denying 'Read', got %d", len(tools))
 	}
 
 	// Should have bash, Glob, Grep remaining
@@ -58,8 +58,8 @@ func TestRegistry_WithDenyRules(t *testing.T) {
 	for _, t := range tools {
 		names[t.Name()] = true
 	}
-	if names["read"] {
-		t.Error("'read' should have been denied")
+	if names["Read"] {
+		t.Error("'Read' should have been denied")
 	}
 }
 
@@ -91,11 +91,11 @@ func TestRegistry_WithMCPTools(t *testing.T) {
 	}
 
 	// Base tools should come first
-	if tools[0].Name() != "read" {
-		t.Errorf("expected first tool to be 'read', got %q", tools[0].Name())
+	if tools[0].Name() != "Read" {
+		t.Errorf("expected first tool to be 'Read', got %q", tools[0].Name())
 	}
-	if tools[1].Name() != "bash" {
-		t.Errorf("expected second tool to be 'bash', got %q", tools[1].Name())
+	if tools[1].Name() != "Bash" {
+		t.Errorf("expected second tool to be 'Bash', got %q", tools[1].Name())
 	}
 	if tools[2].Name() != "Glob" {
 		t.Errorf("expected third tool to be 'Glob', got %q", tools[2].Name())
@@ -116,7 +116,7 @@ func TestRegistry_WithMCPTools(t *testing.T) {
 func TestRegistry_BuiltInWins(t *testing.T) {
 	// If a built-in and MCP tool share a name, built-in wins
 	mcpTools := []Tool{
-		&mockTool{name: "read"}, // Same name as base tool
+		&mockTool{name: "Read"}, // Same name as base tool
 	}
 
 	tools := NewRegistry().
@@ -129,19 +129,19 @@ func TestRegistry_BuiltInWins(t *testing.T) {
 	}
 
 	// First tool should still be the built-in read
-	if tools[0].Name() != "read" {
-		t.Errorf("expected first tool to be built-in 'read', got %q", tools[0].Name())
+	if tools[0].Name() != "Read" {
+		t.Errorf("expected first tool to be built-in 'Read', got %q", tools[0].Name())
 	}
 }
 
 func TestRegistry_WithEnabled(t *testing.T) {
 	tools := NewRegistry().
 		WithBaseTools().
-		WithEnabled("bash", false).
+		WithEnabled("Bash", false).
 		Build()
 
 	if len(tools) != 3 {
-		t.Errorf("expected 3 tools after disabling 'bash', got %d", len(tools))
+		t.Errorf("expected 3 tools after disabling 'Bash', got %d", len(tools))
 	}
 
 	// Should have read, Glob, Grep remaining
@@ -149,15 +149,15 @@ func TestRegistry_WithEnabled(t *testing.T) {
 	for _, t := range tools {
 		names[t.Name()] = true
 	}
-	if names["bash"] {
-		t.Error("'bash' should have been disabled")
+	if names["Bash"] {
+		t.Error("'Bash' should have been disabled")
 	}
 }
 
 func TestRegistry_WithEnabled_NotDisabled(t *testing.T) {
 	tools := NewRegistry().
 		WithBaseTools().
-		WithEnabled("bash", true). // Explicitly enabled (default anyway)
+		WithEnabled("Bash", true). // Explicitly enabled (default anyway)
 		Build()
 
 	if len(tools) != 4 {
@@ -224,8 +224,8 @@ func TestRegistry_CombinedFilters(t *testing.T) {
 	tools := NewRegistry().
 		WithBaseTools().
 		WithMCPTools(mcpTools).
-		WithDenyRules([]string{"read"}).
-		WithEnabled("bash", false).
+		WithDenyRules([]string{"Read"}).
+		WithEnabled("Bash", false).
 		Build()
 
 	if len(tools) != 4 {
@@ -238,11 +238,11 @@ func TestRegistry_CombinedFilters(t *testing.T) {
 		names[t.Name()] = true
 	}
 
-	if names["read"] {
-		t.Error("'read' should have been denied")
+	if names["Read"] {
+		t.Error("'Read' should have been denied")
 	}
-	if names["bash"] {
-		t.Error("'bash' should have been disabled")
+	if names["Bash"] {
+		t.Error("'Bash' should have been disabled")
 	}
 	if !names["Glob"] {
 		t.Error("'Glob' should be present")
@@ -272,8 +272,8 @@ func TestAC4_RegistryBuildReceivesReadFileCache(t *testing.T) {
 	}
 
 	// Should have Read, write, edit, notebook_edit (since cache is configured)
-	if !names["read"] {
-		t.Error("expected 'read' tool")
+	if !names["Read"] {
+		t.Error("expected 'Read' tool")
 	}
 	if !names["write"] {
 		t.Error("expected 'write' tool (enabled when ReadFileCache is set)")

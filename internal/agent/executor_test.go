@@ -56,16 +56,16 @@ func (m *execMockTool) Execute(ctx context.Context, input map[string]any, cwd st
 // TestExecutor_AC1_ParallelReadOnly verifies AC1: Read/Glob/Grep run in parallel when consecutive.
 func TestExecutor_AC1_ParallelReadOnly(t *testing.T) {
 	tools := []tool.Tool{
-		&execMockTool{name: "read", delay: 100 * time.Millisecond, isSafe: true},
+		&execMockTool{name: "Read", delay: 100 * time.Millisecond, isSafe: true},
 		&execMockTool{name: "Glob", delay: 100 * time.Millisecond, isSafe: true},
-		&execMockTool{name: "grep", delay: 100 * time.Millisecond, isSafe: true},
+		&execMockTool{name: "Grep", delay: 100 * time.Millisecond, isSafe: true},
 	}
 
 	executor := NewToolExecutor(tools, "/tmp")
 
 	blocks := []toolUseBlock{
-		{ID: "1", Name: "read", Input: map[string]any{"file_path": "a.txt"}},
-		{ID: "2", Name: "read", Input: map[string]any{"file_path": "b.txt"}},
+		{ID: "1", Name: "Read", Input: map[string]any{"file_path": "a.txt"}},
+		{ID: "2", Name: "Read", Input: map[string]any{"file_path": "b.txt"}},
 		{ID: "3", Name: "Glob", Input: map[string]any{"pattern": "*.go"}},
 	}
 
@@ -100,7 +100,7 @@ func TestExecutor_AC2_SerializedMutation(t *testing.T) {
 	tools := []tool.Tool{
 		&execMockTool{name: "write", delay: 100 * time.Millisecond, isSafe: false},
 		&execMockTool{name: "edit", delay: 100 * time.Millisecond, isSafe: false},
-		&execMockTool{name: "read", delay: 100 * time.Millisecond, isSafe: true},
+		&execMockTool{name: "Read", delay: 100 * time.Millisecond, isSafe: true},
 	}
 
 	executor := NewToolExecutor(tools, "/tmp")
@@ -130,9 +130,9 @@ func TestExecutor_AC2_SerializedMutation(t *testing.T) {
 
 	// Test: Mixed batch [Read, Write, Read] should be: Read parallel, then Write serial, then Read parallel
 	mixedBlocks := []toolUseBlock{
-		{ID: "3", Name: "read", Input: map[string]any{"file_path": "a.txt"}},
+		{ID: "3", Name: "Read", Input: map[string]any{"file_path": "a.txt"}},
 		{ID: "4", Name: "write", Input: map[string]any{"file_path": "f1"}},
-		{ID: "5", Name: "read", Input: map[string]any{"file_path": "b.txt"}},
+		{ID: "5", Name: "Read", Input: map[string]any{"file_path": "b.txt"}},
 	}
 
 	mixedResults, err := executor.Execute(context.Background(), mixedBlocks)
@@ -147,14 +147,14 @@ func TestExecutor_AC2_SerializedMutation(t *testing.T) {
 
 	// B3: Test: Bash + Bash should be serial (≥2s) - AC2 explicit case
 	bashTools := []tool.Tool{
-		&execMockTool{name: "bash", delay: 1000 * time.Millisecond, isSafe: false},
-		&execMockTool{name: "bash", delay: 1000 * time.Millisecond, isSafe: false},
+		&execMockTool{name: "Bash", delay: 1000 * time.Millisecond, isSafe: false},
+		&execMockTool{name: "Bash", delay: 1000 * time.Millisecond, isSafe: false},
 	}
 	bashExecutor := NewToolExecutor(bashTools, "/tmp")
 
 	bashBlocks := []toolUseBlock{
-		{ID: "6", Name: "bash", Input: map[string]any{"command": "sleep 1"}},
-		{ID: "7", Name: "bash", Input: map[string]any{"command": "sleep 1"}},
+		{ID: "6", Name: "Bash", Input: map[string]any{"command": "sleep 1"}},
+		{ID: "7", Name: "Bash", Input: map[string]any{"command": "sleep 1"}},
 	}
 
 	bashStart := time.Now()
@@ -182,13 +182,13 @@ func TestExecutor_AC3_BashSiblingAbort(t *testing.T) {
 	// The FIRST one should have already completed.
 	tools := []tool.Tool{
 		&execMockTool{
-			name:    "bash",
+			name:    "Bash",
 			delay:   100 * time.Millisecond,
 			isSafe:  false,
 			content: "bash1 success",
 		},
 		&execMockTool{
-			name:    "bash",
+			name:    "Bash",
 			delay:   100 * time.Millisecond,
 			isSafe:  false,
 			err:     fmt.Errorf("exit 1"), // This one fails and triggers abort
@@ -196,7 +196,7 @@ func TestExecutor_AC3_BashSiblingAbort(t *testing.T) {
 			content: "bash2 failed",
 		},
 		&execMockTool{
-			name:    "bash",
+			name:    "Bash",
 			delay:   500 * time.Millisecond,
 			isSafe:  false,
 			content: "bash3 should be skipped",
@@ -206,9 +206,9 @@ func TestExecutor_AC3_BashSiblingAbort(t *testing.T) {
 	executor := NewToolExecutor(tools, "/tmp")
 
 	blocks := []toolUseBlock{
-		{ID: "1", Name: "bash", Input: map[string]any{"command": "echo success"}},
-		{ID: "2", Name: "bash", Input: map[string]any{"command": "exit 1"}},
-		{ID: "3", Name: "bash", Input: map[string]any{"command": "sleep 10"}},
+		{ID: "1", Name: "Bash", Input: map[string]any{"command": "echo success"}},
+		{ID: "2", Name: "Bash", Input: map[string]any{"command": "exit 1"}},
+		{ID: "3", Name: "Bash", Input: map[string]any{"command": "sleep 10"}},
 	}
 
 	start := time.Now()
@@ -252,7 +252,7 @@ func TestExecutor_AC3_BashSiblingAbort(t *testing.T) {
 // TestExecutor_AC4_UnknownTool verifies AC4: Unknown tool returns immediate error.
 func TestExecutor_AC4_UnknownTool(t *testing.T) {
 	tools := []tool.Tool{
-		&execMockTool{name: "read", delay: 100 * time.Millisecond, isSafe: true},
+		&execMockTool{name: "Read", delay: 100 * time.Millisecond, isSafe: true},
 	}
 
 	executor := NewToolExecutor(tools, "/tmp")
@@ -291,18 +291,18 @@ func TestExecutor_AC4_UnknownTool(t *testing.T) {
 // TestExecutor_AC5_ResultOrdering verifies AC5: Results emitted in request order.
 func TestExecutor_AC5_ResultOrdering(t *testing.T) {
 	tools := []tool.Tool{
-		&execMockTool{name: "read", delay: 50 * time.Millisecond, isSafe: true},
+		&execMockTool{name: "Read", delay: 50 * time.Millisecond, isSafe: true},
 		&execMockTool{name: "write", delay: 100 * time.Millisecond, isSafe: false},
-		&execMockTool{name: "grep", delay: 30 * time.Millisecond, isSafe: true},
+		&execMockTool{name: "Grep", delay: 30 * time.Millisecond, isSafe: true},
 	}
 
 	executor := NewToolExecutor(tools, "/tmp")
 
 	// Send [slow(safe), fast(serial), fast(safe)] - results should be in request order
 	blocks := []toolUseBlock{
-		{ID: "1", Name: "read", Input: map[string]any{}},
+		{ID: "1", Name: "Read", Input: map[string]any{}},
 		{ID: "2", Name: "write", Input: map[string]any{}},
-		{ID: "3", Name: "grep", Input: map[string]any{}},
+		{ID: "3", Name: "Grep", Input: map[string]any{}},
 	}
 
 	results, err := executor.Execute(context.Background(), blocks)
@@ -331,23 +331,23 @@ func TestExecutor_AC5_ResultOrdering(t *testing.T) {
 // TestExecutor_MixedBatch verifies mixed parallel/serial partitioning.
 func TestExecutor_MixedBatch(t *testing.T) {
 	tools := []tool.Tool{
-		&execMockTool{name: "read", delay: 50 * time.Millisecond, isSafe: true},
+		&execMockTool{name: "Read", delay: 50 * time.Millisecond, isSafe: true},
 		&execMockTool{name: "Glob", delay: 50 * time.Millisecond, isSafe: true},
 		&execMockTool{name: "write", delay: 100 * time.Millisecond, isSafe: false},
-		&execMockTool{name: "read", delay: 50 * time.Millisecond, isSafe: true},
+		&execMockTool{name: "Read", delay: 50 * time.Millisecond, isSafe: true},
 		&execMockTool{name: "edit", delay: 100 * time.Millisecond, isSafe: false},
-		&execMockTool{name: "grep", delay: 50 * time.Millisecond, isSafe: true},
+		&execMockTool{name: "Grep", delay: 50 * time.Millisecond, isSafe: true},
 	}
 
 	executor := NewToolExecutor(tools, "/tmp")
 
 	blocks := []toolUseBlock{
-		{ID: "1", Name: "read", Input: map[string]any{}},
+		{ID: "1", Name: "Read", Input: map[string]any{}},
 		{ID: "2", Name: "Glob", Input: map[string]any{}},
 		{ID: "3", Name: "write", Input: map[string]any{}},
-		{ID: "4", Name: "read", Input: map[string]any{}},
+		{ID: "4", Name: "Read", Input: map[string]any{}},
 		{ID: "5", Name: "edit", Input: map[string]any{}},
-		{ID: "6", Name: "grep", Input: map[string]any{}},
+		{ID: "6", Name: "Grep", Input: map[string]any{}},
 	}
 
 	start := time.Now()
@@ -397,7 +397,7 @@ func TestExecutor_ConcurrencyCap(t *testing.T) {
 	// Create 15 read tools
 	tools := make([]tool.Tool, 15)
 	for i := range 15 {
-		tools[i] = &execMockTool{name: "read", delay: 100 * time.Millisecond, isSafe: true}
+		tools[i] = &execMockTool{name: "Read", delay: 100 * time.Millisecond, isSafe: true}
 	}
 
 	// Create executor with maxConcurrency=10
@@ -411,7 +411,7 @@ func TestExecutor_ConcurrencyCap(t *testing.T) {
 	for i := range 15 {
 		blocks[i] = toolUseBlock{
 			ID:    fmt.Sprintf("%d", i+1),
-			Name:  "read",
+			Name:  "Read",
 			Input: map[string]any{},
 		}
 	}
@@ -442,14 +442,14 @@ func TestExecutor_ConcurrencyCap(t *testing.T) {
 func TestExecutor_BashFailureDoesNotAbortNonBash(t *testing.T) {
 	tools := []tool.Tool{
 		&execMockTool{
-			name:    "bash",
+			name:    "Bash",
 			delay:   0,
 			isSafe:  false,
 			err:     fmt.Errorf("exit 1"),
 			isError: true,
 		},
 		&execMockTool{
-			name:    "read",
+			name:    "Read",
 			delay:   200 * time.Millisecond,
 			isSafe:  true,
 			content: "read completed",
@@ -459,8 +459,8 @@ func TestExecutor_BashFailureDoesNotAbortNonBash(t *testing.T) {
 	executor := NewToolExecutor(tools, "/tmp")
 
 	blocks := []toolUseBlock{
-		{ID: "1", Name: "bash", Input: map[string]any{"command": "exit 1"}},
-		{ID: "2", Name: "read", Input: map[string]any{"file_path": "a.txt"}},
+		{ID: "1", Name: "Bash", Input: map[string]any{"command": "exit 1"}},
+		{ID: "2", Name: "Read", Input: map[string]any{"file_path": "a.txt"}},
 	}
 
 	results, err := executor.Execute(context.Background(), blocks)
@@ -484,7 +484,7 @@ func TestExecutor_BashFailureDoesNotAbortNonBash(t *testing.T) {
 // TestExecutor_EmptyBatch verifies executor handles empty batch.
 func TestExecutor_EmptyBatch(t *testing.T) {
 	tools := []tool.Tool{
-		&execMockTool{name: "read", isSafe: true},
+		&execMockTool{name: "Read", isSafe: true},
 	}
 
 	executor := NewToolExecutor(tools, "/tmp")
@@ -503,19 +503,19 @@ func TestExecutor_EmptyBatch(t *testing.T) {
 // TestExecutor_AllReadOnlyTools verifies all-read batch runs in parallel.
 func TestExecutor_AllReadOnlyTools(t *testing.T) {
 	tools := []tool.Tool{
-		&execMockTool{name: "read", delay: 100 * time.Millisecond, isSafe: true},
+		&execMockTool{name: "Read", delay: 100 * time.Millisecond, isSafe: true},
 		&execMockTool{name: "Glob", delay: 100 * time.Millisecond, isSafe: true},
-		&execMockTool{name: "grep", delay: 100 * time.Millisecond, isSafe: true},
-		&execMockTool{name: "read", delay: 100 * time.Millisecond, isSafe: true},
+		&execMockTool{name: "Grep", delay: 100 * time.Millisecond, isSafe: true},
+		&execMockTool{name: "Read", delay: 100 * time.Millisecond, isSafe: true},
 	}
 
 	executor := NewToolExecutor(tools, "/tmp")
 
 	blocks := []toolUseBlock{
-		{ID: "1", Name: "read", Input: map[string]any{}},
+		{ID: "1", Name: "Read", Input: map[string]any{}},
 		{ID: "2", Name: "Glob", Input: map[string]any{}},
-		{ID: "3", Name: "grep", Input: map[string]any{}},
-		{ID: "4", Name: "read", Input: map[string]any{}},
+		{ID: "3", Name: "Grep", Input: map[string]any{}},
+		{ID: "4", Name: "Read", Input: map[string]any{}},
 	}
 
 	start := time.Now()
@@ -540,17 +540,17 @@ func TestExecutor_AllReadOnlyTools(t *testing.T) {
 // Note: This test verifies the mechanism since mock tools can't be truly interrupted.
 func TestExecutor_BashAbortOnlyAffectsBash(t *testing.T) {
 	tools := []tool.Tool{
-		&execMockTool{name: "bash", delay: 500 * time.Millisecond, isSafe: false, content: "bash1"},
-		&execMockTool{name: "bash", delay: 0, isSafe: false, content: "bash2"},
-		&execMockTool{name: "bash", delay: 500 * time.Millisecond, isSafe: false, content: "bash3"},
+		&execMockTool{name: "Bash", delay: 500 * time.Millisecond, isSafe: false, content: "bash1"},
+		&execMockTool{name: "Bash", delay: 0, isSafe: false, content: "bash2"},
+		&execMockTool{name: "Bash", delay: 500 * time.Millisecond, isSafe: false, content: "bash3"},
 	}
 
 	executor := NewToolExecutor(tools, "/tmp")
 
 	blocks := []toolUseBlock{
-		{ID: "1", Name: "bash", Input: map[string]any{"command": "sleep 10"}},
-		{ID: "2", Name: "bash", Input: map[string]any{"command": "exit 1"}},
-		{ID: "3", Name: "bash", Input: map[string]any{"command": "sleep 10"}},
+		{ID: "1", Name: "Bash", Input: map[string]any{"command": "sleep 10"}},
+		{ID: "2", Name: "Bash", Input: map[string]any{"command": "exit 1"}},
+		{ID: "3", Name: "Bash", Input: map[string]any{"command": "sleep 10"}},
 	}
 
 	results, err := executor.Execute(context.Background(), blocks)
@@ -578,13 +578,13 @@ func TestExecutor_BashAbortOnlyAffectsBash(t *testing.T) {
 func TestExecutor_SiblingAbort_SetsInterruptedField(t *testing.T) {
 	tools := []tool.Tool{
 		&execMockTool{
-			name:    "bash",
+			name:    "Bash",
 			delay:   100 * time.Millisecond,
 			isSafe:  false,
 			content: "bash1 success",
 		},
 		&execMockTool{
-			name:    "bash",
+			name:    "Bash",
 			delay:   100 * time.Millisecond,
 			isSafe:  false,
 			err:     fmt.Errorf("exit 1"),
@@ -592,7 +592,7 @@ func TestExecutor_SiblingAbort_SetsInterruptedField(t *testing.T) {
 			content: "bash2 failed",
 		},
 		&execMockTool{
-			name:    "bash",
+			name:    "Bash",
 			delay:   500 * time.Millisecond,
 			isSafe:  false,
 			content: "bash3 should be skipped",
@@ -602,9 +602,9 @@ func TestExecutor_SiblingAbort_SetsInterruptedField(t *testing.T) {
 	executor := NewToolExecutor(tools, "/tmp")
 
 	blocks := []toolUseBlock{
-		{ID: "1", Name: "bash", Input: map[string]any{"command": "echo success"}},
-		{ID: "2", Name: "bash", Input: map[string]any{"command": "exit 1"}},
-		{ID: "3", Name: "bash", Input: map[string]any{"command": "sleep 10"}},
+		{ID: "1", Name: "Bash", Input: map[string]any{"command": "echo success"}},
+		{ID: "2", Name: "Bash", Input: map[string]any{"command": "exit 1"}},
+		{ID: "3", Name: "Bash", Input: map[string]any{"command": "sleep 10"}},
 	}
 
 	results, err := executor.Execute(context.Background(), blocks)
@@ -642,19 +642,19 @@ func TestExecutor_SiblingAbort_SetsInterruptedField(t *testing.T) {
 func TestExecutor_CtxCancelled_SetsInterruptedField(t *testing.T) {
 	tools := []tool.Tool{
 		&execMockTool{
-			name:    "bash",
+			name:    "Bash",
 			delay:   500 * time.Millisecond,
 			isSafe:  false,
 			content: "bash1 slow",
 		},
 		&execMockTool{
-			name:    "bash",
+			name:    "Bash",
 			delay:   500 * time.Millisecond,
 			isSafe:  false,
 			content: "bash2 slow",
 		},
 		&execMockTool{
-			name:    "bash",
+			name:    "Bash",
 			delay:   500 * time.Millisecond,
 			isSafe:  false,
 			content: "bash3 slow",
@@ -664,9 +664,9 @@ func TestExecutor_CtxCancelled_SetsInterruptedField(t *testing.T) {
 	executor := NewToolExecutor(tools, "/tmp")
 
 	blocks := []toolUseBlock{
-		{ID: "1", Name: "bash", Input: map[string]any{"command": "sleep 1"}},
-		{ID: "2", Name: "bash", Input: map[string]any{"command": "sleep 1"}},
-		{ID: "3", Name: "bash", Input: map[string]any{"command": "sleep 1"}},
+		{ID: "1", Name: "Bash", Input: map[string]any{"command": "sleep 1"}},
+		{ID: "2", Name: "Bash", Input: map[string]any{"command": "sleep 1"}},
+		{ID: "3", Name: "Bash", Input: map[string]any{"command": "sleep 1"}},
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)

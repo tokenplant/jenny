@@ -204,8 +204,8 @@ func TestBashTool_Timeout(t *testing.T) {
 func TestBashTool_NameAndDescription(t *testing.T) {
 	tool := NewBashTool(false)
 
-	if tool.Name() != "bash" {
-		t.Errorf("expected name 'bash', got %q", tool.Name())
+	if tool.Name() != "Bash" {
+		t.Errorf("expected name 'Bash', got %q", tool.Name())
 	}
 
 	desc := tool.Description()

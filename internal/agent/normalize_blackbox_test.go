@@ -179,7 +179,7 @@ func TestAC2_IsErrorToolResult(t *testing.T) {
 			Role:    "assistant",
 			Content: "Using tool",
 			ToolUse: []api.ToolUseBlock{
-				{ID: "tool_e1", Name: "bash", Input: map[string]any{"cmd": "fail"}},
+				{ID: "tool_e1", Name: "Bash", Input: map[string]any{"cmd": "fail"}},
 			},
 		},
 		{
@@ -227,9 +227,9 @@ func TestAC2_AllSixDirections(t *testing.T) {
 			Role:    "assistant",
 			Content: "Running tools",
 			ToolUse: []api.ToolUseBlock{
-				{ID: "tool_a", Name: "read", Input: map[string]any{"file": "a.txt"}},
-				{ID: "tool_b", Name: "read", Input: map[string]any{"file": "b.txt"}},
-				{ID: "tool_a", Name: "read", Input: map[string]any{"file": "a_dup.txt"}}, // duplicate ID (dir3)
+				{ID: "tool_a", Name: "Read", Input: map[string]any{"file": "a.txt"}},
+				{ID: "tool_b", Name: "Read", Input: map[string]any{"file": "b.txt"}},
+				{ID: "tool_a", Name: "Read", Input: map[string]any{"file": "a_dup.txt"}}, // duplicate ID (dir3)
 			},
 		},
 		// User message: has tool_result for tool_b, missing tool_a (dir1), has orphan (dir2)

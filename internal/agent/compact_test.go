@@ -342,7 +342,7 @@ func TestEstimateTokens(t *testing.T) {
 			name: "user and assistant with tool_use",
 			messages: []api.Message{
 				{Role: "user", Content: "hello"},
-				{Role: "assistant", Content: "Using tool", ToolUse: []api.ToolUseBlock{{ID: "1", Name: "read", Input: map[string]any{}}}},
+				{Role: "assistant", Content: "Using tool", ToolUse: []api.ToolUseBlock{{ID: "1", Name: "Read", Input: map[string]any{}}}},
 			},
 			wantMin: 50,
 			wantMax: 80,
