@@ -224,6 +224,7 @@ func (g *CommandGate) CheckDevicePath(path string) error {
 
 	// Block device paths
 	devicePaths := []string{
+		"/dev/null",
 		"/dev/zero",
 		"/dev/urandom",
 		"/dev/random",
@@ -241,6 +242,11 @@ func (g *CommandGate) CheckDevicePath(path string) error {
 
 	// Block /dev/fd/* (file descriptor paths)
 	if strings.HasPrefix(path, "/dev/fd/") {
+		return fmt.Errorf("access to device path %s is blocked", path)
+	}
+
+	// Block /proc/self/fd/* (self file descriptor paths)
+	if strings.HasPrefix(path, "/proc/self/fd/") {
 		return fmt.Errorf("access to device path %s is blocked", path)
 	}
 

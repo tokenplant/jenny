@@ -144,7 +144,7 @@ func (sm *SessionMemory) Init() error {
 	}
 
 	// Record read in cache for edit validation
-	sm.readCache.RecordRead(sm.memoryFilePath, content, time.Now(), true)
+	sm.readCache.RecordRead(sm.memoryFilePath, content, time.Now(), true, 0, 0)
 
 	log.Debug("Session memory file created", "path", sm.memoryFilePath)
 	return nil
@@ -183,7 +183,7 @@ func (sm *SessionMemory) Update(ctx context.Context) error {
 	}
 
 	// Record read in cache so Edit tool's read-before-write check passes
-	sm.readCache.RecordRead(sm.memoryFilePath, string(currentContent), info.ModTime(), true)
+	sm.readCache.RecordRead(sm.memoryFilePath, string(currentContent), info.ModTime(), true, 0, 0)
 
 	// Create context with timeout (default 15s, or override)
 	ctx, cancel := context.WithTimeout(ctx, sm.effectiveTimeout())

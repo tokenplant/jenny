@@ -934,7 +934,7 @@ func seedReadFileCacheFromTranscript(cache *tool.ReadFileCache, sessionManager *
 				if path != "" && entry.Content != "" {
 					// Use current mtime since transcript doesn't store it precisely
 					if info, err := os.Stat(path); err == nil {
-						cache.Add(path, entry.Content, info.ModTime(), true)
+						cache.Add(path, entry.Content, info.ModTime(), true, 0, 0)
 					}
 				}
 			}

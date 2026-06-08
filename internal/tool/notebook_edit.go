@@ -319,7 +319,7 @@ func (t *NotebookEditTool) Execute(ctx context.Context, input map[string]any, cw
 	}
 
 	// AC5: Update readFileCache with new content, offset undefined to break Read dedup
-	t.readCache.RecordRead(notebookPath, string(newJSON), newMtime, true)
+	t.readCache.RecordRead(notebookPath, string(newJSON), newMtime, true, 0, 0)
 
 	return &ToolResult{
 		Content: diff,

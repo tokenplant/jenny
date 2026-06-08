@@ -223,7 +223,7 @@ func (t *EditTool) Execute(ctx context.Context, input map[string]any, cwd string
 					newMtime = newInfo.ModTime()
 				}
 				// Update cache
-				t.readCache.RecordRead(filePath, newString, newMtime, true)
+				t.readCache.RecordRead(filePath, newString, newMtime, true, 0, 0)
 				return &ToolResult{
 					Content: fmt.Sprintf("Created file with content: %s", newString),
 					IsError: false,
@@ -314,7 +314,7 @@ func (t *EditTool) Execute(ctx context.Context, input map[string]any, cwd string
 	diff := GenerateUnifiedDiff(oldContentFromCache, newContent, filePath)
 
 	// Update readFileCache after successful edit
-	t.readCache.RecordRead(filePath, newContent, newMtime, true)
+	t.readCache.RecordRead(filePath, newContent, newMtime, true, 0, 0)
 
 	return &ToolResult{
 		Content: diff,

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestReadTool_Execute(t *testing.T) {
@@ -350,6 +351,138 @@ func TestReadTool_SizeLimits(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestReadTool_Dedup(t *testing.T) {
+	tmpDir := t.TempDir()
+	cache := NewReadFileCache()
+	tool := NewReadTool(false, cache)
+
+	// Create test file
+	testFile := filepath.Join(tmpDir, "dedup.txt")
+	err := os.WriteFile(testFile, []byte("line 1\nline 2\nline 3\n"), 0644)
+	if err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	// AC1: First read should return content
+	result, err := tool.Execute(context.Background(), map[string]any{
+		"file_path": testFile,
+	}, tmpDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("first read should not error: %s", result.Content)
+	}
+	if !contains(result.Content, "line 1") || !contains(result.Content, "line 2") {
+		t.Fatalf("first read should return content, got: %s", result.Content)
+	}
+
+	// AC1: Second read with same path/offset/limit should return stub
+	result, err = tool.Execute(context.Background(), map[string]any{
+		"file_path": testFile,
+	}, tmpDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("dedup read should not error: %s", result.Content)
+	}
+	if result.Content != "file unchanged" {
+		t.Fatalf("second read should return 'file unchanged' stub, got: %s", result.Content)
+	}
+
+	// AC2: Modify file (change mtime), read again should return new content
+	err = os.Chtimes(testFile, time.Now(), time.Now().Add(time.Second))
+	if err != nil {
+		t.Fatalf("failed to change mtime: %v", err)
+	}
+	newContent := []byte("line 1\nline 2 modified\nline 3\n")
+	err = os.WriteFile(testFile, newContent, 0644)
+	if err != nil {
+		t.Fatalf("failed to modify test file: %v", err)
+	}
+
+	result, err = tool.Execute(context.Background(), map[string]any{
+		"file_path": testFile,
+	}, tmpDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("read after modification should not error: %s", result.Content)
+	}
+	if !contains(result.Content, "line 2 modified") {
+		t.Fatalf("read after modification should return new content, got: %s", result.Content)
+	}
+
+	// AC3: Different offset should bypass dedup and return full content
+	result, err = tool.Execute(context.Background(), map[string]any{
+		"file_path": testFile,
+		"offset":    float64(2),
+	}, tmpDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("read with different offset should not error: %s", result.Content)
+	}
+	if result.Content == "file unchanged" {
+		t.Fatalf("different offset should bypass dedup, got stub: %s", result.Content)
+	}
+	if !contains(result.Content, "line 2") {
+		t.Fatalf("different offset should return content, got: %s", result.Content)
+	}
+}
+
+func TestReadTool_BlockDeviceGuard(t *testing.T) {
+	tmpDir := t.TempDir()
+	tool := NewReadTool(false, nil)
+
+	// AC4: Test deny list for /dev paths
+	devPaths := []string{
+		"/dev/null",
+		"/dev/zero",
+		"/dev/urandom",
+		"/proc/self/fd/0",
+	}
+
+	for _, devPath := range devPaths {
+		result, err := tool.Execute(context.Background(), map[string]any{
+			"file_path": devPath,
+		}, tmpDir)
+		if err != nil {
+			t.Fatalf("unexpected error for %s: %v", devPath, err)
+		}
+		if !result.IsError {
+			t.Fatalf("block device %s should be rejected, got: %s", devPath, result.Content)
+		}
+		if !contains(result.Content, "device") {
+			t.Fatalf("error should mention device, got: %s", result.Content)
+		}
+	}
+
+	// AC5: Regular file at a custom path should work normally
+	// Create a file with a name that looks suspicious but isn't a device
+	regularFile := filepath.Join(tmpDir, "regular_file.txt")
+	err := os.WriteFile(regularFile, []byte("regular content\n"), 0644)
+	if err != nil {
+		t.Fatalf("failed to create regular file: %v", err)
+	}
+
+	result, err := tool.Execute(context.Background(), map[string]any{
+		"file_path": regularFile,
+	}, tmpDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("regular file should not be rejected: %s", result.Content)
+	}
+	if !contains(result.Content, "regular content") {
+		t.Fatalf("regular file should return content, got: %s", result.Content)
 	}
 }
 

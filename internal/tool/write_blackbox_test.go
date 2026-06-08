@@ -348,7 +348,7 @@ func TestWriteTool_PathTraversal_BlackBox(t *testing.T) {
 
 	// Register a path inside tmpDir in cache to bypass AC1
 	insidePath := filepath.Join(tmpDir, "inside.txt")
-	cache.RecordRead(insidePath, "test", time.Now(), true)
+	cache.RecordRead(insidePath, "test", time.Now(), true, 0, 0)
 
 	// Try to write outside cwd via ..
 	result, err := wt.Execute(context.Background(), map[string]any{

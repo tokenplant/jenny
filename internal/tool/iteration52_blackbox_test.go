@@ -118,7 +118,7 @@ func TestAC1_WriteTool_ActivatesSkillOnPathAccess(t *testing.T) {
 
 	// Set up ReadFileCache and pre-read the file (required by write contract)
 	cache := NewReadFileCache()
-	cache.RecordRead(fileInSkillDir, "original", mustGetMtime(t, fileInSkillDir), true)
+	cache.RecordRead(fileInSkillDir, "original", mustGetMtime(t, fileInSkillDir), true, 0, 0)
 
 	// Create activator and WriteTool
 	activator := skills.NewPathSkillActivator(discovered)
@@ -171,7 +171,7 @@ func TestAC1_EditTool_ActivatesSkillOnPathAccess(t *testing.T) {
 	}
 
 	cache := NewReadFileCache()
-	cache.RecordRead(fileInSkillDir, "original content", mustGetMtime(t, fileInSkillDir), true)
+	cache.RecordRead(fileInSkillDir, "original content", mustGetMtime(t, fileInSkillDir), true, 0, 0)
 
 	activator := skills.NewPathSkillActivator(discovered)
 	editTool := NewEditTool(cache)

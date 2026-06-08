@@ -12,6 +12,8 @@ type ReadFileEntry struct {
 	Content    string
 	Mtime      time.Time
 	IsFullRead bool
+	Offset     int
+	Limit      int
 }
 
 // ReadFileCache tracks file read state for the read-before-write contract.
@@ -28,7 +30,7 @@ func NewReadFileCache() *ReadFileCache {
 }
 
 // RecordRead records a file read operation.
-func (c *ReadFileCache) RecordRead(path, content string, mtime time.Time, isFullRead bool) {
+func (c *ReadFileCache) RecordRead(path, content string, mtime time.Time, isFullRead bool, offset, limit int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.entries[path] = &ReadFileEntry{
@@ -36,6 +38,8 @@ func (c *ReadFileCache) RecordRead(path, content string, mtime time.Time, isFull
 		Content:    content,
 		Mtime:      mtime,
 		IsFullRead: isFullRead,
+		Offset:     offset,
+		Limit:      limit,
 	}
 }
 
@@ -63,11 +67,13 @@ func (c *ReadFileCache) UpdateAfterWrite(path, content string, mtime time.Time) 
 		Content:    content,
 		Mtime:      mtime,
 		IsFullRead: true,
+		Offset:     0,
+		Limit:      0,
 	}
 }
 
 // Add adds a pre-seeded entry to the cache (used for resume seeding from transcript).
-func (c *ReadFileCache) Add(path, content string, mtime time.Time, isFullRead bool) {
+func (c *ReadFileCache) Add(path, content string, mtime time.Time, isFullRead bool, offset, limit int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.entries[path] = &ReadFileEntry{
@@ -75,5 +81,7 @@ func (c *ReadFileCache) Add(path, content string, mtime time.Time, isFullRead bo
 		Content:    content,
 		Mtime:      mtime,
 		IsFullRead: isFullRead,
+		Offset:     offset,
+		Limit:      limit,
 	}
 }

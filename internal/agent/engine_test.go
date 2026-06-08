@@ -794,7 +794,7 @@ func TestAC4_QueryEngineWireReadFileCache(t *testing.T) {
 	testPath := "/test/file.txt"
 	testContent := "hello world"
 	testMtime := time.Now()
-	cacheB.RecordRead(testPath, testContent, testMtime, true)
+	cacheB.RecordRead(testPath, testContent, testMtime, true, 0, 0)
 
 	// Build tools with cacheA (empty cache)
 	tools := tool.NewRegistry().

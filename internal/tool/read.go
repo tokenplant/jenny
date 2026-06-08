@@ -159,7 +159,23 @@ func (t *ReadTool) Execute(ctx context.Context, input map[string]any, cwd string
 		}, nil
 	}
 
-	// Determine offset and limit early (needed for isFullRead check)
+	// Block device guard - reject block/char devices before reading
+	if info.Mode()&os.ModeDevice != 0 || info.Mode()&os.ModeCharDevice != 0 {
+		return &ToolResult{
+			Content: fmt.Sprintf("cannot read block device: %s", filePath),
+			IsError: true,
+		}, nil
+	}
+
+	// Also check deny list for known device paths
+	if strings.HasPrefix(absFilePathClean, "/dev/") || strings.HasPrefix(absFilePathClean, "/proc/self/fd/") {
+		return &ToolResult{
+			Content: fmt.Sprintf("cannot read block device: %s", filePath),
+			IsError: true,
+		}, nil
+	}
+
+	// Determine offset and limit early (needed for isFullRead check and dedup)
 	offset := 1
 	offsetExplicit := false
 	if offsetVal, ok := input["offset"].(float64); ok {
@@ -175,6 +191,18 @@ func (t *ReadTool) Execute(ctx context.Context, input map[string]any, cwd string
 	}
 
 	isFullRead := !offsetExplicit && !limitExplicit
+
+	// AC1-AC3: Dedup check - return stub if same path + offset + limit + mtime unchanged
+	if t.readCache != nil && isFullRead {
+		if cachedEntry, ok := t.readCache.GetRead(absFilePath); ok {
+			if cachedEntry.Mtime.Equal(info.ModTime()) && cachedEntry.Offset == offset && cachedEntry.Limit == limit {
+				return &ToolResult{
+					Content: "file unchanged",
+					IsError: false,
+				}, nil
+			}
+		}
+	}
 
 	// maxSizeBytes check (pre-read, only for full reads)
 	if isFullRead {
@@ -265,7 +293,7 @@ func (t *ReadTool) Execute(ctx context.Context, input map[string]any, cwd string
 		if finalInfo != nil {
 			finalMtime = finalInfo.ModTime()
 		}
-		t.readCache.RecordRead(absFilePath, fullContent, finalMtime, isFullRead)
+		t.readCache.RecordRead(absFilePath, fullContent, finalMtime, isFullRead, offset, limit)
 	}
 
 	// Handle empty file content - warning, not error
