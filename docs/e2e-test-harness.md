@@ -29,12 +29,15 @@ jenny_test/
 ├── stream_json_test.go            # stream-json + cassette replay smoke
 ├── stream_json_format_test.go     # NDJSON event-shape conformance tests
 ├── api_protocol_test.go           # outbound /v1/messages request conformance
+├── tool_call_test.go              # multi-turn tool-call event conformance
 ├── harness/                       # internal helper package
 │   ├── mock_api.go                # mock Anthropic API server
 │   └── runner.go                  # jenny binary builder + spawner
 └── fixtures/
     └── cassettes/                 # SSE cassette files
-        └── echo-hello.sse
+        ├── echo-hello.sse
+        ├── tool-use-turn1.sse
+        └── tool-use-turn2.sse
 ```
 
 `jenny_test/` itself is a Go test-only package (`package e2e_test`); it has
@@ -103,6 +106,29 @@ Each POST appends a decoded copy of the request body to the mock
 server's in-memory list. Tests call `Requests()` to retrieve a copy and
 assert against the outbound request shape (model, stream flag, messages,
 tools, etc.).
+
+### Cassette sequences (multi-turn)
+
+Single-turn flows are the common case, but tool use is a multi-turn
+pattern: the model responds with `stop_reason: "tool_use"`, jenny runs
+the tool, then makes a second `/v1/messages` call carrying the tool
+result. The mock server supports this via per-cassette-id sequences:
+
+```go
+mock.SetSequence("tool-use", []string{"tool-use-turn1", "tool-use-turn2"})
+```
+
+After registration, the first POST to `/cassette/tool-use/v1/messages`
+streams `tool-use-turn1.sse`, the second streams `tool-use-turn2.sse`,
+and any subsequent request returns `HTTP 400` with a JSON error body
+explaining the sequence exhaustion. The mock does not panic, block, or
+loop — exhaustion is terminal for that cassette id.
+
+The same `Requests()` accessor captures every POST in the sequence, so
+tests can assert on multi-turn request shape (e.g. that the second turn
+includes a `tool_result` block) the same way they assert on single-turn
+shape. Single-cassette tests are unaffected: when no sequence is
+registered for a cassette id, the existing one-shot behavior applies.
 
 ## Binary Runner
 
@@ -234,6 +260,36 @@ Seven properties are checked, each in its own test function:
 7. **The first JSON line is a `system` event** — the first
    JSON-parseable stdout line must have `type=system`.
 
+## Tool-Call Conformance (multi-turn)
+
+`jenny_test/tool_call_test.go` exercises the two-turn tool-use flow
+end-to-end. The mock is configured with a two-cassette sequence (see
+"Cassette sequences" above) so that the first turn streams a
+`stop_reason: "tool_use"` response and the second streams the final
+`end_turn` text. The test then asserts on the NDJSON event shapes that
+the spec (`stream-json-spec.md`, `stream-json.md`) requires a tool-call
+turn to produce:
+
+1. **`tool_call/started`** — at least one `type=tool_call,
+   subtype=started` event with a non-empty `tool_name` (e.g. `"Bash"`),
+   a non-empty `tool_use_id`, and a v4 `uuid`.
+2. **`tool_call/completed`** — at least one `type=tool_call,
+   subtype=completed` event carrying a `tool_use_id` that matches the
+   started event.
+3. **`user` tool_result wrapper** — at least one `type=user` event whose
+   `message.content` is a non-empty array whose first block has
+   `type=tool_result` and a `tool_use_id` matching the started event.
+4. **Two `stream_request_start` markers** — exactly two
+   `type=stream_request_start` lines, one per API turn.
+5. **Final `result/success`** — the last meaningful NDJSON event has
+   `type=result, subtype=success`.
+
+Together with `stream_json_format_test.go`, this brings every event
+type in `stream-json-spec.md` under blackbox conformance coverage.
+No production code (`internal/`, `cmd/`) is touched; the entire surface
+is exercised through the mock server and the existing
+`harness.NewMockServer` / `harness.RunJenny` plumbing.
+
 ## Resolved Debt
 
 - `scope-creep-now-disclosed` (deferred from iter-112) — resolved.
@@ -316,17 +372,21 @@ inspected.
 ## Out of Scope
 
 - Recording mode (capturing cassettes from a live API).
-- Multi-turn cassettes (multiple `/v1/messages` exchanges).
-- Tool-invocation test cases (only CLI and prompt kinds).
+- Sequence reset / replay (calling `SetSequence` a second time, or
+  replaying after exhaustion).
+- Non-Bash tools (Read, Edit, Grep) in cassettes — the single Bash
+  scenario is sufficient for conformance.
+- Permission gate (`control_request`/`control_response`) event testing
+  — requires production-side control protocol support.
+- `--skip-permissions` flag or `--output-format text` mode tool-call
+  behavior.
+- Multi-cassette sequences with more than 2 turns.
+- Parallel tool use (multiple `tool_use` blocks in one assistant turn).
 - Session transcript (`session_id` NDJSON persistence) assertions.
 - Case-loader / case-registry pattern; tests stay as plain
   `*_test.go` functions.
 - `jenny_test/cases/` subdirectory hierarchy.
 - CI / Makefile / Docker isolation.
-- More than the three test functions in this iteration.
-  (Subsequent iterations may add `api_protocol_test.go` and other
-  targeted conformance files; see the "API protocol conformance"
-  subsection above.)
 
 ## Related
 
