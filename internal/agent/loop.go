@@ -323,6 +323,7 @@ func RunSimple(ctx context.Context, prompt string, tools []tool.Tool) (string, e
 // StreamMessage represents a message in the stream-json output.
 type StreamMessage struct {
 	Type       string `json:"type"`
+	Subtype    string `json:"subtype,omitempty"`
 	Content    string `json:"content,omitempty"`
 	SessionID  string `json:"session_id,omitempty"`
 	Result     string `json:"result,omitempty"`
@@ -330,6 +331,7 @@ type StreamMessage struct {
 	Usage      *Usage `json:"usage,omitempty"`
 	ToolName   string `json:"tool_name,omitempty"`
 	ToolInput  any    `json:"parameters,omitempty"`
+	ToolUseID  string `json:"tool_use_id,omitempty"`
 	IsError    bool   `json:"is_error,omitempty"`
 	IsPartial  bool   `json:"is_partial,omitempty"`
 	MessageIdx int    `json:"message_idx,omitempty"`

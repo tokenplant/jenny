@@ -1216,3 +1216,110 @@ func TestAC3_ResultExtraction(t *testing.T) {
 		}
 	}
 }
+
+// TestAC1_ToolCallEvents verifies that when stream-json mode is enabled and
+// the model requests tool use, the engine emits tool_call started events before
+// execution and tool_call completed events after each tool completes.
+func TestAC1_ToolCallEvents(t *testing.T) {
+	tmpDir := t.TempDir()
+	sessMgr, err := session.NewManager(tmpDir, false)
+	if err != nil {
+		t.Fatalf("NewManager error: %v", err)
+	}
+
+	sessionID := "sess_tool_call_test"
+
+	// Server that returns a single tool_use then end_turn
+	server := makeTestMockStreamServer([]string{
+		testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
+		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tool_1","name":"bash","input":{}}}`),
+		testSseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
+		testSseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":1}}`),
+		testSseLine("message_stop", `{"type":"message_stop"}`),
+	})
+	defer server.Close()
+
+	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
+	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
+	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	os.Setenv("ANTHROPIC_API_KEY", "test-key")
+	defer func() {
+		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
+		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
+	}()
+
+	// Save original stdout
+	oldStdout := os.Stdout
+
+	// Create pipe to capture stdout
+	stdoutR, stdoutW, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe() error: %v", err)
+	}
+
+	// Redirect stdout to our pipe
+	os.Stdout = stdoutW
+
+	cfg := StreamConfig{
+		Enabled:        true, // Stream-json mode enabled
+		SessionManager: sessMgr,
+		SessionID:      sessionID,
+	}
+
+	engine := NewQueryEngine(cfg, nil, "")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	_, err = engine.SubmitMessage(ctx, "test prompt")
+
+	// Close write end to signal EOF on read end
+	stdoutW.Close()
+
+	// Restore original stdout BEFORE checking output
+	os.Stdout = oldStdout
+
+	if err != nil {
+		t.Fatalf("SubmitMessage error: %v", err)
+	}
+
+	// Read captured stdout
+	var stdoutBuf bytes.Buffer
+	io.Copy(&stdoutBuf, stdoutR)
+	stdoutOutput := stdoutBuf.String()
+
+	// Verify tool_call started event exists
+	if !strings.Contains(stdoutOutput, `"type":"tool_call"`) {
+		t.Error("AC1 FAIL: stdout does not contain tool_call event")
+	} else {
+		t.Log("AC1 PASS: stdout contains tool_call event")
+	}
+
+	// Verify tool_call started subtype
+	if !strings.Contains(stdoutOutput, `"subtype":"started"`) {
+		t.Error("AC1 FAIL: stdout does not contain tool_call started event")
+	} else {
+		t.Log("AC1 PASS: stdout contains tool_call started event")
+	}
+
+	// Verify tool_call completed subtype
+	if !strings.Contains(stdoutOutput, `"subtype":"completed"`) {
+		t.Error("AC1 FAIL: stdout does not contain tool_call completed event")
+	} else {
+		t.Log("AC1 PASS: stdout contains tool_call completed event")
+	}
+
+	// Verify tool_name is present
+	if !strings.Contains(stdoutOutput, `"tool_name":"bash"`) {
+		t.Error("AC1 FAIL: stdout does not contain tool_name in tool_call event")
+	} else {
+		t.Log("AC1 PASS: stdout contains tool_name in tool_call event")
+	}
+
+	// Verify tool_use_id is present
+	if !strings.Contains(stdoutOutput, `"tool_use_id":"tool_1"`) {
+		t.Error("AC1 FAIL: stdout does not contain tool_use_id in tool_call event")
+	} else {
+		t.Log("AC1 PASS: stdout contains tool_use_id in tool_call event")
+	}
+}

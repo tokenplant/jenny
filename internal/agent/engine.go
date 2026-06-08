@@ -573,6 +573,22 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 			})
 		}
 
+		// AC1: Emit tool_call started events before execution begins
+		if e.streamCfg.Enabled {
+			for _, block := range execBlocks {
+				msg := StreamMessage{
+					Type:       "tool_call",
+					Subtype:    "started",
+					ToolName:   block.Name,
+					ToolUseID:  block.ID,
+					SessionID:  sessionID,
+					MessageIdx: currentTurn,
+				}
+				data, _ := json.Marshal(msg)
+				fmt.Fprintln(os.Stdout, string(data))
+			}
+		}
+
 		// Execute all tools using the parallel executor
 		executor := NewToolExecutor(e.tools, cwd)
 		execResults, err := executor.Execute(ctx, execBlocks)
@@ -606,6 +622,18 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 			}
 
 			if e.streamCfg.Enabled {
+				// AC2: Emit tool_call completed event before tool_result
+				completedMsg := StreamMessage{
+					Type:       "tool_call",
+					Subtype:    "completed",
+					ToolUseID:  res.ToolUseID,
+					IsError:    res.IsError,
+					SessionID:  sessionID,
+					MessageIdx: currentTurn,
+				}
+				data, _ := json.Marshal(completedMsg)
+				fmt.Fprintln(os.Stdout, string(data))
+
 				// Output tool result event
 				msg := StreamMessage{
 					Type:       "tool_result",
@@ -614,7 +642,7 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 					IsError:    res.IsError,
 					MessageIdx: currentTurn,
 				}
-				data, _ := json.Marshal(msg)
+				data, _ = json.Marshal(msg)
 				fmt.Fprintln(os.Stdout, string(data))
 			}
 		}

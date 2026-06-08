@@ -80,7 +80,6 @@ Help (`-h`) exits 0.
 | `--no-session-persistence` | Wired |
 | `--fork-session` | Wired |
 | stream-json stdout guard | Not implemented |
-| Flat tool_use `parameters` | Should use `parameters` not `tool_input` |
 
 ## Acceptance Criteria
 
