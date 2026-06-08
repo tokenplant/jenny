@@ -159,19 +159,21 @@ func Parse() (*Flags, error) {
 
 // StreamMessage represents a message in the stream-json output.
 type StreamMessage struct {
-	Type       string   `json:"type"`
-	Subtype    string   `json:"subtype,omitempty"`
-	Content    string   `json:"content,omitempty"`
-	SessionID  string   `json:"session_id,omitempty"`
-	Result     string   `json:"result,omitempty"`
-	Model      string   `json:"model,omitempty"`
-	CWD        string   `json:"cwd,omitempty"`
-	Tools      []string `json:"tools,omitempty"`
-	ToolName   string   `json:"tool_name,omitempty"`
-	ToolInput  any      `json:"parameters,omitempty"`
-	IsError    bool     `json:"is_error,omitempty"`
-	IsPartial  bool     `json:"is_partial,omitempty"`
-	MessageIdx int      `json:"message_idx,omitempty"`
+	Type              string   `json:"type"`
+	Subtype           string   `json:"subtype,omitempty"`
+	Content           string   `json:"content,omitempty"`
+	SessionID         string   `json:"session_id,omitempty"`
+	Uuid              string   `json:"uuid,omitempty"`
+	Result            string   `json:"result,omitempty"`
+	Model             string   `json:"model,omitempty"`
+	CWD               string   `json:"cwd,omitempty"`
+	Tools             []string `json:"tools,omitempty"`
+	ToolName          string   `json:"tool_name,omitempty"`
+	ToolInput         any      `json:"parameters,omitempty"`
+	IsError           bool     `json:"is_error,omitempty"`
+	IsPartial         bool     `json:"is_partial,omitempty"`
+	ClaudeCodeVersion string   `json:"claude_code_version,omitempty"`
+	PermissionMode    string   `json:"permissionMode,omitempty"`
 }
 
 // WriteStreamJSON writes a message as NDJSON line to stdout.

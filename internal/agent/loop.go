@@ -3,12 +3,14 @@ package agent
 
 import (
 	"context"
+	crypto_rand "crypto/rand"
 	"fmt"
 	"os"
 	"strings"
 
 	"github.com/ipy/jenny/internal/api"
 	"github.com/ipy/jenny/internal/cli"
+	"github.com/ipy/jenny/internal/constants"
 	"github.com/ipy/jenny/internal/mcp"
 	"github.com/ipy/jenny/internal/session"
 	"github.com/ipy/jenny/internal/skills"
@@ -357,29 +359,44 @@ func RunSimple(ctx context.Context, prompt string, tools []tool.Tool) (string, e
 
 // StreamMessage represents a message in the stream-json output.
 type StreamMessage struct {
-	Type       string `json:"type"`
-	Subtype    string `json:"subtype,omitempty"`
-	Content    string `json:"content,omitempty"`
-	SessionID  string `json:"session_id,omitempty"`
-	Result     string `json:"result,omitempty"`
-	Model      string `json:"model,omitempty"`
-	Usage      *Usage `json:"usage,omitempty"`
-	ToolName   string `json:"tool_name,omitempty"`
-	ToolInput  any    `json:"parameters,omitempty"`
-	ToolUseID  string `json:"tool_use_id,omitempty"`
-	IsError    bool   `json:"is_error,omitempty"`
-	IsPartial  bool   `json:"is_partial,omitempty"`
-	MessageIdx int    `json:"message_idx,omitempty"`
+	Type          string  `json:"type"`
+	Subtype       string  `json:"subtype,omitempty"`
+	Content       string  `json:"content,omitempty"`
+	SessionID     string  `json:"session_id,omitempty"`
+	Uuid          string  `json:"uuid,omitempty"`
+	Result        string  `json:"result,omitempty"`
+	Model         string  `json:"model,omitempty"`
+	Usage         *Usage  `json:"usage,omitempty"`
+	ToolName      string  `json:"tool_name,omitempty"`
+	ToolInput     any     `json:"parameters,omitempty"`
+	ToolUseID     string  `json:"tool_use_id,omitempty"`
+	IsError       bool    `json:"is_error,omitempty"`
+	IsPartial     bool    `json:"is_partial,omitempty"`
+	Message       any     `json:"message,omitempty"`
+	StopReason    string  `json:"stop_reason,omitempty"`
+	DurationMs    int64   `json:"duration_ms,omitempty"`
+	DurationAPIMs int64   `json:"duration_api_ms,omitempty"`
+	TotalCostUSD  float64 `json:"total_cost_usd,omitempty"`
+	TotalCostCNY  float64 `json:"total_cost_cny,omitempty"`
+	ModelUsage    any     `json:"modelUsage,omitempty"`
+	Event         any     `json:"event,omitempty"`
+}
+
+// GenerateUUID generates a random UUID v4.
+func GenerateUUID() string {
+	b := make([]byte, 16)
+	_, _ = crypto_rand.Read(b)
+	b[6] = (b[6] & 0x0f) | 0x40
+	b[8] = (b[8] & 0x3f) | 0x80
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
 }
 
 // Usage represents token usage information for streaming output.
 type Usage struct {
-	InputTokens              int     `json:"input_tokens,omitempty"`
-	OutputTokens             int     `json:"output_tokens,omitempty"`
-	CacheReadInputTokens     int     `json:"cache_read_input_tokens,omitempty"`
-	CacheCreationInputTokens int     `json:"cache_creation_input_tokens,omitempty"`
-	TotalCostUSD             float64 `json:"total_cost_usd,omitempty"`
-	TotalCostCNY             float64 `json:"total_cost_cny,omitempty"`
+	InputTokens              int `json:"input_tokens,omitempty"`
+	OutputTokens             int `json:"output_tokens,omitempty"`
+	CacheReadInputTokens     int `json:"cache_read_input_tokens,omitempty"`
+	CacheCreationInputTokens int `json:"cache_creation_input_tokens,omitempty"`
 }
 
 // RunStream executes the agent loop with streaming JSON output.
@@ -415,12 +432,15 @@ func RunStream(ctx context.Context, prompt string, tools []tool.Tool, cwd string
 			toolNames[i] = t.Name()
 		}
 		initMsg := cli.StreamMessage{
-			Type:      "system",
-			Subtype:   "init",
-			SessionID: sessionID,
-			Model:     engine.Model(),
-			CWD:       cwd,
-			Tools:     toolNames,
+			Type:              "system",
+			Subtype:           "init",
+			SessionID:         sessionID,
+			Uuid:              GenerateUUID(),
+			Model:             engine.Model(),
+			CWD:               cwd,
+			Tools:             toolNames,
+			ClaudeCodeVersion: constants.Version,
+			PermissionMode:    "default",
 		}
 		_ = cli.WriteStreamJSON(initMsg)
 	}

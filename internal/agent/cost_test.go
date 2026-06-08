@@ -433,7 +433,6 @@ func TestAC4_UsageStructHasCorrectJSONTags(t *testing.T) {
 		OutputTokens:             20,
 		CacheReadInputTokens:     5,
 		CacheCreationInputTokens: 3,
-		TotalCostUSD:             0.00123,
 	}
 
 	data, err := json.Marshal(usage)
@@ -459,9 +458,6 @@ func TestAC4_UsageStructHasCorrectJSONTags(t *testing.T) {
 	if _, ok := parsed["cache_creation_input_tokens"]; !ok {
 		t.Error("AC4 FAIL: missing 'cache_creation_input_tokens' in JSON output")
 	}
-	if _, ok := parsed["total_cost_usd"]; !ok {
-		t.Error("AC4 FAIL: missing 'total_cost_usd' in JSON output")
-	}
 
 	// Verify values
 	if parsed["input_tokens"] != float64(10) {
@@ -469,9 +465,6 @@ func TestAC4_UsageStructHasCorrectJSONTags(t *testing.T) {
 	}
 	if parsed["cache_read_input_tokens"] != float64(5) {
 		t.Errorf("AC4 FAIL: cache_read_input_tokens = %v, want 5", parsed["cache_read_input_tokens"])
-	}
-	if parsed["total_cost_usd"] != 0.00123 {
-		t.Errorf("AC4 FAIL: total_cost_usd = %v, want 0.00123", parsed["total_cost_usd"])
 	}
 
 	t.Log("AC4 PASS: all JSON tags are snake_case and present")
@@ -543,18 +536,20 @@ func TestAC4_ResultLineContainsCacheAndCostFields(t *testing.T) {
 		t.Fatal("AC4 FAIL: result.usage is not an object or missing")
 	}
 
-	// Verify cache fields and total_cost_usd are present
+	// Verify cache fields are present in usage
 	if _, ok := usage["cache_read_input_tokens"]; !ok {
 		t.Error("AC4 FAIL: result.usage missing cache_read_input_tokens")
 	}
 	if _, ok := usage["cache_creation_input_tokens"]; !ok {
 		t.Error("AC4 FAIL: result.usage missing cache_creation_input_tokens")
 	}
-	if _, ok := usage["total_cost_usd"]; !ok {
-		t.Error("AC4 FAIL: result.usage missing total_cost_usd")
+
+	// Verify total_cost_usd is at top level
+	if _, ok := result["total_cost_usd"]; !ok {
+		t.Error("AC4 FAIL: result missing total_cost_usd")
 	}
 
-	t.Logf("AC4 PASS: result.usage = %+v", usage)
+	t.Logf("AC4 PASS: result.usage = %+v, total_cost_usd = %v", usage, result["total_cost_usd"])
 }
 
 // ---------------------------------------------------------------------------
@@ -876,49 +871,51 @@ func TestCNY_AC4_StreamJsonFieldEmission(t *testing.T) {
 		TotalCostUSD: 0.00055,
 		TotalCostCNY: 0.00385,
 	}
-	usageCNY := &Usage{
-		InputTokens:  100,
-		OutputTokens: 50,
+	msgCNY := &StreamMessage{
+		Usage: &Usage{
+			InputTokens:  100,
+			OutputTokens: 50,
+		},
 		TotalCostUSD: stateCNY.TotalCostUSD,
-	}
-	if stateCNY.Currency == "CNY" {
-		usageCNY.TotalCostCNY = stateCNY.TotalCostCNY
+		TotalCostCNY: stateCNY.TotalCostCNY,
 	}
 
-	dataCNY, err := json.Marshal(usageCNY)
+	dataCNY, err := json.Marshal(msgCNY)
 	if err != nil {
-		t.Fatalf("CNY AC4 FAIL: json.Marshal(usageCNY) error = %v", err)
+		t.Fatalf("CNY AC4 FAIL: json.Marshal(msgCNY) error = %v", err)
 	}
 	var parsedCNY map[string]any
 	if err := json.Unmarshal(dataCNY, &parsedCNY); err != nil {
-		t.Fatalf("CNY AC4 FAIL: cannot unmarshal CNY usage JSON: %v", err)
+		t.Fatalf("CNY AC4 FAIL: cannot unmarshal CNY message JSON: %v", err)
 	}
 	if _, ok := parsedCNY["total_cost_cny"]; !ok {
-		t.Error("CNY AC4 FAIL: CNY usage missing 'total_cost_cny' in JSON output")
+		t.Error("CNY AC4 FAIL: CNY message missing 'total_cost_cny' in JSON output")
 	}
 	if _, ok := parsedCNY["total_cost_usd"]; !ok {
-		t.Error("CNY AC4 FAIL: CNY usage missing 'total_cost_usd' in JSON output")
+		t.Error("CNY AC4 FAIL: CNY message missing 'total_cost_usd' in JSON output")
 	}
 
 	// Test 2: USD/unset currency should omit total_cost_cny
-	usageUSD := &Usage{
-		InputTokens:  100,
-		OutputTokens: 50,
+	msgUSD := &StreamMessage{
+		Usage: &Usage{
+			InputTokens:  100,
+			OutputTokens: 50,
+		},
 		TotalCostUSD: 0.00055,
 	}
-	dataUSD, err := json.Marshal(usageUSD)
+	dataUSD, err := json.Marshal(msgUSD)
 	if err != nil {
-		t.Fatalf("CNY AC4 FAIL: json.Marshal(usageUSD) error = %v", err)
+		t.Fatalf("CNY AC4 FAIL: json.Marshal(msgUSD) error = %v", err)
 	}
 	var parsedUSD map[string]any
 	if err := json.Unmarshal(dataUSD, &parsedUSD); err != nil {
-		t.Fatalf("CNY AC4 FAIL: cannot unmarshal USD usage JSON: %v", err)
+		t.Fatalf("CNY AC4 FAIL: cannot unmarshal USD message JSON: %v", err)
 	}
 	if _, ok := parsedUSD["total_cost_cny"]; ok {
-		t.Error("CNY AC4 FAIL: USD usage should NOT have 'total_cost_cny' in JSON output")
+		t.Error("CNY AC4 FAIL: USD message should NOT have 'total_cost_cny' in JSON output")
 	}
 	if _, ok := parsedUSD["total_cost_usd"]; !ok {
-		t.Error("CNY AC4 FAIL: USD usage missing 'total_cost_usd' in JSON output")
+		t.Error("CNY AC4 FAIL: USD message missing 'total_cost_usd' in JSON output")
 	}
 
 	t.Log("CNY AC4 PASS: total_cost_cny emitted for CNY, omitted for USD")
