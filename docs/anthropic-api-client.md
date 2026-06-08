@@ -9,7 +9,6 @@ package: internal/api
 gaps:
   - No image count validation
   - No oversize media error mapping
-  - No cache control headers
 defer_to: P3
 depends_on:
   []
