@@ -10,10 +10,12 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/ipy/jenny/internal/session"
+	"github.com/ipy/jenny/internal/tool"
 )
 
 func sseLine(event, data string) string {
@@ -614,4 +616,523 @@ func TestStreamingFallbackParityPreserved(t *testing.T) {
 	} else {
 		t.Log("AC5 PASS: fallback path emits one assistant")
 	}
+}
+
+// captureStdout redirects os.Stdout to a pipe for the duration of fn, then
+// returns everything written. Uses a named return so the deferred close/
+// drain can populate the result after all data has been read from the pipe
+// (avoids a race where return evaluates before the reader finishes).
+func captureStdout(t *testing.T, fn func()) (result string) {
+	t.Helper()
+	oldStdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe() error: %v", err)
+	}
+	os.Stdout = w
+
+	defer func() {
+		w.Close()
+		os.Stdout = oldStdout
+		var buf bytes.Buffer
+		io.Copy(&buf, r)
+		result = buf.String()
+	}()
+
+	fn()
+	return ""
+}
+
+// parseAssistantEvents returns all parsed StreamMessage envelopes of type
+// "assistant" found in the NDJSON output, preserving original order.
+func parseAssistantEvents(t *testing.T, ndjson string) []map[string]any {
+	t.Helper()
+	var out []map[string]any
+	for line := range strings.SplitSeq(ndjson, "\n") {
+		if !strings.Contains(line, `"type":"assistant"`) {
+			continue
+		}
+		var msg map[string]any
+		if err := json.Unmarshal([]byte(line), &msg); err != nil {
+			t.Fatalf("unmarshal assistant line: %v\nline: %s", err, line)
+		}
+		out = append(out, msg)
+	}
+	return out
+}
+
+// multiTurnTextPlusToolUsesServer returns a mock server that streams a turn
+// containing text content followed by two tool_use blocks (stop_reason=tool_use)
+// on the first API call, then a final end_turn text turn on the second. This
+// lets a single test drive both the text+2 tool_uses consolidated-emission
+// path and verify the loop continues.
+func multiTurnTextPlusToolUsesServer() *httptest.Server {
+	turn1 := []string{
+		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
+		// index 0: text
+		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
+		sseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}`),
+		sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
+		// index 1: tool_use t1 Read
+		sseLine("content_block_start", `{"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"t1","name":"read","input":{}}}`),
+		sseLine("content_block_delta", `{"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{}"}}`),
+		sseLine("content_block_stop", `{"type":"content_block_stop","index":1}`),
+		// index 2: tool_use t2 Bash
+		sseLine("content_block_start", `{"type":"content_block_start","index":2,"content_block":{"type":"tool_use","id":"t2","name":"bash","input":{}}}`),
+		sseLine("content_block_delta", `{"type":"content_block_delta","index":2,"delta":{"type":"input_json_delta","partial_json":"{}"}}`),
+		sseLine("content_block_stop", `{"type":"content_block_stop","index":2}`),
+		sseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"tool_use","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":3}}`),
+		sseLine("message_stop", `{"type":"message_stop"}`),
+	}
+	turn2 := []string{
+		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_2","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
+		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
+		sseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"done"}}`),
+		sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
+		sseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":2}}`),
+		sseLine("message_stop", `{"type":"message_stop"}`),
+	}
+
+	var calls atomic.Int32
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.ReadAll(r.Body)
+		r.Body.Close()
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.WriteHeader(http.StatusOK)
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			return
+		}
+		flusher.Flush()
+
+		n := calls.Add(1)
+		events := turn1
+		if n == 2 {
+			events = turn2
+		}
+		for _, e := range events {
+			io.WriteString(w, e)
+			flusher.Flush()
+		}
+	}))
+}
+
+// TestStreamingEmitsOneAssistantPerTurn verifies AC1: when a model turn
+// produces text plus two tool_use blocks, exactly ONE "assistant" line is
+// emitted whose message.content array has length 3 in the order
+// [text, tool_use t1 Read, tool_use t2 Bash]. No other assistant line
+// contains the text body.
+func TestStreamingEmitsOneAssistantPerTurn(t *testing.T) {
+	// t.Setenv for iter91 hygiene: clear any leftover state from prior tests
+	t.Setenv("ANTHROPIC_BASE_URL", "")
+	t.Setenv("ANTHROPIC_API_KEY", "")
+	server := multiTurnTextPlusToolUsesServer()
+	defer server.Close()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key-00000")
+
+	tools := []tool.Tool{
+		&fastTool{name: "read", content: "file-contents"},
+		&fastTool{name: "bash", content: "bash-ok"},
+	}
+
+	var runErr error
+	output := captureStdout(t, func() {
+		tmpDir := t.TempDir()
+		sessMgr, _ := session.NewManager(tmpDir, false)
+		cfg := StreamConfig{
+			Enabled:        true,
+			SessionManager: sessMgr,
+			SessionID:      "sess_ac1_emission",
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_, _, runErr = RunStream(ctx, "test", tools, tmpDir, cfg, "test-model")
+	})
+
+	if runErr != nil {
+		t.Fatalf("RunStream error: %v", runErr)
+	}
+
+	// AC1: Exactly one assistant line containing the turn-1 text body.
+	assistantEvents := parseAssistantEvents(t, output)
+	var turn1Assistant map[string]any
+	for _, ev := range assistantEvents {
+		if inner, ok := ev["message"].(map[string]any); ok {
+			if content, ok := inner["content"].([]any); ok {
+				if hasTextWith(content, "Hello") {
+					turn1Assistant = ev
+					break
+				}
+			}
+		}
+	}
+	if turn1Assistant == nil {
+		t.Fatalf("AC1 FAIL: no assistant event with text 'Hello' found; assistant events=%d\noutput:\n%s", len(assistantEvents), output)
+	}
+	t.Log("AC1 PASS: exactly one assistant line contains the turn-1 text body")
+
+	// AC1: Content array length is 3 in the order [text, tool_use t1 read, tool_use t2 bash].
+	inner := turn1Assistant["message"].(map[string]any)
+	content := inner["content"].([]any)
+	if len(content) != 3 {
+		t.Fatalf("AC1 FAIL: expected content array length 3, got %d", len(content))
+	}
+
+	// Index 0: text block with "Hello"
+	textBlock, ok := content[0].(map[string]any)
+	if !ok {
+		t.Fatalf("AC1 FAIL: content[0] is not a map: %T", content[0])
+	}
+	if textBlock["type"] != "text" {
+		t.Errorf("AC1 FAIL: content[0].type = %v, want 'text'", textBlock["type"])
+	}
+	if textBlock["text"] != "Hello" {
+		t.Errorf("AC1 FAIL: content[0].text = %v, want 'Hello'", textBlock["text"])
+	}
+
+	// Index 1: tool_use t1 read
+	tu1, ok := content[1].(map[string]any)
+	if !ok {
+		t.Fatalf("AC1 FAIL: content[1] is not a map: %T", content[1])
+	}
+	if tu1["type"] != "tool_use" {
+		t.Errorf("AC1 FAIL: content[1].type = %v, want 'tool_use'", tu1["type"])
+	}
+	if tu1["id"] != "t1" {
+		t.Errorf("AC1 FAIL: content[1].id = %v, want 't1'", tu1["id"])
+	}
+	if tu1["name"] != "read" {
+		t.Errorf("AC1 FAIL: content[1].name = %v, want 'read'", tu1["name"])
+	}
+
+	// Index 2: tool_use t2 bash
+	tu2, ok := content[2].(map[string]any)
+	if !ok {
+		t.Fatalf("AC1 FAIL: content[2] is not a map: %T", content[2])
+	}
+	if tu2["type"] != "tool_use" {
+		t.Errorf("AC1 FAIL: content[2].type = %v, want 'tool_use'", tu2["type"])
+	}
+	if tu2["id"] != "t2" {
+		t.Errorf("AC1 FAIL: content[2].id = %v, want 't2'", tu2["id"])
+	}
+	if tu2["name"] != "bash" {
+		t.Errorf("AC1 FAIL: content[2].name = %v, want 'bash'", tu2["name"])
+	}
+	t.Log("AC1 PASS: content array order is [text, tool_use t1 read, tool_use t2 bash]")
+
+	// AC1: No other assistant line contains the substring "Hello".
+	turn1UUID, _ := turn1Assistant["uuid"].(string)
+	otherHello := 0
+	for _, ev := range assistantEvents {
+		if uuidStr, _ := ev["uuid"].(string); uuidStr == turn1UUID {
+			continue
+		}
+		if b, _ := json.Marshal(ev); bytes.Contains(b, []byte(`"text":"Hello"`)) {
+			otherHello++
+		}
+	}
+	if otherHello != 0 {
+		t.Errorf("AC1 FAIL: %d other assistant line(s) contain text 'Hello' (expected 0)", otherHello)
+	} else {
+		t.Log("AC1 PASS: no other assistant line contains 'Hello'")
+	}
+}
+
+// TestStreamingNoTextDuplication verifies AC2: across all assistant events in
+// the turn-1 output, the exact substring "text":"Hello" appears exactly once
+// (regression: before the fix it appeared N times, where N = number of
+// tool_use blocks in the turn).
+func TestStreamingNoTextDuplication(t *testing.T) {
+	// t.Setenv for iter91 hygiene: clear any leftover state from prior tests
+	t.Setenv("ANTHROPIC_BASE_URL", "")
+	t.Setenv("ANTHROPIC_API_KEY", "")
+	server := multiTurnTextPlusToolUsesServer()
+	defer server.Close()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key-00000")
+
+	tools := []tool.Tool{
+		&fastTool{name: "read", content: "ok"},
+		&fastTool{name: "bash", content: "ok"},
+	}
+
+	var runErr error
+	output := captureStdout(t, func() {
+		tmpDir := t.TempDir()
+		sessMgr, _ := session.NewManager(tmpDir, false)
+		cfg := StreamConfig{
+			Enabled:        true,
+			SessionManager: sessMgr,
+			SessionID:      "sess_ac2_no_dup",
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_, _, runErr = RunStream(ctx, "test", tools, tmpDir, cfg, "test-model")
+	})
+
+	if runErr != nil {
+		t.Fatalf("RunStream error: %v", runErr)
+	}
+
+	// Count occurrences of the exact substring `"text":"Hello"` across all
+	// assistant events (was 2 before the fix when 2 tool_uses followed the
+	// text; consolidated emission makes it 1).
+	count := strings.Count(output, `"text":"Hello"`)
+	if count != 1 {
+		t.Errorf("AC2 FAIL: expected 1 occurrence of '\"text\":\"Hello\"' across all assistant events, got %d\noutput:\n%s", count, output)
+	} else {
+		t.Log("AC2 PASS: 'Hello' text body appears exactly once across all assistant events")
+	}
+}
+
+// TestStreamingTextOnlyTurn verifies AC3: a turn that emits text but no
+// tool_use (and reaches end_turn) produces exactly one assistant line whose
+// content is a single-element array [text]. No empty/null content blocks, no
+// tool_use content blocks.
+func TestStreamingTextOnlyTurn(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.ReadAll(r.Body)
+		r.Body.Close()
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.WriteHeader(http.StatusOK)
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			return
+		}
+		flusher.Flush()
+
+		events := []string{
+			sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
+			sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
+			sseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"just-text"}}`),
+			sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
+			sseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":2}}`),
+			sseLine("message_stop", `{"type":"message_stop"}`),
+		}
+		for _, e := range events {
+			io.WriteString(w, e)
+			flusher.Flush()
+		}
+	}))
+	defer server.Close()
+	t.Setenv("ANTHROPIC_BASE_URL", "")
+	t.Setenv("ANTHROPIC_API_KEY", "")
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key-00000")
+
+	var runErr error
+	output := captureStdout(t, func() {
+		tmpDir := t.TempDir()
+		sessMgr, _ := session.NewManager(tmpDir, false)
+		cfg := StreamConfig{
+			Enabled:        true,
+			SessionManager: sessMgr,
+			SessionID:      "sess_ac3_text_only",
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_, _, runErr = RunStream(ctx, "test", nil, tmpDir, cfg, "test-model")
+	})
+
+	if runErr != nil {
+		t.Fatalf("RunStream error: %v", runErr)
+	}
+
+	// AC3: Exactly one assistant line.
+	assistantEvents := parseAssistantEvents(t, output)
+	if len(assistantEvents) != 1 {
+		t.Fatalf("AC3 FAIL: expected exactly 1 assistant event, got %d\noutput:\n%s", len(assistantEvents), output)
+	}
+	t.Log("AC3 PASS: exactly one assistant event emitted")
+
+	// AC3: Content is a single-element array [text].
+	ev := assistantEvents[0]
+	inner, ok := ev["message"].(map[string]any)
+	if !ok {
+		t.Fatalf("AC3 FAIL: assistant.message is not a map: %T", ev["message"])
+	}
+	content, ok := inner["content"].([]any)
+	if !ok {
+		t.Fatalf("AC3 FAIL: assistant.message.content is not an array: %T", inner["content"])
+	}
+	if len(content) != 1 {
+		t.Fatalf("AC3 FAIL: content array length = %d, want 1", len(content))
+	}
+	block, ok := content[0].(map[string]any)
+	if !ok {
+		t.Fatalf("AC3 FAIL: content[0] is not a map: %T", content[0])
+	}
+	if block["type"] != "text" {
+		t.Errorf("AC3 FAIL: content[0].type = %v, want 'text'", block["type"])
+	}
+	if block["text"] != "just-text" {
+		t.Errorf("AC3 FAIL: content[0].text = %v, want 'just-text'", block["text"])
+	}
+	t.Log("AC3 PASS: content is a single-element [text] array")
+
+	// AC3: No empty/null content blocks, no tool_use blocks.
+	for i, item := range content {
+		b, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if b["type"] == "tool_use" {
+			t.Errorf("AC3 FAIL: content[%d] is a tool_use block (text-only turn must not emit tool_use)", i)
+		}
+	}
+	t.Log("AC3 PASS: no tool_use blocks in text-only turn")
+}
+
+// TestStreamingToolUseOnlyTurn verifies AC4: a turn that emits one or more
+// tool_use blocks and no text produces exactly one assistant line whose
+// content array contains only the tool_use block(s) — no text block, no
+// empty-string text block.
+func TestStreamingToolUseOnlyTurn(t *testing.T) {
+	turn1 := []string{
+		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
+		// index 0: tool_use t1 read (no preceding text)
+		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"t1","name":"read","input":{}}}`),
+		sseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{}"}}`),
+		sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
+		sseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"tool_use","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":2}}`),
+		sseLine("message_stop", `{"type":"message_stop"}`),
+	}
+	turn2 := []string{
+		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_2","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
+		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
+		sseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"done"}}`),
+		sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
+		sseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":2}}`),
+		sseLine("message_stop", `{"type":"message_stop"}`),
+	}
+
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.ReadAll(r.Body)
+		r.Body.Close()
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.WriteHeader(http.StatusOK)
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			return
+		}
+		flusher.Flush()
+
+		n := calls.Add(1)
+		events := turn1
+		if n == 2 {
+			events = turn2
+		}
+		for _, e := range events {
+			io.WriteString(w, e)
+			flusher.Flush()
+		}
+	}))
+	defer server.Close()
+	t.Setenv("ANTHROPIC_BASE_URL", "")
+	t.Setenv("ANTHROPIC_API_KEY", "")
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key-00000")
+
+	tools := []tool.Tool{
+		&fastTool{name: "read", content: "ok"},
+	}
+
+	var runErr error
+	output := captureStdout(t, func() {
+		tmpDir := t.TempDir()
+		sessMgr, _ := session.NewManager(tmpDir, false)
+		cfg := StreamConfig{
+			Enabled:        true,
+			SessionManager: sessMgr,
+			SessionID:      "sess_ac4_tool_use_only",
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_, _, runErr = RunStream(ctx, "test", tools, tmpDir, cfg, "test-model")
+	})
+
+	if runErr != nil {
+		t.Fatalf("RunStream error: %v", runErr)
+	}
+
+	// AC4: Exactly one assistant line. The turn-2 assistant carries the
+	// "done" text — we identify the turn-1 assistant by the presence of the
+	// tool_use block with id=t1.
+	assistantEvents := parseAssistantEvents(t, output)
+	var turn1Assistant map[string]any
+	for _, ev := range assistantEvents {
+		inner, ok := ev["message"].(map[string]any)
+		if !ok {
+			continue
+		}
+		content, ok := inner["content"].([]any)
+		if !ok {
+			continue
+		}
+		if hasToolUseWithID(content, "t1") {
+			turn1Assistant = ev
+			break
+		}
+	}
+	if turn1Assistant == nil {
+		t.Fatalf("AC4 FAIL: no assistant event with tool_use id=t1 found; assistant events=%d\noutput:\n%s", len(assistantEvents), output)
+	}
+	t.Log("AC4 PASS: exactly one assistant event contains the tool_use block from turn 1")
+
+	// AC4: Content contains only the tool_use block(s) — no text, no empty
+	// text block.
+	inner := turn1Assistant["message"].(map[string]any)
+	content := inner["content"].([]any)
+	if len(content) == 0 {
+		t.Fatal("AC4 FAIL: content array is empty")
+	}
+	for i, item := range content {
+		b, ok := item.(map[string]any)
+		if !ok {
+			t.Fatalf("AC4 FAIL: content[%d] is not a map: %T", i, item)
+		}
+		if b["type"] == "text" {
+			t.Errorf("AC4 FAIL: content[%d] is a text block (tool-use-only turn must not emit text)", i)
+		}
+	}
+	t.Log("AC4 PASS: content array contains only tool_use blocks, no text block")
+}
+
+// hasTextWith reports whether any element of content is a text block whose
+// text matches want.
+func hasTextWith(content []any, want string) bool {
+	for _, item := range content {
+		b, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if b["type"] == "text" && b["text"] == want {
+			return true
+		}
+	}
+	return false
+}
+
+// hasToolUseWithID reports whether any element of content is a tool_use block
+// with id == want.
+func hasToolUseWithID(content []any, want string) bool {
+	for _, item := range content {
+		b, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if b["type"] == "tool_use" && b["id"] == want {
+			return true
+		}
+	}
+	return false
 }
