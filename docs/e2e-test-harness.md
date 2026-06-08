@@ -25,14 +25,15 @@ functions under `jenny_test/`. No live API access is required.
 
 ```
 jenny_test/
-├── cli_flags_test.go          # --version, --help smoke tests
-├── stream_json_test.go        # stream-json + cassette replay smoke
-├── api_protocol_test.go       # outbound /v1/messages request conformance
-├── harness/                   # internal helper package
-│   ├── mock_api.go            # mock Anthropic API server
-│   └── runner.go              # jenny binary builder + spawner
+├── cli_flags_test.go              # --version, --help smoke tests
+├── stream_json_test.go            # stream-json + cassette replay smoke
+├── stream_json_format_test.go     # NDJSON event-shape conformance tests
+├── api_protocol_test.go           # outbound /v1/messages request conformance
+├── harness/                       # internal helper package
+│   ├── mock_api.go                # mock Anthropic API server
+│   └── runner.go                  # jenny binary builder + spawner
 └── fixtures/
-    └── cassettes/             # SSE cassette files
+    └── cassettes/                 # SSE cassette files
         └── echo-hello.sse
 ```
 
@@ -200,6 +201,47 @@ wall time. The non-streaming code path in
 `internal/api/client.go` (`doSendMessage`) therefore emits
 `max_tokens == 64000` on the wire on both the streaming and
 fallback paths, satisfying AC1's literal requirement.
+
+## Stream-json Output Format
+
+`jenny_test/stream_json_format_test.go` is a blackbox conformance suite
+for the NDJSON event shapes that jenny emits in
+`--output-format=stream-json` mode. It reuses the same `echo-hello`
+cassette and the same `harness.NewMockServer` / `harness.RunJenny`
+plumbing as the rest of the suite — no production code changes are
+required to add or run these tests.
+
+Seven properties are checked, each in its own test function:
+
+1. **Every line has a non-empty `type` field** — any JSON line that
+   lacks `"type"`, or has `"type": ""`, fails the test.
+2. **UUIDs are UUID v4** — every top-level `"uuid"` value must match
+   `^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`
+   (lowercase hex, version-4, variant-1).
+3. **`system/init` has envelope fields** — at least one event with
+   `type=system, subtype=init`; it must carry non-empty `session_id`,
+   a v4 `uuid`, and a `tools` field.
+4. **`system/init` `tools` is a non-empty string array** — the array
+   has at least one element, every element is a non-empty string, and
+   the array includes `"Bash"` and `"Read"` (exact case).
+5. **`result/success` has content fields** — at least one event with
+   `type=result, subtype=success`; it must carry a string `result`
+   (empty allowed), a non-empty `stop_reason`, a numeric
+   `duration_ms >= 0`, a non-empty `session_id`, and a v4 `uuid`.
+6. **`session_id` is consistent within a run** — every line that
+   carries `session_id` must carry the same value; exactly one
+   distinct value is allowed per run.
+7. **The first JSON line is a `system` event** — the first
+   JSON-parseable stdout line must have `type=system`.
+
+## Resolved Debt
+
+- `scope-creep-now-disclosed` (deferred from iter-112) — resolved.
+  The scope creep that touched three files (`internal/agent/loop.go`,
+  `internal/api/client.go`, `internal/agent/engine.go`) was disclosed
+  in commit `005a97b` and the corresponding AC1 violation (the
+  non-streaming fallback path emitting `max_tokens != 64000`) was
+  fixed in the same commit. No further action is required.
 
 ## Running the Suite
 
