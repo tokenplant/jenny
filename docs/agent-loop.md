@@ -77,6 +77,12 @@ Anthropic API client wrapper:
 4. Result is appended to messages as `tool_result` content block
 5. Loop continues until `stop_reason == "end_turn"`
 
+### Termination
+
+Empty or unrecognized `stop_reason` values are treated as `end_turn` (terminal). The loop **NEVER** continues on unrecognized `stop_reason` values. This prevents an infinite-loop bug where a text-only response with an empty `stop_reason` would cause the engine to re-query with the same duplicated assistant message.
+
+If a response carries a `tool_use` block but `stop_reason` is empty (defensive path, should not occur per API contract but may occur with proxies), the loop treats this as `tool_use` and continues to execute the tool to keep the chain valid.
+
 ## Security
 
 ### Path Traversal Prevention

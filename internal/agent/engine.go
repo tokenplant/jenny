@@ -173,6 +173,12 @@ func (e *QueryEngine) SetMaxTurns(maxTurns int) {
 	e.maxTurns = maxTurns
 }
 
+// setMemExtractorForTest sets the memExtractor field for testing purposes.
+// This is only for use in test files within the agent package.
+func (e *QueryEngine) setMemExtractorForTest(memExtractor *MemoryExtractor) {
+	e.memExtractor = memExtractor
+}
+
 // SubmitMessage runs a single query turn: persist message, run agent loop,
 // flush state on completion. Returns the text result and error.
 func (e *QueryEngine) SubmitMessage(ctx context.Context, prompt string) (string, error) {
@@ -857,11 +863,29 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 			}
 
 			return textOutput.String(), nil
-		}
 
-		// If we get here without text output and without tool results, something is wrong
-		if textOutput.String() == "" && len(toolResults) == 0 && len(toolUseBlocks) == 0 {
-			return "", fmt.Errorf("unexpected empty response")
+		default:
+			// Empty or unrecognized stop_reason: treat as end_turn (terminal).
+			// Defensive: if tool_use blocks are present, continue the loop to keep
+			// the chain valid (the API requires tool_use to be answered with tool_result).
+			if len(toolUseBlocks) > 0 {
+				if len(toolResults) > 0 {
+					userMsg := api.Message{
+						Role:        "user",
+						ToolResults: make([]api.ToolResultBlock, 0, len(toolResults)),
+					}
+					for _, tr := range toolResults {
+						userMsg.ToolResults = append(userMsg.ToolResults, api.ToolResultBlock{
+							ToolUseID: tr.ToolUseID,
+							Content:   tr.Content,
+							IsError:   tr.IsError,
+						})
+					}
+					messages = append(messages, userMsg)
+				}
+				continue
+			}
+			return e.finalizeAsEndTurn(ctx, resp, textOutput, sessionID, &assistantMsg, messages)
 		}
 	}
 
@@ -908,6 +932,58 @@ func (e *QueryEngine) persistCompactFailCount() {
 			CompactFailCount: e.compactFailCount,
 		})
 	}
+}
+
+// finalizeAsEndTurn handles finalization for the end_turn stop reason and for
+// empty/unrecognized stop_reason values (treated as terminal). It returns the
+// final text result and nil error on success.
+func (e *QueryEngine) finalizeAsEndTurn(ctx context.Context, resp *api.Response, textOutput strings.Builder, sessionID string, assistantMsg *api.Message, messages []api.Message) (string, error) {
+	// AC3: Enforce structured output at end of turn
+	if e.structuredOutputTool != nil && !e.structuredOutputTool.IsEmitted() {
+		return "", fmt.Errorf("structured output not emitted")
+	}
+	// AC3: Determine final result - use structured output if available
+	finalResult := textOutput.String()
+	if e.structuredOutputTool != nil && e.structuredOutputTool.IsEmitted() && e.structuredOutputResult != "" {
+		finalResult = e.structuredOutputResult
+	}
+	// Output final result
+	if e.streamCfg.Enabled {
+		usage := &Usage{
+			InputTokens:              resp.Usage.InputTokens,
+			OutputTokens:             resp.Usage.OutputTokens,
+			CacheReadInputTokens:     resp.Usage.CacheReadInputTokens,
+			CacheCreationInputTokens: resp.Usage.CacheCreationInputTokens,
+			TotalCostUSD:             e.costState.TotalCostUSD,
+		}
+		if e.costState.Currency == "CNY" {
+			usage.TotalCostCNY = e.costState.TotalCostCNY
+		}
+		msg := StreamMessage{
+			Type:      "result",
+			Result:    finalResult,
+			SessionID: sessionID,
+			Model:     resp.Model,
+			Usage:     usage,
+		}
+		data, _ := json.Marshal(msg)
+		fmt.Fprintln(os.Stdout, string(data))
+	}
+	// AC2: Reset compaction failure counter on successful API response
+	e.resetCompactFailCount()
+
+	// Check and run memory extraction before returning.
+	// StopReason is passed through verbatim (may be "" for empty stop_reason).
+	if e.memExtractor != nil {
+		e.memExtractor.CheckAndExtract(ctx, TurnContext{
+			StopReason:       resp.StopReason,
+			AssistantMessage: assistantMsg,
+			TotalMessages:    len(messages),
+			RecentMessages:   messages,
+		})
+	}
+
+	return finalResult, nil
 }
 
 // CompactFailCount returns the current compaction failure count for diagnostics.
