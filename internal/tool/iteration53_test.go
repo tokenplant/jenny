@@ -1,9 +1,12 @@
-package tool
+package tool_test
 
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
+
+	"github.com/ipy/jenny/internal/tool"
 )
 
 // ============================================================================
@@ -12,7 +15,7 @@ import (
 
 func TestAC2_ValidSchema_ParsesSuccessfully(t *testing.T) {
 	validSchema := `{"type": "object", "properties": {"name": {"type": "string"}}}`
-	schema, err := ValidateStructuredSchema(validSchema)
+	schema, err := tool.ValidateStructuredSchema(validSchema)
 	if err != nil {
 		t.Fatalf("expected valid schema to parse, got error: %v", err)
 	}
@@ -26,44 +29,44 @@ func TestAC2_ValidSchema_ParsesSuccessfully(t *testing.T) {
 
 func TestAC2_InvalidJSON_FailsParsing(t *testing.T) {
 	invalidJSON := `not json at all`
-	_, err := ValidateStructuredSchema(invalidJSON)
+	_, err := tool.ValidateStructuredSchema(invalidJSON)
 	if err == nil {
 		t.Fatal("expected error for invalid JSON, got nil")
 	}
-	if !contains(err.Error(), "invalid JSON") {
+	if !strings.Contains(err.Error(), "invalid JSON") {
 		t.Errorf("expected 'invalid JSON' error, got: %v", err)
 	}
 }
 
 func TestAC2_TypeNotString_Fails(t *testing.T) {
 	invalidSchema := `{"type": 123}`
-	_, err := ValidateStructuredSchema(invalidSchema)
+	_, err := tool.ValidateStructuredSchema(invalidSchema)
 	if err == nil {
 		t.Fatal("expected error for non-string type, got nil")
 	}
-	if !contains(err.Error(), "type must be a string") {
+	if !strings.Contains(err.Error(), "type must be a string") {
 		t.Errorf("expected 'type must be a string' error, got: %v", err)
 	}
 }
 
 func TestAC2_TypeNotObject_Fails(t *testing.T) {
 	invalidSchema := `{"type": "string"}`
-	_, err := ValidateStructuredSchema(invalidSchema)
+	_, err := tool.ValidateStructuredSchema(invalidSchema)
 	if err == nil {
 		t.Fatal("expected error for non-object type, got nil")
 	}
-	if !contains(err.Error(), "type must be 'object'") {
+	if !strings.Contains(err.Error(), "type must be 'object'") {
 		t.Errorf("expected 'type must be object' error, got: %v", err)
 	}
 }
 
 func TestAC2_PropertiesNotObject_Fails(t *testing.T) {
 	invalidSchema := `{"type": "object", "properties": "not an object"}`
-	_, err := ValidateStructuredSchema(invalidSchema)
+	_, err := tool.ValidateStructuredSchema(invalidSchema)
 	if err == nil {
 		t.Fatal("expected error for non-object properties, got nil")
 	}
-	if !contains(err.Error(), "properties must be an object") {
+	if !strings.Contains(err.Error(), "properties must be an object") {
 		t.Errorf("expected 'properties must be an object' error, got: %v", err)
 	}
 }
@@ -71,7 +74,7 @@ func TestAC2_PropertiesNotObject_Fails(t *testing.T) {
 func TestAC2_MissingType_Accepted(t *testing.T) {
 	// Schema without type is technically valid (any JSON value allowed)
 	schema := `{"properties": {"name": {"type": "string"}}}`
-	parsed, err := ValidateStructuredSchema(schema)
+	parsed, err := tool.ValidateStructuredSchema(schema)
 	if err != nil {
 		t.Fatalf("schema without type should be accepted, got error: %v", err)
 	}
@@ -86,28 +89,28 @@ func TestAC2_MissingType_Accepted(t *testing.T) {
 
 func TestAC1_StructuredOutputTool_Name(t *testing.T) {
 	schema := map[string]any{"type": "object"}
-	tool := NewStructuredOutputTool(schema)
-	if tool.Name() != "StructuredOutput" {
-		t.Errorf("expected name 'StructuredOutput', got %q", tool.Name())
+	outputTool := tool.NewStructuredOutputTool(schema)
+	if outputTool.Name() != "StructuredOutput" {
+		t.Errorf("expected name 'StructuredOutput', got %q", outputTool.Name())
 	}
 }
 
 func TestAC1_StructuredOutputTool_Description(t *testing.T) {
 	schema := map[string]any{"type": "object", "properties": map[string]any{"name": map[string]any{"type": "string"}}}
-	tool := NewStructuredOutputTool(schema)
-	desc := tool.Description()
+	outputTool := tool.NewStructuredOutputTool(schema)
+	desc := outputTool.Description()
 	if desc == "" {
 		t.Error("expected non-empty description")
 	}
-	if !contains(desc, "structured") {
+	if !strings.Contains(desc, "structured") {
 		t.Errorf("description should mention 'structured', got: %s", desc)
 	}
 }
 
 func TestAC1_StructuredOutputTool_InputSchema(t *testing.T) {
 	schema := map[string]any{"type": "object"}
-	tool := NewStructuredOutputTool(schema)
-	inputSchema := tool.InputSchema()
+	outputTool := tool.NewStructuredOutputTool(schema)
+	inputSchema := outputTool.InputSchema()
 	if inputSchema == nil {
 		t.Fatal("expected non-nil input schema")
 	}
@@ -133,8 +136,8 @@ func TestAC1_InputSchema_DynamicUserSchema(t *testing.T) {
 		},
 		"required": []any{"name"},
 	}
-	tool := NewStructuredOutputTool(userSchema)
-	inputSchema := tool.InputSchema()
+	outputTool := tool.NewStructuredOutputTool(userSchema)
+	inputSchema := outputTool.InputSchema()
 
 	props, ok := inputSchema["properties"].(map[string]any)
 	if !ok {
@@ -186,24 +189,24 @@ func TestAC1_InputSchema_DynamicUserSchema(t *testing.T) {
 
 func TestAC1_StructuredOutputTool_Reset(t *testing.T) {
 	schema := map[string]any{"type": "object"}
-	tool := NewStructuredOutputTool(schema)
+	outputTool := tool.NewStructuredOutputTool(schema)
 
-	if tool.IsEmitted() {
+	if outputTool.IsEmitted() {
 		t.Error("expected IsEmitted() to be false initially")
 	}
 
 	// Simulate a call
-	_, _ = tool.Execute(context.Background(), map[string]any{
+	_, _ = outputTool.Execute(context.Background(), map[string]any{
 		"value": map[string]any{"result": "test"},
 	}, "/tmp")
 
-	if !tool.IsEmitted() {
+	if !outputTool.IsEmitted() {
 		t.Error("expected IsEmitted() to be true after Execute")
 	}
 
 	// Reset
-	tool.Reset()
-	if tool.IsEmitted() {
+	outputTool.Reset()
+	if outputTool.IsEmitted() {
 		t.Error("expected IsEmitted() to be false after Reset")
 	}
 }
@@ -214,10 +217,10 @@ func TestAC1_StructuredOutputTool_Reset(t *testing.T) {
 
 func TestAC3_SecondExecute_ReturnsError(t *testing.T) {
 	schema := map[string]any{"type": "object"}
-	tool := NewStructuredOutputTool(schema)
+	outputTool := tool.NewStructuredOutputTool(schema)
 
 	// First call succeeds
-	result1, err1 := tool.Execute(context.Background(), map[string]any{
+	result1, err1 := outputTool.Execute(context.Background(), map[string]any{
 		"value": map[string]any{"result": "first"},
 	}, "/tmp")
 	if err1 != nil {
@@ -228,7 +231,7 @@ func TestAC3_SecondExecute_ReturnsError(t *testing.T) {
 	}
 
 	// Second call fails
-	result2, err2 := tool.Execute(context.Background(), map[string]any{
+	result2, err2 := outputTool.Execute(context.Background(), map[string]any{
 		"value": map[string]any{"result": "second"},
 	}, "/tmp")
 	if err2 != nil {
@@ -240,16 +243,16 @@ func TestAC3_SecondExecute_ReturnsError(t *testing.T) {
 	if !result2.IsError {
 		t.Error("second Execute should be error")
 	}
-	if !contains(result2.Content, "already emitted") {
+	if !strings.Contains(result2.Content, "already emitted") {
 		t.Errorf("expected 'already emitted' error, got: %s", result2.Content)
 	}
 }
 
 func TestAC3_ExecuteWithMissingValue_ReturnsError(t *testing.T) {
 	schema := map[string]any{"type": "object"}
-	tool := NewStructuredOutputTool(schema)
+	outputTool := tool.NewStructuredOutputTool(schema)
 
-	result, err := tool.Execute(context.Background(), map[string]any{}, "/tmp")
+	result, err := outputTool.Execute(context.Background(), map[string]any{}, "/tmp")
 	if err != nil {
 		t.Fatalf("Execute returned error: %v", err)
 	}
@@ -259,16 +262,16 @@ func TestAC3_ExecuteWithMissingValue_ReturnsError(t *testing.T) {
 	if !result.IsError {
 		t.Error("Execute with missing value should be error")
 	}
-	if !contains(result.Content, "value field is required") {
+	if !strings.Contains(result.Content, "value field is required") {
 		t.Errorf("expected 'value field is required' error, got: %s", result.Content)
 	}
 }
 
 func TestAC3_ExecuteWithValidValue_ReturnsValidatedJSON(t *testing.T) {
 	schema := map[string]any{"type": "object"}
-	tool := NewStructuredOutputTool(schema)
+	outputTool := tool.NewStructuredOutputTool(schema)
 
-	result, err := tool.Execute(context.Background(), map[string]any{
+	result, err := outputTool.Execute(context.Background(), map[string]any{
 		"value": map[string]any{
 			"name": "test",
 			"age":  42,
@@ -299,10 +302,10 @@ func TestAC3_ExecuteWithRequiredFields_ValidatesPresence(t *testing.T) {
 			"name": map[string]any{"type": "string"},
 		},
 	}
-	tool := NewStructuredOutputTool(schema)
+	outputTool := tool.NewStructuredOutputTool(schema)
 
 	// Missing required field
-	result, err := tool.Execute(context.Background(), map[string]any{
+	result, err := outputTool.Execute(context.Background(), map[string]any{
 		"value": map[string]any{"age": 42},
 	}, "/tmp")
 	if err != nil {
@@ -314,12 +317,12 @@ func TestAC3_ExecuteWithRequiredFields_ValidatesPresence(t *testing.T) {
 	if !result.IsError {
 		t.Error("Execute with missing required field should be error")
 	}
-	if !contains(result.Content, "required field") {
+	if !strings.Contains(result.Content, "required field") {
 		t.Errorf("expected 'required field' error, got: %s", result.Content)
 	}
 
 	// Present required field
-	result2, err2 := tool.Execute(context.Background(), map[string]any{
+	result2, err2 := outputTool.Execute(context.Background(), map[string]any{
 		"value": map[string]any{"name": "test"},
 	}, "/tmp")
 	if err2 != nil {

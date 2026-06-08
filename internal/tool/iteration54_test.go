@@ -172,6 +172,15 @@ func TestAC3_NamedAgentHasAccessToParentTools(t *testing.T) {
 	// Use LocalSubagentRunner to verify StreamConfig capture
 	readTool := tool.NewReadTool(false, nil)
 	runner := agent.NewLocalSubagentRunner([]tool.Tool{readTool}, nil)
+
+	// Set parent config with non-zero values before Execute
+	parentCfg := agent.StreamConfig{
+		MaxBudgetUSD: 1.5,
+		MaxBudgetCNY: 10.0,
+		MaxTurns:     50,
+	}
+	runner.SetParentConfig(parentCfg)
+
 	agentTool := tool.NewAgentToolWithSwarms(runner, nil, true)
 
 	input := map[string]any{
@@ -203,17 +212,23 @@ func TestAC3_NamedAgentHasAccessToParentTools(t *testing.T) {
 		t.Log("AC2-(5) PASS: IsNamedAgent is true")
 	}
 
-	// Verify inherited fields are present (non-nil values indicate inheritance happened)
-	if cfgInfo["MaxBudgetUSD"] == nil {
-		t.Error("AC2-(5) FAIL: MaxBudgetUSD should be inherited")
+	// Verify inherited fields match parent config values
+	if cfgInfo["MaxBudgetUSD"] != parentCfg.MaxBudgetUSD {
+		t.Errorf("AC2-(5) FAIL: MaxBudgetUSD should be inherited, got %v", cfgInfo["MaxBudgetUSD"])
 	} else {
-		t.Log("AC2-(5) PASS: MaxBudgetUSD is inherited")
+		t.Logf("AC2-(5) PASS: MaxBudgetUSD is inherited: %v", cfgInfo["MaxBudgetUSD"])
 	}
 
-	if cfgInfo["MaxTurns"] == nil {
-		t.Error("AC2-(5) FAIL: MaxTurns should be inherited")
+	if cfgInfo["MaxBudgetCNY"] != parentCfg.MaxBudgetCNY {
+		t.Errorf("AC2-(5) FAIL: MaxBudgetCNY should be inherited, got %v", cfgInfo["MaxBudgetCNY"])
 	} else {
-		t.Log("AC2-(5) PASS: MaxTurns is inherited")
+		t.Logf("AC2-(5) PASS: MaxBudgetCNY is inherited: %v", cfgInfo["MaxBudgetCNY"])
+	}
+
+	if cfgInfo["MaxTurns"] != parentCfg.MaxTurns {
+		t.Errorf("AC2-(5) FAIL: MaxTurns should be inherited, got %v", cfgInfo["MaxTurns"])
+	} else {
+		t.Logf("AC2-(5) PASS: MaxTurns is inherited: %v", cfgInfo["MaxTurns"])
 	}
 }
 
