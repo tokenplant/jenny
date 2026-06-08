@@ -84,7 +84,7 @@ Implement in this order:
    - System prompt is a top-level parameter, not a `role: system` message
    - Assistant messages with `tool_use` must include the full `tool_use` block before tool results
    - Tool results go in user messages as `tool_result` blocks keyed by `tool_use_id`
-   - **Deferred:** non-streaming only; no image validation → P3+
+   - Image validation and SSE streaming default both shipped ✓
 
 4. - [x] Core agent loop — partial — [`agent-loop.md`](./agent-loop.md)
    - Basic tool_use → execute → tool_result loop
@@ -100,19 +100,18 @@ Implement in this order:
 
 6. - [x] Session resume (`-r`) — partial — [`session-resume.md`](./session-resume.md)
    - Rebuild message history from transcript ✓
-   - **Deferred:** `readFileState` restoration, cost state, queue-only filtering, compaction boundaries → P3+
+   - **Deferred:** queue-only filtering, compaction boundaries → P3+
 
 7. - [x] SSE streaming from API — [`sse-streaming.md`](./sse-streaming.md) — partial _(moved from P2)_
    - Stream via server-sent events; yield partial text as it arrives ✓
    - On streaming failure with fallback configured, retry non-streaming ✓
    - Emit `stream_request_start` before each API iteration ✓
-   - **Blocks:** full stream-json compliance and `--include-partial-messages`
-
+   
 8. - [x] Stream-json output (NDJSON) — partial — [`stream-json.md`](./stream-json.md)
    - One JSON object per line on stdout; debug on stderr
    - Terminal `{ type: "result", session_id, result, usage }` on successful run
    - stdout guard implemented (AC3)
-   - **Deferred:** system/init line; `tool_input` vs `parameters` → P3+
+   - **Deferred:** system/init line → P3+
 
 9. - [x] Cost / token tracking — [`cost-tracking.md`](./cost-tracking.md)
    - Track input/output tokens plus cache read/creation per model

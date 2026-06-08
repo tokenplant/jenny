@@ -7,7 +7,6 @@ spec: complete
 code: partial
 package: internal/agent
 gaps:
-  - Sequential tools only
   - No thinking block handling
   - No tool result spill to disk
   - No compaction/retry caps
