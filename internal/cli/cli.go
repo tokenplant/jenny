@@ -168,7 +168,7 @@ type StreamMessage struct {
 	CWD        string   `json:"cwd,omitempty"`
 	Tools      []string `json:"tools,omitempty"`
 	ToolName   string   `json:"tool_name,omitempty"`
-	ToolInput  any      `json:"tool_input,omitempty"`
+	ToolInput  any      `json:"parameters,omitempty"`
 	IsError    bool     `json:"is_error,omitempty"`
 	IsPartial  bool     `json:"is_partial,omitempty"`
 	MessageIdx int      `json:"message_idx,omitempty"`

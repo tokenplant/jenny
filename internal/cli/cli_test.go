@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -327,5 +329,36 @@ func TestParseMCPConfigNoFlag(t *testing.T) {
 	}
 	if len(flags.MCPConfig) > 0 {
 		t.Errorf("expected nil or empty MCPConfig, got %v", flags.MCPConfig)
+	}
+}
+
+func TestStreamMessageToolInputUsesParametersKey(t *testing.T) {
+	msg := StreamMessage{
+		Type:     "tool_use",
+		ToolName: "Read",
+		ToolInput: map[string]any{
+			"file_path": "foo.go",
+		},
+	}
+
+	data, err := json.Marshal(msg)
+	if err != nil {
+		t.Fatalf("json.Marshal failed: %v", err)
+	}
+
+	var parsed map[string]any
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("json.Unmarshal failed: %v", err)
+	}
+
+	if _, ok := parsed["parameters"]; !ok {
+		t.Errorf("expected 'parameters' key in JSON output, got: %s", string(data))
+	}
+	if _, ok := parsed["tool_input"]; ok {
+		t.Errorf("unexpected 'tool_input' key found in JSON output: %s", string(data))
+	}
+
+	if !strings.Contains(string(data), `"parameters"`) {
+		t.Errorf("JSON output does not contain 'parameters' key: %s", string(data))
 	}
 }

@@ -8,7 +8,6 @@ code: partial
 defer_to: P3
 package: internal/cli, internal/agent
 gaps:
-  - Flat tool_use uses tool_input not parameters
   - No tool_call started/completed
   - Simplified event shape vs SDK
 depends_on:

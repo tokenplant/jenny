@@ -329,7 +329,7 @@ type StreamMessage struct {
 	Model      string `json:"model,omitempty"`
 	Usage      *Usage `json:"usage,omitempty"`
 	ToolName   string `json:"tool_name,omitempty"`
-	ToolInput  any    `json:"tool_input,omitempty"`
+	ToolInput  any    `json:"parameters,omitempty"`
 	IsError    bool   `json:"is_error,omitempty"`
 	IsPartial  bool   `json:"is_partial,omitempty"`
 	MessageIdx int    `json:"message_idx,omitempty"`
