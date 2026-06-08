@@ -10,6 +10,10 @@ import (
 // Exported so the agent package can use the same key for consistent context lookups.
 var ForkChildKey = "agent.forkChild"
 
+// NamedAgentKey is the context key for checking if we're in a named swarm agent.
+// Used to block nested named agents (AC1).
+var NamedAgentKey = "agent.namedAgent"
+
 // SubagentParams holds parameters for running a subagent.
 type SubagentParams struct {
 	Prompt          string
@@ -19,6 +23,7 @@ type SubagentParams struct {
 	CWD             string
 	Isolation       string
 	RunInBackground bool
+	Name            string // Swarm agent name (empty means unnamed subagent)
 }
 
 // SubagentResult holds the result of a subagent execution.
@@ -46,13 +51,19 @@ type AsyncResult struct {
 
 // AgentTool provides subagent spawning capability.
 type AgentTool struct {
-	runner      SubagentRunner
-	asyncRunner AsyncRunner
+	runner        SubagentRunner
+	asyncRunner   AsyncRunner
+	swarmsEnabled bool
 }
 
 // NewAgentTool creates a new AgentTool with the given subagent runner.
 func NewAgentTool(runner SubagentRunner, asyncRunner AsyncRunner) *AgentTool {
-	return &AgentTool{runner: runner, asyncRunner: asyncRunner}
+	return &AgentTool{runner: runner, asyncRunner: asyncRunner, swarmsEnabled: false}
+}
+
+// NewAgentToolWithSwarms creates a new AgentTool with swarm mode enabled.
+func NewAgentToolWithSwarms(runner SubagentRunner, asyncRunner AsyncRunner, swarmsEnabled bool) *AgentTool {
+	return &AgentTool{runner: runner, asyncRunner: asyncRunner, swarmsEnabled: swarmsEnabled}
 }
 
 // Name returns the tool name.
@@ -62,6 +73,14 @@ func (t *AgentTool) Name() string {
 
 // Description returns a description of the tool.
 func (t *AgentTool) Description() string {
+	if t.swarmsEnabled {
+		return "Spawns a subagent with type-filtered tool allowlist. " +
+			"Use subagent_type to select the agent type (explore, plan, shell, verification, general-purpose). " +
+			"Use name to spawn a named teammate for parallel delegation (swarm mode). " +
+			"Legacy alias: task. " +
+			"When run_in_background is false (default), waits for completion and returns text. " +
+			"When run_in_background is true, returns immediately with async launch info."
+	}
 	return "Spawns a subagent with type-filtered tool allowlist. " +
 		"Use subagent_type to select the agent type (explore, plan, shell, verification, general-purpose). " +
 		"Legacy alias: task. " +
@@ -71,39 +90,47 @@ func (t *AgentTool) Description() string {
 
 // InputSchema returns the JSON schema for tool input.
 func (t *AgentTool) InputSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"prompt": map[string]any{
-				"type":        "string",
-				"description": "The instruction prompt for the subagent",
-			},
-			"description": map[string]any{
-				"type":        "string",
-				"description": "Short label describing the task",
-			},
-			"subagent_type": map[string]any{
-				"type":        "string",
-				"description": "Built-in subagent type: explore, plan, shell, verification, general-purpose",
-			},
-			"model": map[string]any{
-				"type":        "string",
-				"description": "Optional model override (sonnet, opus, haiku, or full model name)",
-			},
-			"run_in_background": map[string]any{
-				"type":        "boolean",
-				"description": "If true, launch subagent asynchronously without blocking",
-			},
-			"isolation": map[string]any{
-				"type":        "string",
-				"description": "Isolation mode: worktree for temp worktree, none otherwise",
-			},
-			"cwd": map[string]any{
-				"type":        "string",
-				"description": "Working directory override for the subagent",
-			},
+	props := map[string]any{
+		"prompt": map[string]any{
+			"type":        "string",
+			"description": "The instruction prompt for the subagent",
 		},
-		"required": []string{"prompt", "subagent_type"},
+		"description": map[string]any{
+			"type":        "string",
+			"description": "Short label describing the task",
+		},
+		"subagent_type": map[string]any{
+			"type":        "string",
+			"description": "Built-in subagent type: explore, plan, shell, verification, general-purpose",
+		},
+		"model": map[string]any{
+			"type":        "string",
+			"description": "Optional model override (sonnet, opus, haiku, or full model name)",
+		},
+		"run_in_background": map[string]any{
+			"type":        "boolean",
+			"description": "If true, launch subagent asynchronously without blocking",
+		},
+		"isolation": map[string]any{
+			"type":        "string",
+			"description": "Isolation mode: worktree for temp worktree, none otherwise",
+		},
+		"cwd": map[string]any{
+			"type":        "string",
+			"description": "Working directory override for the subagent",
+		},
+	}
+	// AC2: Only include name parameter when swarm mode is enabled
+	if t.swarmsEnabled {
+		props["name"] = map[string]any{
+			"type":        "string",
+			"description": "Teammate name for swarm delegation (flat roster of parallel named agents)",
+		}
+	}
+	return map[string]any{
+		"type":       "object",
+		"properties": props,
+		"required":   []string{"prompt", "subagent_type"},
 	}
 }
 
@@ -111,6 +138,17 @@ func (t *AgentTool) InputSchema() map[string]any {
 // This is used to block recursive fork (AC1).
 func isForkChild(ctx context.Context) bool {
 	if v := ctx.Value(ForkChildKey); v != nil {
+		if b, ok := v.(bool); ok && b {
+			return true
+		}
+	}
+	return false
+}
+
+// isNamedAgent checks if the current execution context indicates we're in a named swarm agent.
+// This is used to block nested named agents (AC1).
+func isNamedAgent(ctx context.Context) bool {
+	if v := ctx.Value(NamedAgentKey); v != nil {
 		if b, ok := v.(bool); ok && b {
 			return true
 		}
@@ -171,6 +209,28 @@ func (t *AgentTool) Execute(ctx context.Context, input map[string]any, cwd strin
 		subagentCWD = c
 	}
 
+	// Extract name parameter (swarm agent name)
+	var name string
+	if n, ok := input["name"].(string); ok {
+		name = n
+	}
+
+	// AC2: Check swarm mode feature flag
+	if name != "" && !t.swarmsEnabled {
+		return &ToolResult{
+			Content: "swarm mode not enabled",
+			IsError: true,
+		}, nil
+	}
+
+	// AC1: Block nested named agents
+	if name != "" && isNamedAgent(ctx) {
+		return &ToolResult{
+			Content: "nested named agents not allowed",
+			IsError: true,
+		}, nil
+	}
+
 	// Build subagent params
 	params := SubagentParams{
 		Prompt:          prompt,
@@ -180,6 +240,7 @@ func (t *AgentTool) Execute(ctx context.Context, input map[string]any, cwd strin
 		CWD:             subagentCWD,
 		Isolation:       isolation,
 		RunInBackground: runInBackground,
+		Name:            name,
 	}
 
 	// Handle async mode

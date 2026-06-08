@@ -155,7 +155,9 @@ func run() error {
 	}
 	localRunner := agent.NewLocalSubagentRunner(tools, denyRulesMap)
 	asyncRunner := agent.NewAsyncSubagentRunner(tools, denyRulesMap)
-	agentTool := tool.NewAgentTool(localRunner, asyncRunner)
+	localRunner.SetSwarmsEnabled(flags.SwarmsEnabled)
+	asyncRunner.SetSwarmsEnabled(flags.SwarmsEnabled)
+	agentTool := tool.NewAgentToolWithSwarms(localRunner, asyncRunner, flags.SwarmsEnabled)
 	tools = append(tools, agentTool)
 
 	// Ensure MCP clients are shut down on exit
@@ -179,6 +181,7 @@ func run() error {
 		MCPConfig:       mcpConfig,
 		ReadFileCache:   readFileCache,
 		Skills:          discoveredSkills,
+		SwarmsEnabled:   flags.SwarmsEnabled,
 	}
 
 	// Run agent

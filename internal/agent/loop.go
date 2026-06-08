@@ -130,6 +130,8 @@ type StreamConfig struct {
 	IsForkChild          bool                        // True when this session is a fork child (subagent spawned another agent)
 	StructuredSchema     map[string]any              // JSON schema for structured output (AC1, AC4: non-interactive only)
 	StructuredDenyRules  []string                    // Tool names to deny; checked by engine to enforce AC1
+	SwarmsEnabled        bool                        // When true, enables named agent delegation (swarm mode)
+	IsNamedAgent         bool                        // True when this session is a named swarm agent
 }
 
 // ToolParam represents a tool parameter for the API.
@@ -361,6 +363,9 @@ func RunStream(ctx context.Context, prompt string, tools []tool.Tool, cwd string
 
 	// AC1: Store IsForkChild in context so tools can check it
 	ctx = context.WithValue(ctx, tool.ForkChildKey, cfg.IsForkChild)
+
+	// AC1: Store IsNamedAgent in context so tools can check it (blocks nested named agents)
+	ctx = context.WithValue(ctx, tool.NamedAgentKey, cfg.IsNamedAgent)
 
 	// Create QueryEngine - it handles API client creation, cost state restoration,
 	// tool parameter conversion, and the agent loop lifecycle

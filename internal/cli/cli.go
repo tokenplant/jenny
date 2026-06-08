@@ -23,6 +23,7 @@ type Flags struct {
 	StrictMCP              bool
 	DeniedTools            []string
 	Bare                   bool
+	SwarmsEnabled          bool // When true, enables named agent delegation (swarm mode)
 }
 
 // StringSlice implements flag.Value for multiple string values.
@@ -86,6 +87,9 @@ func Parse() (*Flags, error) {
 	var bare bool
 	flags.BoolVar(&bare, "bare", false, "Disable skill discovery for minimal environments")
 
+	var swarmsEnabled bool
+	flags.BoolVar(&swarmsEnabled, "swarm", false, "Enable swarm mode for named agent delegation")
+
 	// Parse the flags
 	if err := flags.Parse(os.Args[1:]); err != nil {
 		if err == flag.ErrHelp {
@@ -124,6 +128,7 @@ func Parse() (*Flags, error) {
 		StrictMCP:              strictMCP,
 		DeniedTools:            deniedTools,
 		Bare:                   bare,
+		SwarmsEnabled:          swarmsEnabled,
 	}, nil
 }
 
