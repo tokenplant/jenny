@@ -526,7 +526,7 @@ func TestClient_NonStreaming_SendsPromptCachingBetaHeader(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "test-key-0000000000000000")
 
 	client, _ := NewClientWithModel("m")
-	client.SetMaxTokensOverride(64000)
+	client.SetMaxTokensOverride(8192)
 	_, err := client.SendMessage(context.Background(), nil, nil, nil, "")
 	if err != nil {
 		t.Fatalf("SendMessage error = %v", err)
@@ -648,7 +648,7 @@ func TestClient_SystemPrompt_HasCacheControl_Ephemeral(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "test-key-0000000000000000")
 
 	client, _ := NewClientWithModel("m")
-	client.SetMaxTokensOverride(64000)
+	client.SetMaxTokensOverride(8192)
 	_, err := client.SendMessage(context.Background(), nil, nil, nil, "system prompt content")
 	if err != nil {
 		t.Fatalf("SendMessage error = %v", err)
@@ -701,7 +701,7 @@ func TestClient_Tools_LastEntryHasCacheControl_Ephemeral(t *testing.T) {
 		{Name: "tool2", Description: "Second tool", InputSchema: ToolInputSchema{Type: "object", Properties: map[string]any{}, Required: []string{}}},
 		{Name: "tool3", Description: "Third tool", InputSchema: ToolInputSchema{Type: "object", Properties: map[string]any{}, Required: []string{}}},
 	}
-	client.SetMaxTokensOverride(64000)
+	client.SetMaxTokensOverride(8192)
 	_, err := client.SendMessage(context.Background(), nil, tools, nil, "")
 	if err != nil {
 		t.Fatalf("SendMessage error = %v", err)
@@ -762,7 +762,7 @@ func TestClient_NoTools_NoToolsCacheControl_NoPanic(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "test-key-0000000000000000")
 
 	client, _ := NewClientWithModel("m")
-	client.SetMaxTokensOverride(64000)
+	client.SetMaxTokensOverride(8192)
 	// Empty tools slice
 	_, err := client.SendMessage(context.Background(), nil, []ToolParam{}, nil, "")
 	if err != nil {
@@ -799,7 +799,7 @@ func TestClient_NonStreaming_UsageTokensRegression(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "test-key-0000000000000000")
 
 	client, _ := NewClientWithModel("m")
-	client.SetMaxTokensOverride(64000)
+	client.SetMaxTokensOverride(8192)
 	resp, err := client.SendMessage(context.Background(), nil, nil, nil, "")
 	if err != nil {
 		t.Fatalf("SendMessage error = %v", err)

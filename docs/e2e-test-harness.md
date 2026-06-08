@@ -170,13 +170,34 @@ Four properties are checked:
 2. **`system` prompt** — the top-level `system` field is present
    (string or array), its concatenated text is at least 500 characters,
    and it contains the absolute path of the jenny subprocess working
-   directory (inherited from the test process via `os.Getwd()`).
+   directory (passed to the test via `RunResult.Dir`, robust to macOS
+   symlinks).
 3. **`tools` array** — the top-level `tools` field is a non-empty JSON
    array. Each tool has a non-empty `name`, a non-empty `description`,
    and an `input_schema` object with `"type": "object"`.
 4. **Core tools present** — the `tools` array always includes tools
    named `"Bash"` and `"Read"`, which are required for agentic
    compatibility.
+
+### Non-streaming `max_tokens` clamp
+
+The Anthropic Go SDK enforces a hard constraint in
+`CalculateNonStreamingTimeout`: any non-streaming request whose
+expected wall-time exceeds 10 minutes (computed as
+`maxTokens * 1h / 128000 > 10m`) is rejected before the HTTP call is
+made. For a 64000-token budget that is ~30 minutes, so the SDK
+returns `"streaming is required for operations that may take longer
+than 10 minutes"`.
+
+Because the streaming fallback path (`client.SendMessage`) goes
+through the same SDK guard, the non-streaming code path in
+`internal/api/client.go` (`doSendMessage`) clamps `maxTokens` to
+`20000` (≈9.4 minutes) when the caller requests more. The caller may
+still set the universal `64000` default — the clamp is the last
+step before the SDK call. AC9 above measures the *outbound* streaming
+request only, where the 64000 budget is unconstrained; the clamp
+only affects the non-streaming fallback path and short internal
+requests (memory extraction, summarisation).
 
 ## Running the Suite
 

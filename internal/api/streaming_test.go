@@ -371,7 +371,7 @@ func TestAC1_NonStreamingCacheTokensExtracted(t *testing.T) {
 	defer setTestEnv(t, server.URL)()
 
 	client, _ := NewClientWithModel("m")
-	client.SetMaxTokensOverride(64000)
+	client.SetMaxTokensOverride(8192)
 	resp, err := client.SendMessage(context.Background(), nil, nil, nil, "")
 	if err != nil {
 		t.Fatalf("AC1 FAIL: SendMessage error = %v", err)
