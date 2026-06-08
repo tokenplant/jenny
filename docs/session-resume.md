@@ -56,7 +56,7 @@ If a transcript contains only `queue-operation` entries and zero chain messages,
 
 > **Note:** The check is implemented at the CLI resume entrypoint (`cmd/jenny/main.go`) after `LoadTranscript` returns. It validates that at least one chain-participant entry (`user`, `assistant`, `tool_result`) exists before proceeding. Progress/ephemeral types (`progress`, `bash_progress`, `mcp_progress`, `powershell_progress`) and state types (`worktree_state`, `session_state`) do not count as chain participants. This rule supersedes the literal "queue-operation" wording in the spec — any session whose rebuilt message history would be empty is rejected.
 >
-> Helper-level (`TestHasChainMessages_TableDriven`) and CLI-resume (`TestResume_*_HasChainMessages`) tests directly exercise `HasChainMessages` for comprehensive regression coverage.
+> Helper-level (`TestHasChainMessages_TableDriven` in `internal/agent/loop_test.go`) and CLI-resume tests (`TestResume_QueueOnlyTranscript_Error`, `TestResume_EmptyTranscript_Error`, `TestResume_NormalTranscript_NoError`, `TestResume_ForkSession_NoFileCreated`, and `TestResume_NormalTranscript_ForkSession_CreatesFile` in `cmd/jenny/main_test.go`) directly exercise `HasChainMessages` for comprehensive regression coverage.
 
 ## readFileState Restoration
 
