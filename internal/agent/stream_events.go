@@ -56,44 +56,158 @@ type MessageStopEvent struct {
 
 // MinimalContentBlock represents a minimal content block for serialization.
 // Only relevant fields based on block type are included.
+// Implements json.Marshaler for custom serialization without zero-value padding.
 type MinimalContentBlock struct {
-	Type      string `json:"type"`
-	Thinking  string `json:"thinking,omitempty"`
-	Signature string `json:"signature,omitempty"`
-	Text      string `json:"text,omitempty"`
-	ID        string `json:"id,omitempty"`
-	Name      string `json:"name,omitempty"`
-	Input     any    `json:"input,omitempty"`
+	Type      string
+	Thinking  string
+	Signature string
+	Text      string
+	ID        string
+	Name      string
+	Input     any
+}
+
+func (m MinimalContentBlock) MarshalJSON() ([]byte, error) {
+	// Build fields in order: type first, then only non-empty fields
+	fields := []any{`"type":` + encodeString(m.Type)}
+
+	switch m.Type {
+	case "thinking":
+		if m.Thinking != "" {
+			fields = append(fields, `"thinking":`+encodeString(m.Thinking))
+		}
+		if m.Signature != "" {
+			fields = append(fields, `"signature":`+encodeString(m.Signature))
+		}
+	case "text":
+		if m.Text != "" {
+			fields = append(fields, `"text":`+encodeString(m.Text))
+		}
+	case "tool_use":
+		fields = append(fields, `"id":`+encodeString(m.ID))
+		fields = append(fields, `"name":`+encodeString(m.Name))
+		if m.Input != nil {
+			inputBytes, err := json.Marshal(m.Input)
+			if err != nil {
+				return nil, err
+			}
+			fields = append(fields, `"input":`+string(inputBytes))
+		}
+	case "redacted_thinking":
+		if m.Text != "" {
+			fields = append(fields, `"data":`+encodeString(m.Text))
+		}
+	}
+
+	return []byte("{" + joinFields(fields) + "}"), nil
 }
 
 // MinimalDelta represents a minimal delta for message_delta events.
 type MinimalDelta struct {
-	Type        string `json:"type"`
-	Thinking    string `json:"thinking,omitempty"`
-	PartialJSON string `json:"partial_json,omitempty"`
-	Signature   string `json:"signature,omitempty"`
-	StopReason  string `json:"stop_reason,omitempty"`
-	StopSeq     string `json:"stop_sequence,omitempty"`
+	Type        string
+	Thinking    string
+	PartialJSON string
+	Signature   string
+	StopReason  string
+	StopSeq     string
+	Text        string
+}
+
+func (m MinimalDelta) MarshalJSON() ([]byte, error) {
+	fields := []any{`"type":` + encodeString(m.Type)}
+
+	switch m.Type {
+	case "thinking_delta":
+		if m.Thinking != "" {
+			fields = append(fields, `"thinking":`+encodeString(m.Thinking))
+		}
+		if m.Signature != "" {
+			fields = append(fields, `"signature":`+encodeString(m.Signature))
+		}
+	case "text_delta":
+		if m.Text != "" {
+			fields = append(fields, `"text":`+encodeString(m.Text))
+		}
+	case "input_json_delta":
+		if m.PartialJSON != "" {
+			fields = append(fields, `"partial_json":`+encodeString(m.PartialJSON))
+		}
+	case "signature_delta":
+		if m.Signature != "" {
+			fields = append(fields, `"signature":`+encodeString(m.Signature))
+		}
+	case "message_delta":
+		if m.StopReason != "" {
+			fields = append(fields, `"stop_reason":`+encodeString(m.StopReason))
+		}
+		if m.StopSeq != "" {
+			fields = append(fields, `"stop_sequence":`+encodeString(m.StopSeq))
+		}
+	}
+
+	return []byte("{" + joinFields(fields) + "}"), nil
 }
 
 // MinimalMessage represents a minimal message for message_start events.
 type MinimalMessage struct {
-	ID         string          `json:"id,omitempty"`
-	Type       string          `json:"type,omitempty"`
-	Role       string          `json:"role,omitempty"`
-	Model      string          `json:"model,omitempty"`
-	Content    any             `json:"content,omitempty"`
-	StopReason string          `json:"stop_reason,omitempty"`
-	StopSeq    string          `json:"stop_sequence,omitempty"`
-	Usage      json.RawMessage `json:"usage,omitempty"`
+	ID         string
+	Type       string
+	Role       string
+	Model      string
+	Content    any
+	StopReason string
+	StopSeq    string
+	Usage      *StreamUsage
 }
 
-// MinimalUsage represents a minimal usage object for stream events.
-type MinimalUsage struct {
+func (m MinimalMessage) MarshalJSON() ([]byte, error) {
+	fields := []any{`"id":` + encodeString(m.ID), `"type":` + encodeString(m.Type), `"role":` + encodeString(m.Role)}
+
+	if m.Model != "" {
+		fields = append(fields, `"model":`+encodeString(m.Model))
+	}
+
+	if m.Content != nil {
+		contentBytes, err := json.Marshal(m.Content)
+		if err != nil {
+			return nil, err
+		}
+		fields = append(fields, `"content":`+string(contentBytes))
+	}
+
+	if m.Usage != nil {
+		usageBytes, err := json.Marshal(m.Usage)
+		if err != nil {
+			return nil, err
+		}
+		fields = append(fields, `"usage":`+string(usageBytes))
+	}
+
+	return []byte("{" + joinFields(fields) + "}"), nil
+}
+
+// StreamUsage represents a minimal usage object for stream events.
+type StreamUsage struct {
 	InputTokens              int `json:"input_tokens,omitempty"`
 	OutputTokens             int `json:"output_tokens,omitempty"`
 	CacheReadInputTokens     int `json:"cache_read_input_tokens,omitempty"`
 	CacheCreationInputTokens int `json:"cache_creation_input_tokens,omitempty"`
+}
+
+func encodeString(s string) string {
+	b, _ := json.Marshal(s)
+	return string(b)
+}
+
+func joinFields(fields []any) string {
+	result := ""
+	for i, f := range fields {
+		if i > 0 {
+			result += ","
+		}
+		result += fmt.Sprintf("%v", f)
+	}
+	return result
 }
 
 // TransformStreamEvent transforms an SDK stream event to a minimal JSON representation.
@@ -119,155 +233,167 @@ func TransformStreamEvent(event any) (json.RawMessage, error) {
 }
 
 func transformMessageStart(e anthropic.MessageStartEvent) (json.RawMessage, error) {
-	// Build minimal message - only include non-empty fields
-	msg := make(map[string]any)
-
-	// Always include type as first field
-	msg["type"] = "message_start"
-
-	// Add message fields
-	message := make(map[string]any)
-	if e.Message.ID != "" {
-		message["id"] = e.Message.ID
-	}
-	message["type"] = "message"
-	message["role"] = "assistant"
-	if e.Message.Model != "" {
-		message["model"] = string(e.Message.Model)
-	}
-	message["content"] = []any{}
-
-	// Add usage if present
-	usage := make(map[string]any)
+	// Build minimal message using proper struct with MarshalJSON
+	usage := &StreamUsage{}
 	if e.Message.Usage.InputTokens > 0 {
-		usage["input_tokens"] = int(e.Message.Usage.InputTokens)
+		usage.InputTokens = int(e.Message.Usage.InputTokens)
 	}
 	if e.Message.Usage.CacheReadInputTokens > 0 {
-		usage["cache_read_input_tokens"] = int(e.Message.Usage.CacheReadInputTokens)
+		usage.CacheReadInputTokens = int(e.Message.Usage.CacheReadInputTokens)
 	}
 	if e.Message.Usage.CacheCreationInputTokens > 0 {
-		usage["cache_creation_input_tokens"] = int(e.Message.Usage.CacheCreationInputTokens)
+		usage.CacheCreationInputTokens = int(e.Message.Usage.CacheCreationInputTokens)
 	}
 	if e.Message.Usage.OutputTokens > 0 {
-		usage["output_tokens"] = int(e.Message.Usage.OutputTokens)
-	}
-	if len(usage) > 0 {
-		usage["service_tier"] = "standard"
-		message["usage"] = usage
+		usage.OutputTokens = int(e.Message.Usage.OutputTokens)
 	}
 
-	msg["message"] = message
+	msg := struct {
+		Type    string         `json:"type"`
+		Message MinimalMessage `json:"message"`
+	}{
+		Type: "message_start",
+		Message: MinimalMessage{
+			ID:      string(e.Message.ID),
+			Type:    "message",
+			Role:    "assistant",
+			Model:   string(e.Message.Model),
+			Content: []any{},
+			Usage:   usage,
+		},
+	}
 	return json.Marshal(msg)
 }
 
 func transformContentBlockStart(e anthropic.ContentBlockStartEvent) (json.RawMessage, error) {
-	// Build minimal event - type first
-	event := make(map[string]any)
-	event["type"] = "content_block_start"
-	event["index"] = int(e.Index)
-
-	// Build minimal content_block based on type
-	cb := make(map[string]any)
-	cb["type"] = string(e.ContentBlock.Type)
+	// Build minimal content_block based on type using struct with custom MarshalJSON
+	cb := MinimalContentBlock{Type: string(e.ContentBlock.Type)}
 
 	switch e.ContentBlock.Type {
 	case "thinking":
-		cb["thinking"] = ""
-		cb["signature"] = ""
+		// Only include thinking and signature if non-empty (they come in deltas)
+		if e.ContentBlock.Thinking != "" {
+			cb.Thinking = e.ContentBlock.Thinking
+		}
+		if e.ContentBlock.Signature != "" {
+			cb.Signature = e.ContentBlock.Signature
+		}
 	case "text":
-		cb["text"] = ""
+		if e.ContentBlock.Text != "" {
+			cb.Text = e.ContentBlock.Text
+		}
 	case "tool_use":
-		if e.ContentBlock.ID != "" {
-			cb["id"] = e.ContentBlock.ID
+		cb.ID = e.ContentBlock.ID
+		cb.Name = e.ContentBlock.Name
+		if e.ContentBlock.Input != nil {
+			cb.Input = e.ContentBlock.Input
 		}
-		if e.ContentBlock.Name != "" {
-			cb["name"] = e.ContentBlock.Name
-		}
-		cb["input"] = map[string]any{}
 	case "redacted_thinking":
-		cb["data"] = ""
+		if e.ContentBlock.Data != "" {
+			cb.Text = e.ContentBlock.Data
+		}
 	}
 
-	event["content_block"] = cb
-	return json.Marshal(event)
+	// Use struct with MarshalJSON for proper field ordering and zero-value omission
+	msg := struct {
+		Type         string              `json:"type"`
+		Index        int                 `json:"index"`
+		ContentBlock MinimalContentBlock `json:"content_block"`
+	}{
+		Type:         "content_block_start",
+		Index:        int(e.Index),
+		ContentBlock: cb,
+	}
+	return json.Marshal(msg)
 }
 
 func transformContentBlockDelta(e anthropic.ContentBlockDeltaEvent) (json.RawMessage, error) {
-	// Build minimal event - type first
-	event := make(map[string]any)
-	event["type"] = "content_block_delta"
-	event["index"] = int(e.Index)
+	// Build minimal delta using struct with custom MarshalJSON
+	delta := MinimalDelta{Type: string(e.Delta.Type)}
 
-	// Build minimal delta
-	delta := make(map[string]any)
-	delta["type"] = string(e.Delta.Type)
+	switch e.Delta.Type {
+	case "thinking_delta":
+		if e.Delta.Thinking != "" {
+			delta.Thinking = e.Delta.Thinking
+		}
+		if e.Delta.Signature != "" {
+			delta.Signature = e.Delta.Signature
+		}
+	case "text_delta":
+		if e.Delta.Text != "" {
+			delta.Text = e.Delta.Text
+		}
+	case "input_json_delta":
+		if e.Delta.PartialJSON != "" {
+			delta.PartialJSON = e.Delta.PartialJSON
+		}
+	case "signature_delta":
+		if e.Delta.Signature != "" {
+			delta.Signature = e.Delta.Signature
+		}
+	}
 
-	if e.Delta.Thinking != "" {
-		delta["thinking"] = e.Delta.Thinking
+	msg := struct {
+		Type  string       `json:"type"`
+		Index int          `json:"index"`
+		Delta MinimalDelta `json:"delta"`
+	}{
+		Type:  "content_block_delta",
+		Index: int(e.Index),
+		Delta: delta,
 	}
-	if e.Delta.PartialJSON != "" {
-		delta["partial_json"] = e.Delta.PartialJSON
-	}
-	if e.Delta.Signature != "" {
-		delta["signature"] = e.Delta.Signature
-	}
-	if e.Delta.Text != "" {
-		delta["text"] = e.Delta.Text
-	}
-
-	event["delta"] = delta
-	return json.Marshal(event)
+	return json.Marshal(msg)
 }
 
 func transformContentBlockStop(e anthropic.ContentBlockStopEvent) (json.RawMessage, error) {
-	event := make(map[string]any)
-	event["type"] = "content_block_stop"
-	event["index"] = int(e.Index)
+	event := ContentBlockStopEvent{
+		Type:  "content_block_stop",
+		Index: int(e.Index),
+	}
 	return json.Marshal(event)
 }
 
 func transformMessageDelta(e anthropic.MessageDeltaEvent) (json.RawMessage, error) {
-	// Build minimal event - type first
-	event := make(map[string]any)
-	event["type"] = "message_delta"
+	// Build minimal delta - only include if stop_reason or stop_sequence is present
+	hasContent := e.Delta.StopReason != "" || e.Delta.StopSequence != ""
 
-	// Build minimal delta - only stop_reason and stop_sequence
-	delta := make(map[string]any)
-	delta["type"] = "message_delta"
-
-	if e.Delta.StopReason != "" {
-		delta["stop_reason"] = string(e.Delta.StopReason)
-	}
-	if e.Delta.StopSequence != "" {
-		delta["stop_sequence"] = e.Delta.StopSequence
+	msg := struct {
+		Type  string        `json:"type"`
+		Delta *MinimalDelta `json:"delta,omitempty"`
+		Usage *StreamUsage  `json:"usage,omitempty"`
+	}{
+		Type: "message_delta",
 	}
 
-	event["delta"] = delta
+	if hasContent {
+		delta := MinimalDelta{Type: "message_delta"}
+		if e.Delta.StopReason != "" {
+			delta.StopReason = string(e.Delta.StopReason)
+		}
+		if e.Delta.StopSequence != "" {
+			delta.StopSeq = e.Delta.StopSequence
+		}
+		msg.Delta = &delta
+	}
 
 	// Add usage if present
-	usage := make(map[string]any)
-	if e.Usage.InputTokens > 0 {
-		usage["input_tokens"] = int(e.Usage.InputTokens)
-	}
-	if e.Usage.OutputTokens > 0 {
-		usage["output_tokens"] = int(e.Usage.OutputTokens)
-	}
-	if e.Usage.CacheReadInputTokens > 0 {
-		usage["cache_read_input_tokens"] = int(e.Usage.CacheReadInputTokens)
-	}
-	if e.Usage.CacheCreationInputTokens > 0 {
-		usage["cache_creation_input_tokens"] = int(e.Usage.CacheCreationInputTokens)
-	}
-	if len(usage) > 0 {
-		event["usage"] = usage
+	if e.Usage.InputTokens > 0 || e.Usage.OutputTokens > 0 ||
+		e.Usage.CacheReadInputTokens > 0 || e.Usage.CacheCreationInputTokens > 0 {
+		msg.Usage = &StreamUsage{
+			InputTokens:              int(e.Usage.InputTokens),
+			OutputTokens:             int(e.Usage.OutputTokens),
+			CacheReadInputTokens:     int(e.Usage.CacheReadInputTokens),
+			CacheCreationInputTokens: int(e.Usage.CacheCreationInputTokens),
+		}
 	}
 
-	return json.Marshal(event)
+	return json.Marshal(msg)
 }
 
 func transformMessageStop(e anthropic.MessageStopEvent) (json.RawMessage, error) {
-	event := make(map[string]any)
-	event["type"] = "message_stop"
+	event := MessageStopEvent{
+		Type: "message_stop",
+	}
 	return json.Marshal(event)
 }
 

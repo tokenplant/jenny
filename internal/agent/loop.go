@@ -432,14 +432,14 @@ type Usage struct {
 
 // ServerToolUse represents server-side tool use statistics.
 type ServerToolUse struct {
-	WebSearchRequests int `json:"web_search_requests,omitempty"`
-	WebFetchRequests  int `json:"web_fetch_requests,omitempty"`
+	WebSearchRequests int `json:"web_search_requests"`
+	WebFetchRequests  int `json:"web_fetch_requests"`
 }
 
 // CacheCreation represents cache creation token statistics.
 type CacheCreation struct {
-	Ephemeral1hInputTokens int `json:"ephemeral_1h_input_tokens,omitempty"`
-	Ephemeral5mInputTokens int `json:"ephemeral_5m_input_tokens,omitempty"`
+	Ephemeral1hInputTokens int `json:"ephemeral_1h_input_tokens"`
+	Ephemeral5mInputTokens int `json:"ephemeral_5m_input_tokens"`
 }
 
 // RunStream executes the agent loop with streaming JSON output.
