@@ -30,6 +30,7 @@ jenny_test/
 ├── stream_json_format_test.go     # NDJSON event-shape conformance tests
 ├── api_protocol_test.go           # outbound /v1/messages request conformance
 ├── tool_call_test.go              # multi-turn tool-call event conformance
+├── transcript_test.go             # session transcript smoke tests
 ├── harness/                       # internal helper package
 │   ├── mock_api.go                # mock Anthropic API server
 │   └── runner.go                  # jenny binary builder + spawner
@@ -172,6 +173,17 @@ asserting that emission is well-formed.
 The `Dir` field reflects the actual directory the jenny subprocess was
 launched from. If no directory was explicitly requested by the test, it
 defaults to the repository root.
+
+## Session Transcript Control
+
+Tests that assert on transcript file contents set the `JENNY_TRANSCRIPT_DIR`
+environment variable to `t.TempDir()`. Jenny reads this variable on startup
+and uses it as the transcript directory instead of `~/.jenny/transcripts/`.
+This prevents test runs from polluting the developer's own jenny state.
+
+The transcript directory is also the location passed to
+`session.NewManager(dir, disabled)`. When `--no-session-persistence` is set,
+`disabled=true` and no file is written regardless of `JENNY_TRANSCRIPT_DIR`.
 
 ## Cassette URL Routing (no jenny changes required)
 

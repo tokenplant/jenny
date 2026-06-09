@@ -68,7 +68,8 @@ func run() error {
 	}
 
 	// Create session manager for transcript persistence
-	sessionManager, err := session.NewManager("", flags.NoSessionPersistence)
+	transcriptDir := os.Getenv("JENNY_TRANSCRIPT_DIR")
+	sessionManager, err := session.NewManager(transcriptDir, flags.NoSessionPersistence)
 	if err != nil {
 		return fmt.Errorf("creating session manager: %w", err)
 	}
