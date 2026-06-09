@@ -359,27 +359,37 @@ func RunSimple(ctx context.Context, prompt string, tools []tool.Tool) (string, e
 
 // StreamMessage represents a message in the stream-json output.
 type StreamMessage struct {
-	Type          string  `json:"type"`
-	Subtype       string  `json:"subtype,omitempty"`
-	Content       string  `json:"content,omitempty"`
-	SessionID     string  `json:"session_id,omitempty"`
-	Uuid          string  `json:"uuid,omitempty"`
-	Result        string  `json:"result,omitempty"`
-	Model         string  `json:"model,omitempty"`
-	Usage         *Usage  `json:"usage,omitempty"`
-	ToolName      string  `json:"tool_name,omitempty"`
-	ToolInput     any     `json:"input,omitempty"`
-	ToolUseID     string  `json:"tool_use_id,omitempty"`
-	IsError       bool    `json:"is_error,omitempty"`
-	IsPartial     bool    `json:"is_partial,omitempty"`
-	Message       any     `json:"message,omitempty"`
-	StopReason    string  `json:"stop_reason,omitempty"`
-	DurationMs    int64   `json:"duration_ms,omitempty"`
-	DurationAPIMs int64   `json:"duration_api_ms,omitempty"`
-	TotalCostUSD  float64 `json:"total_cost_usd"`
-	TotalCostCNY  float64 `json:"total_cost_cny,omitempty"`
-	ModelUsage    any     `json:"modelUsage,omitempty"`
-	Event         any     `json:"event,omitempty"`
+	Type           string                `json:"type"`
+	Subtype        string                `json:"subtype,omitempty"`
+	Content        string                `json:"content,omitempty"`
+	SessionID      string                `json:"session_id,omitempty"`
+	Uuid           string                `json:"uuid,omitempty"`
+	Result         string                `json:"result,omitempty"`
+	Model          string                `json:"model,omitempty"`
+	Usage          *Usage                `json:"usage,omitempty"`
+	ToolName       string                `json:"tool_name,omitempty"`
+	ToolInput      any                   `json:"input,omitempty"`
+	ToolUseID      string                `json:"tool_use_id,omitempty"`
+	IsError        bool                  `json:"is_error,omitempty"`
+	IsPartial      bool                  `json:"is_partial,omitempty"`
+	Message        any                   `json:"message,omitempty"`
+	StopReason     string                `json:"stop_reason,omitempty"`
+	DurationMs     int64                 `json:"duration_ms,omitempty"`
+	DurationAPIMs  int64                 `json:"duration_api_ms,omitempty"`
+	TotalCostUSD   float64               `json:"total_cost_usd"`
+	TotalCostCNY   float64               `json:"total_cost_cny,omitempty"`
+	ModelUsage     any                   `json:"modelUsage,omitempty"`
+	Event          any                   `json:"event,omitempty"`
+	ErrorMaxTokens *ErrorMaxTokensDetail `json:"error_max_tokens,omitempty"`
+}
+
+// ErrorMaxTokensDetail holds structured information for error_max_tokens result events.
+type ErrorMaxTokensDetail struct {
+	Category        string `json:"category"`
+	OutputTokens    int    `json:"output_tokens,omitempty"`
+	MaxOutputTokens int    `json:"max_output_tokens,omitempty"`
+	InputTokens     int    `json:"input_tokens,omitempty"`
+	Threshold       int    `json:"threshold,omitempty"`
 }
 
 // GenerateUUID generates a random UUID v4.

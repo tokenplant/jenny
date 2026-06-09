@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -180,6 +181,46 @@ const (
 	StopReasonMaxTokens StopReason = "max_tokens"
 	StopReasonStopSeq   StopReason = "stop_sequence"
 )
+
+// MaxTokensCategory represents the category of a max_tokens stop reason.
+type MaxTokensCategory string
+
+const (
+	// CategoryOutputCapHit means the model hit its per-response output token limit.
+	// This occurs when output_tokens >= modelMaxOutputTokens.
+	CategoryOutputCapHit MaxTokensCategory = "output_cap_hit"
+	// CategoryContextExhausted means the request was rejected due to context length.
+	// This occurs when the provider returns a prompt_too_long class error.
+	CategoryContextExhausted MaxTokensCategory = "context_exhausted"
+)
+
+// MaxTokensError is returned when the streaming API returns stop_reason: "max_tokens".
+// It distinguishes between output cap hits and context exhaustion for structured error reporting.
+type MaxTokensError struct {
+	Category        MaxTokensCategory
+	Model           string
+	OutputTokens    int
+	MaxOutputTokens int
+	InputTokens     int
+	Threshold       int // autoCompactThreshold for context_exhausted
+}
+
+func (e *MaxTokensError) Error() string {
+	return fmt.Sprintf("max tokens reached: %s", e.Category)
+}
+
+// IsMaxTokensError checks if err is a MaxTokensError and returns it along with true,
+// or returns nil, false if it's a different error type.
+func IsMaxTokensError(err error) (*MaxTokensError, bool) {
+	if err == nil {
+		return nil, false
+	}
+	var mte *MaxTokensError
+	if errors.As(err, &mte) {
+		return mte, true
+	}
+	return nil, false
+}
 
 // Response represents the API response.
 type Response struct {
@@ -771,11 +812,12 @@ type StreamContentBlock struct {
 
 // StreamResult represents the result of a streaming session.
 type StreamResult struct {
-	Blocks     []ContentBlock
-	StopReason StopReason
-	Usage      Usage
-	Error      string
-	Model      string
+	Blocks       []ContentBlock
+	StopReason   StopReason
+	Usage        Usage
+	Error        string
+	Model        string
+	MaxTokensErr *MaxTokensError // Set when stop_reason is "max_tokens"
 }
 
 // SendMessageStream sends a streaming message to the API.
@@ -1105,6 +1147,11 @@ func (c *Client) SendMessageStream(
 		result.StopReason = acc.stopReason
 		result.Usage = acc.usage
 		result.Model = acc.getModel()
+
+		// Detect and categorize stop_reason: max_tokens
+		if result.StopReason == StopReasonMaxTokens && result.Error == "" {
+			result.MaxTokensErr = categorizeMaxTokensError(result.Model, result.Usage.OutputTokens)
+		}
 	}()
 
 	return blocksChan, result
@@ -1202,4 +1249,48 @@ func toolToSDK(t ToolParam, isLast bool, baseURL string) anthropic.ToolUnionPara
 		tool.CacheControl = anthropic.NewCacheControlEphemeralParam()
 	}
 	return anthropic.ToolUnionParam{OfTool: tool}
+}
+
+// modelMaxOutputTokens returns the max output tokens for a given model.
+// This is used to categorize max_tokens errors as output_cap_hit vs context_exhausted.
+func modelMaxOutputTokens(model string) int {
+	// Known model-specific max output tokens
+	switch model {
+	case "deepseek-v4-flash":
+		return 8192
+	case "deepseek-v4":
+		return 8192
+	default:
+		// Default max output tokens (matches defaultModelMaxOutputTokens in compact.go)
+		return 20000
+	}
+}
+
+// categorizeMaxTokensError creates a MaxTokensError from streaming results.
+// It determines the category (output_cap_hit vs context_exhausted) based on whether
+// output_tokens reached the model's max output tokens.
+func categorizeMaxTokensError(model string, outputTokens int) *MaxTokensError {
+	maxOutputTokens := modelMaxOutputTokens(model)
+
+	// Categorize based on whether output hit the model's max
+	if outputTokens >= maxOutputTokens {
+		return &MaxTokensError{
+			Category:        CategoryOutputCapHit,
+			Model:           model,
+			OutputTokens:    outputTokens,
+			MaxOutputTokens: maxOutputTokens,
+		}
+	}
+
+	// If output tokens didn't hit model max, it's context_exhausted
+	// (the request was rejected before generating output, or was very limited)
+	// Note: context_exhausted threshold is computed by the caller (engine.go)
+	// using CompactConfig.autoCompactThreshold().
+	return &MaxTokensError{
+		Category:     CategoryContextExhausted,
+		Model:        model,
+		OutputTokens: outputTokens,
+		// MaxOutputTokens is 0 for context_exhausted since output was limited
+		MaxOutputTokens: 0,
+	}
 }

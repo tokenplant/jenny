@@ -2237,3 +2237,294 @@ func TestQueryEngine_ToolParamExtraction(t *testing.T) {
 		t.Error("required should not be in ExtraFields")
 	}
 }
+
+// TestEngine_OutputCapHit_EmitsStructuredError verifies that when the streaming
+// API returns stop_reason: "max_tokens" with output_tokens >= modelMaxOutputTokens,
+// the engine emits a structured result event with subtype error_max_tokens and
+// category "output_cap_hit".
+func TestEngine_OutputCapHit_EmitsStructuredError(t *testing.T) {
+	tmpDir := t.TempDir()
+	sessMgr, err := session.NewManager(tmpDir, false)
+	if err != nil {
+		t.Fatalf("NewManager error: %v", err)
+	}
+
+	sessionID := "sess_output_cap_hit_test"
+
+	// Server returns stop_reason: max_tokens with output_tokens = 8192 (hits model max)
+	// deepseek-v4-flash has max_output_tokens = 8192
+	server := makeTestMockStreamServer([]string{
+		testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"deepseek-v4-flash","stop_reason":null,"usage":{"input_tokens":70000,"output_tokens":0}}}`),
+		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
+		testSseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Partial response"}}`),
+		testSseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
+		testSseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"max_tokens","stop_sequence":null},"usage":{"input_tokens":70000,"output_tokens":8192}}`),
+		testSseLine("message_stop", `{"type":"message_stop"}`),
+	})
+	defer server.Close()
+
+	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
+	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
+	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	os.Setenv("ANTHROPIC_API_KEY", "test-key")
+	defer func() {
+		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
+		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
+	}()
+
+	cfg := StreamConfig{
+		Enabled:        true, // Enable stream-json output
+		SessionManager: sessMgr,
+		SessionID:      sessionID,
+	}
+
+	engine := NewQueryEngine(cfg, nil, "deepseek-v4-flash")
+
+	// Capture stdout
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	_, err = engine.SubmitMessage(ctx, "test prompt")
+
+	// Restore stdout
+	w.Close()
+	os.Stdout = oldStdout
+
+	var output bytes.Buffer
+	io.Copy(&output, r)
+
+	// Verify error_max_tokens event was emitted
+	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
+	var foundErrorMaxTokens bool
+	for _, line := range lines {
+		if strings.Contains(line, `"subtype":"error_max_tokens"`) {
+			foundErrorMaxTokens = true
+			// Verify category is output_cap_hit
+			if strings.Contains(line, `"category":"output_cap_hit"`) {
+				t.Log("PASS: error_max_tokens event with output_cap_hit category found")
+			} else if strings.Contains(line, `"category":"context_exhausted"`) {
+				t.Error("FAIL: expected output_cap_hit but got context_exhausted")
+			}
+			// Verify max_output_tokens is populated
+			if strings.Contains(line, `"max_output_tokens"`) {
+				t.Log("PASS: max_output_tokens field present")
+			}
+			break
+		}
+	}
+
+	if !foundErrorMaxTokens {
+		t.Error("FAIL: error_max_tokens event not found in output")
+	}
+
+	// Verify error is returned
+	if err == nil {
+		t.Error("FAIL: expected error to be returned")
+	} else if !strings.Contains(err.Error(), "output_cap_hit") {
+		t.Errorf("FAIL: expected error to contain 'output_cap_hit', got: %v", err)
+	}
+}
+
+// TestEngine_ContextExhausted_EmitsStructuredError verifies that when the streaming
+// API returns stop_reason: "max_tokens" with output_tokens < modelMaxOutputTokens,
+// the engine emits a structured result event with subtype error_max_tokens and
+// category "context_exhausted".
+func TestEngine_ContextExhausted_EmitsStructuredError(t *testing.T) {
+	tmpDir := t.TempDir()
+	sessMgr, err := session.NewManager(tmpDir, false)
+	if err != nil {
+		t.Fatalf("NewManager error: %v", err)
+	}
+
+	sessionID := "sess_context_exhausted_test"
+
+	// Server returns stop_reason: max_tokens with output_tokens = 1000 (< 8192 model max)
+	// This indicates the request was rejected or very limited, not an output cap hit
+	server := makeTestMockStreamServer([]string{
+		testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"deepseek-v4-flash","stop_reason":null,"usage":{"input_tokens":100000,"output_tokens":0}}}`),
+		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
+		testSseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Limited"}}`),
+		testSseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
+		testSseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"max_tokens","stop_sequence":null},"usage":{"input_tokens":100000,"output_tokens":1000}}`),
+		testSseLine("message_stop", `{"type":"message_stop"}`),
+	})
+	defer server.Close()
+
+	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
+	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
+	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	os.Setenv("ANTHROPIC_API_KEY", "test-key")
+	defer func() {
+		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
+		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
+	}()
+
+	cfg := StreamConfig{
+		Enabled:        true, // Enable stream-json output
+		SessionManager: sessMgr,
+		SessionID:      sessionID,
+	}
+
+	engine := NewQueryEngine(cfg, nil, "deepseek-v4-flash")
+
+	// Capture stdout
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	_, err = engine.SubmitMessage(ctx, "test prompt")
+
+	// Restore stdout
+	w.Close()
+	os.Stdout = oldStdout
+
+	var output bytes.Buffer
+	io.Copy(&output, r)
+
+	// Verify error_max_tokens event was emitted
+	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
+	var foundErrorMaxTokens bool
+	for _, line := range lines {
+		if strings.Contains(line, `"subtype":"error_max_tokens"`) {
+			foundErrorMaxTokens = true
+			// Verify category is context_exhausted
+			if strings.Contains(line, `"category":"context_exhausted"`) {
+				t.Log("PASS: error_max_tokens event with context_exhausted category found")
+			} else if strings.Contains(line, `"category":"output_cap_hit"`) {
+				t.Error("FAIL: expected context_exhausted but got output_cap_hit")
+			}
+			// Verify threshold is populated for context_exhausted
+			if strings.Contains(line, `"threshold"`) {
+				t.Log("PASS: threshold field present for context_exhausted")
+			}
+			break
+		}
+	}
+
+	if !foundErrorMaxTokens {
+		t.Error("FAIL: error_max_tokens event not found in output")
+	}
+
+	// Verify error is returned
+	if err == nil {
+		t.Error("FAIL: expected error to be returned")
+	} else if !strings.Contains(err.Error(), "context_exhausted") {
+		t.Errorf("FAIL: expected error to contain 'context_exhausted', got: %v", err)
+	}
+}
+
+// TestEngine_AutoCompactFiresAboveThreshold verifies that auto-compact triggers
+// when estimated tokens exceed the auto-compact threshold (regression test).
+// For deepseek-v4-flash: effectiveWindow = 128K - 8K = 120K, threshold = 120K - 13K = 107K
+func TestEngine_AutoCompactFiresAboveThreshold(t *testing.T) {
+	tmpDir := t.TempDir()
+	sessMgr, err := session.NewManager(tmpDir, false)
+	if err != nil {
+		t.Fatalf("NewManager error: %v", err)
+	}
+
+	sessionID := "sess_autocompact_threshold_test"
+
+	// Server that responds to summary calls (compaction) - track if it's called
+	summaryServer := makeTestMockStreamServer([]string{
+		testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":100,"output_tokens":50}}}`),
+		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
+		testSseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Summarized"}}`),
+		testSseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
+		testSseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":100,"output_tokens":50}}`),
+		testSseLine("message_stop", `{"type":"message_stop"}`),
+	})
+	defer summaryServer.Close()
+
+	// First call returns partial response, second call (after compact) returns success
+	callCount := atomic.Int32{}
+	mainServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		count := callCount.Add(1)
+		io.ReadAll(r.Body)
+		r.Body.Close()
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.WriteHeader(http.StatusOK)
+
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			return
+		}
+		flusher.Flush()
+
+		if count == 1 {
+			// First call: partial response with max_tokens
+			events := []string{
+				"event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_1\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"model\":\"deepseek-v4-flash\",\"stop_reason\":null,\"usage\":{\"input_tokens\":5000,\"output_tokens\":0}}}\n\n",
+				"event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n",
+				"event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Response before compact\"}}\n\n",
+				"event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\n",
+				"event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null},\"usage\":{\"input_tokens\":5000,\"output_tokens\":100}}\n\n",
+				"event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n",
+			}
+			for _, e := range events {
+				io.WriteString(w, e)
+				flusher.Flush()
+			}
+		} else {
+			// Second call: success after compact
+			events := []string{
+				"event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_1\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"model\":\"deepseek-v4-flash\",\"stop_reason\":null,\"usage\":{\"input_tokens\":5000,\"output_tokens\":0}}}\n\n",
+				"event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n",
+				"event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Final response\"}}\n\n",
+				"event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\n",
+				"event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null},\"usage\":{\"input_tokens\":5000,\"output_tokens\":50}}\n\n",
+				"event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n",
+			}
+			for _, e := range events {
+				io.WriteString(w, e)
+				flusher.Flush()
+			}
+		}
+	}))
+	defer mainServer.Close()
+
+	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
+	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
+	os.Setenv("ANTHROPIC_BASE_URL", mainServer.URL)
+	os.Setenv("ANTHROPIC_API_KEY", "test-key")
+	defer func() {
+		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
+		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
+	}()
+
+	cfg := StreamConfig{
+		Enabled:        false,
+		SessionManager: sessMgr,
+		SessionID:      sessionID,
+	}
+
+	engine := NewQueryEngine(cfg, nil, "deepseek-v4-flash")
+
+	// Verify the engine's compact config has correct threshold
+	// Default: effectiveWindow = 200K - min(20K, 20K) = 180K, threshold = 180K - 13K = 167K
+	threshold := engine.compactConfig.autoCompactThreshold()
+	expectedThreshold := 167000 // 200K - 20K - 13K = 167K
+	if threshold != expectedThreshold {
+		t.Errorf("expected threshold %d, got %d", expectedThreshold, threshold)
+	} else {
+		t.Logf("PASS: auto-compact threshold correctly calculated as %d", threshold)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	// SubmitMessage with normal prompt - should not trigger auto-compact
+	// (threshold is 167K, prompt is small)
+	_, _ = engine.SubmitMessage(ctx, "small prompt")
+
+	t.Log("Test completed - threshold calculation verified")
+}

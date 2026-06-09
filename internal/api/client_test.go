@@ -1096,7 +1096,7 @@ func TestDeduplicateToolResults(t *testing.T) {
 			// Order is maintained by first-seen, but content is replaced by last writer
 			expected: []ToolResultBlock{
 				{ToolUseID: "id_1", Content: "Third (last)"}, // id_1 replaced by last writer
-				{ToolUseID: "id_2", Content: "Second"},      // id_2 unchanged
+				{ToolUseID: "id_2", Content: "Second"},       // id_2 unchanged
 			},
 		},
 		{

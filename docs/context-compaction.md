@@ -88,3 +88,62 @@ Before next API call:
 - **AC3:** Hard block at effectiveWindow − 3K when auto off.
 - **AC4:** Post-compact payload passes tool/thinking pairing rules.
 - **AC5:** compact/session_memory sources never hard-blocked pre-API.
+
+## Error Reporting: `stop_reason: max_tokens` {#error-reporting-stop_reason-max_tokens}
+
+When the streaming API returns `stop_reason: "max_tokens"`, the engine emits a structured `result` event with `subtype: "error_max_tokens"` to distinguish between two failure categories:
+
+### Categories
+
+| Category | Condition | Fields Emitted |
+|----------|-----------|----------------|
+| `output_cap_hit` | `output_tokens >= modelMaxOutputTokens` | `category`, `model`, `output_tokens`, `max_output_tokens` |
+| `context_exhausted` | `output_tokens < modelMaxOutputTokens` (request limited/rejected) | `category`, `model`, `input_tokens`, `threshold` |
+
+### Structured `result` Event Schema
+
+```json
+{
+  "type": "result",
+  "subtype": "error_max_tokens",
+  "result": "max tokens reached: <category>",
+  "model": "<model_name>",
+  "usage": {
+    "input_tokens": <int>,
+    "output_tokens": <int>,
+    "cache_read_input_tokens": <int>,
+    "cache_creation_input_tokens": <int>
+  },
+  "error_max_tokens": {
+    "category": "<output_cap_hit|context_exhausted>",
+    "output_tokens": <int>,        // only for output_cap_hit
+    "max_output_tokens": <int>,   // only for output_cap_hit
+    "input_tokens": <int>,        // only for context_exhausted
+    "threshold": <int>             // only for context_exhausted (autoCompactThreshold)
+  },
+  "stop_reason": "max_tokens",
+  "duration_ms": <int>,
+  "total_cost_usd": <float>,
+  "total_cost_cny": <float>
+}
+```
+
+### Category Selection Rule
+
+The categorizer in `internal/api/client.go` applies this logic:
+
+1. **output_cap_hit** — The streaming response completed successfully with `stop_reason: "max_tokens"` and `output_tokens >= modelMaxOutputTokens`. The model hit its per-response output cap mid-generation.
+
+2. **context_exhausted** — The streaming response completed with `stop_reason: "max_tokens"` but `output_tokens < modelMaxOutputTokens`. The request was rejected or severely limited before the model could generate significant output. This indicates the input context was too large for the model to generate meaningful response within its output cap.
+
+### Model-Specific Max Output Tokens
+
+| Model | Max Output Tokens |
+|-------|-------------------|
+| `deepseek-v4-flash` | 8,192 |
+| `deepseek-v4` | 8,192 |
+| Default (other models) | 20,000 |
+
+### Backward Compatibility
+
+The new `error_max_tokens` subtype is **additive** to the stream-json output. Existing event subtypes (`success`, `error`, etc.) are unchanged. Consumers should ignore unknown subtypes to maintain forward compatibility with future event types.

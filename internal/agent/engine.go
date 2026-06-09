@@ -916,7 +916,42 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 			continue
 
 		case api.StopReasonMaxTokens:
-			return textOutput.String(), fmt.Errorf("max tokens reached")
+			// AC1: Emit structured error_max_tokens result event
+			if e.streamCfg.Enabled && streamResult.MaxTokensErr != nil {
+				mte := streamResult.MaxTokensErr
+				threshold := e.compactConfig.autoCompactThreshold()
+				errMsg := fmt.Sprintf("max tokens reached: %s", mte.Category)
+				msg := StreamMessage{
+					Type:      "result",
+					Subtype:   "error_max_tokens",
+					Result:    errMsg,
+					SessionID: sessionID,
+					Uuid:      GenerateUUID(),
+					Model:     mte.Model,
+					Usage: &Usage{
+						InputTokens:              resp.Usage.InputTokens,
+						OutputTokens:             mte.OutputTokens,
+						CacheReadInputTokens:     resp.Usage.CacheReadInputTokens,
+						CacheCreationInputTokens: resp.Usage.CacheCreationInputTokens,
+					},
+					StopReason:   string(resp.StopReason),
+					DurationMs:   time.Since(e.startTime).Milliseconds(),
+					TotalCostUSD: e.costState.TotalCostUSD,
+					TotalCostCNY: e.costState.TotalCostCNY,
+					ModelUsage:   e.buildModelUsage(),
+					// Additional fields for error_max_tokens
+					ErrorMaxTokens: &ErrorMaxTokensDetail{
+						Category:        string(mte.Category),
+						OutputTokens:    mte.OutputTokens,
+						MaxOutputTokens: mte.MaxOutputTokens,
+						InputTokens:     resp.Usage.InputTokens,
+						Threshold:       threshold,
+					},
+				}
+				data, _ := json.Marshal(msg)
+				fmt.Fprintln(os.Stdout, string(data))
+			}
+			return textOutput.String(), fmt.Errorf("max tokens reached: %s", streamResult.MaxTokensErr.Category)
 
 		case api.StopReasonStopSeq:
 			if e.streamCfg.Enabled {
