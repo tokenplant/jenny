@@ -451,35 +451,18 @@ func TestNormalize_UniversalToolResultDedup(t *testing.T) {
 				},
 			}
 
-			// dedupMessageToolResults is called by NormalizeMessages
-			// Since we're testing the dedup in NormalizeMessages, we verify
-			// that the API package's NormalizeMessages applies dedup universally.
-			// The actual dedup happens in api.NormalizeMessages which calls
-			// deduplicateToolResults on each message's ToolResults.
-
-			// For this test, we verify the dedup behavior directly
-			deduped := deduplicateToolResultsForTest(messages[0].ToolResults)
-			if len(deduped) != 1 {
-				t.Errorf("expected 1 deduped tool_result, got %d", len(deduped))
+			// Call api.NormalizeMessages to exercise the production path
+			normalized, _, _ := api.NormalizeMessages(messages, nil, api.Capabilities{})
+			if len(normalized) != 1 {
+				t.Fatalf("expected 1 message after normalization, got %d", len(normalized))
 			}
-			if deduped[0].Content != "Duplicate result" {
-				t.Errorf("expected last writer 'Duplicate result', got %q", deduped[0].Content)
+			if len(normalized[0].ToolResults) != 1 {
+				t.Errorf("expected 1 deduped tool_result, got %d", len(normalized[0].ToolResults))
+			}
+			// Last writer wins - should have "Duplicate result"
+			if normalized[0].ToolResults[0].Content != "Duplicate result" {
+				t.Errorf("expected last writer 'Duplicate result', got %q", normalized[0].ToolResults[0].Content)
 			}
 		})
 	}
-}
-
-// deduplicateToolResultsForTest is a test helper that applies dedup to a single message's tool_results
-func deduplicateToolResultsForTest(results []api.ToolResultBlock) []api.ToolResultBlock {
-	seen := make(map[string]int)
-	var unique []api.ToolResultBlock
-	for _, tr := range results {
-		if idx, exists := seen[tr.ToolUseID]; exists {
-			unique[idx] = tr
-		} else {
-			seen[tr.ToolUseID] = len(unique)
-			unique = append(unique, tr)
-		}
-	}
-	return unique
 }

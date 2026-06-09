@@ -91,7 +91,7 @@ Registry → QueryEngine → git → system prompt → Read/Glob/Grep → securi
 
 | Feature | Spec |
 |---------|------|
-| Message normalization | [message-normalization.md](./message-normalization.md) |
+| Message normalization | [message-normalization.md](./message-normalization.md), [universal-normalization-architecture.md](./universal-normalization-architecture.md) |
 | Context compaction | [context-compaction.md](./context-compaction.md) |
 | Sandbox | [sandbox.md](./sandbox.md) |
 | Notebook edit | [notebook-edit.md](./notebook-edit.md) |
