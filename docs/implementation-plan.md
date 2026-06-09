@@ -86,6 +86,7 @@ Implement in this order:
    - Tool results go in user messages as `tool_result` blocks keyed by `tool_use_id`
    - Image validation and SSE streaming default both shipped ✓
    - [x] DeepSeek tool_result dedup fix — duplicate `tool_result` blocks deduplicated by `tool_use_id` in `mergeConsecutiveSameRole` and SDK serialization safety net ✓
+   - [x] Document provider-aware fix rationale — see [provider-aware-fixes.md](./provider-aware-fixes.md)
 
 4. - [x] Core agent loop — partial — [`agent-loop.md`](./agent-loop.md)
    - Basic tool_use → execute → tool_result loop
