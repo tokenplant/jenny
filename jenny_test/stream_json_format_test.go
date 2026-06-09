@@ -245,3 +245,58 @@ func TestStreamJsonSystemIsFirst(t *testing.T) {
 		t.Errorf("AC7: first event type = %q; want \"system\" (event: %v)", typ, first)
 	}
 }
+
+func TestStreamJsonResultUsageAndCost(t *testing.T) {
+	parsed := runEchoHello(t)
+
+	var result map[string]any
+	for _, ev := range parsed {
+		if ev["type"] == "result" && ev["subtype"] == "success" {
+			result = ev
+			break
+		}
+	}
+	if result == nil {
+		t.Fatal("no result/success event found")
+	}
+
+	// AC1: usage is a JSON object.
+	rawUsage, ok := result["usage"]
+	if !ok {
+		t.Fatal("AC1: result event missing 'usage' field")
+	}
+	usage, ok := rawUsage.(map[string]any)
+	if !ok {
+		t.Fatalf("AC1: result.usage is %T, want object", rawUsage)
+	}
+
+	// AC2: input_tokens is a non-negative integer.
+	rawIn, ok := usage["input_tokens"]
+	if !ok {
+		t.Error("AC2: usage missing 'input_tokens'")
+	} else if in, ok := rawIn.(float64); !ok || in < 0 {
+		t.Errorf("AC2: usage.input_tokens=%v, want non-negative number", rawIn)
+	} else if in != 100 {
+		t.Errorf("AC2: usage.input_tokens=%v, want 100 (echo-hello cassette)", in)
+	}
+
+	// AC3: output_tokens is a non-negative integer.
+	rawOut, ok := usage["output_tokens"]
+	if !ok {
+		t.Error("AC3: usage missing 'output_tokens'")
+	} else if out, ok := rawOut.(float64); !ok || out < 0 {
+		t.Errorf("AC3: usage.output_tokens=%v, want non-negative number", rawOut)
+	} else if out != 5 {
+		t.Errorf("AC3: usage.output_tokens=%v, want 5 (echo-hello cassette)", out)
+	}
+
+	// AC4: total_cost_usd is present and non-negative.
+	rawCost, ok := result["total_cost_usd"]
+	if !ok {
+		t.Error("AC4: result event missing 'total_cost_usd' field")
+	} else if cost, ok := rawCost.(float64); !ok {
+		t.Errorf("AC4: total_cost_usd is %T, want float", rawCost)
+	} else if cost < 0 {
+		t.Errorf("AC4: total_cost_usd=%v, want >= 0", cost)
+	}
+}

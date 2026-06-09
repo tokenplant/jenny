@@ -689,9 +689,27 @@ func (acc *streamAccumulator) getModel() string {
 	return acc.model
 }
 
+// mergeUsage merges non-zero fields from usage into the accumulator,
+// allowing message_start (input tokens) and message_delta (output tokens)
+// to contribute independently without overwriting each other.
+func (acc *streamAccumulator) mergeUsage(usage Usage) {
+	if usage.InputTokens > 0 {
+		acc.usage.InputTokens = usage.InputTokens
+	}
+	if usage.OutputTokens > 0 {
+		acc.usage.OutputTokens = usage.OutputTokens
+	}
+	if usage.CacheReadInputTokens > 0 {
+		acc.usage.CacheReadInputTokens = usage.CacheReadInputTokens
+	}
+	if usage.CacheCreationInputTokens > 0 {
+		acc.usage.CacheCreationInputTokens = usage.CacheCreationInputTokens
+	}
+}
+
 // setUsage sets the usage from a message_delta event.
 func (acc *streamAccumulator) setUsage(usage Usage) {
-	acc.usage = usage
+	acc.mergeUsage(usage)
 }
 
 // setStopReason sets the stop reason from a message_delta event.
@@ -941,6 +959,13 @@ func (c *Client) SendMessageStream(
 				blocksChan <- StreamContentBlock{Type: "stream_event", RawEvent: e}
 				hasMessageStart = true
 				acc.setModel(string(e.Message.Model))
+				if e.Message.Usage.InputTokens > 0 {
+					acc.setUsage(Usage{
+						InputTokens:              int(e.Message.Usage.InputTokens),
+						CacheReadInputTokens:     int(e.Message.Usage.CacheReadInputTokens),
+						CacheCreationInputTokens: int(e.Message.Usage.CacheCreationInputTokens),
+					})
+				}
 				log.Debug("Stream: message_start")
 
 			case anthropic.ContentBlockStartEvent:

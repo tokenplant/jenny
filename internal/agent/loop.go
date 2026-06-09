@@ -376,7 +376,7 @@ type StreamMessage struct {
 	StopReason    string  `json:"stop_reason,omitempty"`
 	DurationMs    int64   `json:"duration_ms,omitempty"`
 	DurationAPIMs int64   `json:"duration_api_ms,omitempty"`
-	TotalCostUSD  float64 `json:"total_cost_usd,omitempty"`
+	TotalCostUSD  float64 `json:"total_cost_usd"`
 	TotalCostCNY  float64 `json:"total_cost_cny,omitempty"`
 	ModelUsage    any     `json:"modelUsage,omitempty"`
 	Event         any     `json:"event,omitempty"`
@@ -393,8 +393,8 @@ func GenerateUUID() string {
 
 // Usage represents token usage information for streaming output.
 type Usage struct {
-	InputTokens              int `json:"input_tokens,omitempty"`
-	OutputTokens             int `json:"output_tokens,omitempty"`
+	InputTokens              int `json:"input_tokens"`
+	OutputTokens             int `json:"output_tokens"`
 	CacheReadInputTokens     int `json:"cache_read_input_tokens,omitempty"`
 	CacheCreationInputTokens int `json:"cache_creation_input_tokens,omitempty"`
 }

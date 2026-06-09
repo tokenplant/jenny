@@ -209,3 +209,9 @@ The very first message emitted. Includes environment context.
 2. **Standardize Role Messages**: Create helper functions to wrap tool results in User messages and format Assistant messages as an array of ContentBlocks.
 3. **Handle Deltas**: Update the streaming loop to emit standard `stream_event` objects for thinking and text deltas.
 4. **Implement Control Requests**: `jenny` must be able to emit `can_use_tool` requests if it's acting as a server, and handle `control_response` as input.
+
+## Acceptance Criteria
+
+- **AC-result-1:** The `result` event includes a `usage` object with `input_tokens` (integer ≥ 0) and `output_tokens` (integer ≥ 0).
+- **AC-result-2:** The `result` event includes `total_cost_usd` (float ≥ 0.0). The field must be present even when the value is 0.
+- **AC-result-3:** `duration_ms` is a non-negative number present on every `result` event.
