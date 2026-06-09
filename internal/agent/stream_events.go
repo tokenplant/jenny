@@ -364,35 +364,7 @@ func transformMessageStop(e anthropic.MessageStopEvent) (json.RawMessage, error)
 	return json.Marshal(event)
 }
 
-// BuildUserEvent builds a user event with timestamp and tool_use_result.
-type UserEvent struct {
-	Type            string          `json:"type"`
-	Message         json.RawMessage `json:"message"`
-	SessionID       string          `json:"session_id,omitempty"`
-	ParentToolUseID *string         `json:"parent_tool_use_id,omitempty"`
-	Uuid            string          `json:"uuid,omitempty"`
-	Timestamp       string          `json:"timestamp,omitempty"`
-	ToolUseResult   any             `json:"tool_use_result,omitempty"`
-}
-
-// BuildAssistantEvent builds an assistant event with full message shape.
-type AssistantEvent struct {
-	Type            string          `json:"type"`
-	Message         json.RawMessage `json:"message"`
-	ParentToolUseID *string         `json:"parent_tool_use_id,omitempty"`
-	SessionID       string          `json:"session_id,omitempty"`
-	Uuid            string          `json:"uuid,omitempty"`
-}
-
 // TimestampNow returns current timestamp in RFC3339Nano format.
 func TimestampNow() string {
 	return time.Now().UTC().Format(time.RFC3339Nano)
-}
-
-// FormatToolUseResult formats a tool result for tool_use_result field.
-func FormatToolUseResult(content string, isError bool) string {
-	if isError {
-		return fmt.Sprintf("Error: %s", content)
-	}
-	return content
 }

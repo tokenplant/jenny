@@ -363,26 +363,26 @@ func RunSimple(ctx context.Context, prompt string, tools []tool.Tool) (string, e
 type StreamMessage struct {
 	Type              string                `json:"type"`
 	Subtype           string                `json:"subtype,omitempty"`
-	Content           string                `json:"content,omitempty"`
+	IsError           bool                  `json:"is_error"`
+	DurationMs        int64                 `json:"duration_ms,omitempty"`
+	DurationAPIMs     int64                 `json:"duration_api_ms,omitempty"`
+	NumTurns          int                   `json:"num_turns,omitempty"`
+	Result            string                `json:"result,omitempty"`
+	StopReason        string                `json:"stop_reason,omitempty"`
 	Event             any                   `json:"event,omitempty"`
 	Message           any                   `json:"message,omitempty"`
 	SessionID         string                `json:"session_id,omitempty"`
 	ParentToolUseID   *string               `json:"parent_tool_use_id"`
+	TotalCostUSD      float64               `json:"total_cost_usd,omitempty"`
+	TotalCostCNY      float64               `json:"total_cost_cny,omitempty"`
 	Uuid              string                `json:"uuid,omitempty"`
-	Result            string                `json:"result,omitempty"`
+	Content           string                `json:"content,omitempty"`
 	Model             string                `json:"model,omitempty"`
 	Usage             *Usage                `json:"usage,omitempty"`
 	ToolName          string                `json:"tool_name,omitempty"`
 	ToolInput         any                   `json:"input,omitempty"`
 	ToolUseID         string                `json:"tool_use_id,omitempty"`
-	IsError           bool                  `json:"is_error"`
 	IsPartial         bool                  `json:"is_partial,omitempty"`
-	StopReason        string                `json:"stop_reason,omitempty"`
-	DurationMs        int64                 `json:"duration_ms,omitempty"`
-	DurationAPIMs     int64                 `json:"duration_api_ms,omitempty"`
-	NumTurns          int                   `json:"num_turns,omitempty"`
-	TotalCostUSD      float64               `json:"total_cost_usd,omitempty"`
-	TotalCostCNY      float64               `json:"total_cost_cny,omitempty"`
 	ModelUsage        any                   `json:"modelUsage,omitempty"`
 	ErrorMaxTokens    *ErrorMaxTokensDetail `json:"error_max_tokens,omitempty"`
 	Timestamp         string                `json:"timestamp,omitempty"`
