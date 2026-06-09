@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"sync"
 	"testing"
 	"time"
@@ -243,18 +242,19 @@ func TestRetry_AC1_429Retry(t *testing.T) {
 	// Use jitter=0 to get deterministic backoff timing for verification
 	client.SetRetryConfig(RetryConfig{MaxRetries: 10, Max529Retries: 3, BaseDelay: 500 * time.Millisecond, MaxDelay: 32 * time.Second, Jitter: 0})
 
-	// Create a wrapper that uses our test server URL
-	origBaseURL := server.URL
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 
 	// We'll test by making requests through the retry mechanism
 	// For this, we need to inject our own send function that uses the test server
 	attemptCount := 0
+	baseURL := server.URL
 
 	// Create a simple retry test by calling sendWithRetry directly
 	sendFn := func(ctx context.Context) (*Response, error) {
 		attemptCount++
 		// Make HTTP request to test server
-		req, _ := http.NewRequestWithContext(ctx, "POST", origBaseURL+"/v1/messages", nil)
+		req, _ := http.NewRequestWithContext(ctx, "POST", baseURL+"/v1/messages", nil)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			return nil, err
@@ -562,15 +562,8 @@ func TestRetry_AC5_PreservesParams(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// Set environment to use test server
-	oldBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	oldAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", oldBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", oldAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 
 	// Create client with specific model and maxTokensOverride
 	client, err := NewClientWithModel("my-test-model")

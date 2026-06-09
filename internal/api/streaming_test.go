@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"sync"
 	"testing"
 	"time"
@@ -49,16 +48,10 @@ func makeStreamServer(t *testing.T, events []string) (*httptest.Server, chan []b
 	return s, bodyCh
 }
 
-func setTestEnv(t *testing.T, serverURL string) func() {
+func setTestEnv(t *testing.T, serverURL string) {
 	t.Helper()
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", serverURL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key-0000000000000000")
-	return func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}
+	t.Setenv("ANTHROPIC_BASE_URL", serverURL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key-0000000000000000")
 }
 
 func readAllBlocks(t *testing.T, blocksChan <-chan StreamContentBlock) []StreamContentBlock {
@@ -133,7 +126,7 @@ func TestAC1_StreamingSendsStreamTrue(t *testing.T) {
 
 	server, bodyCh := makeStreamServer(t, events)
 	defer server.Close()
-	defer setTestEnv(t, server.URL)()
+	setTestEnv(t, server.URL)
 
 	client, err := NewClientWithModel("m1")
 	if err != nil {
@@ -192,7 +185,7 @@ func TestAC2_AccumulatesMultipleTextDeltas(t *testing.T) {
 
 	server, _ := makeStreamServer(t, events)
 	defer server.Close()
-	defer setTestEnv(t, server.URL)()
+	setTestEnv(t, server.URL)
 
 	client, _ := NewClientWithModel("m")
 	blocksChan, result := client.SendMessageStream(
@@ -229,7 +222,7 @@ func TestAC2_UsageFromMessageDelta(t *testing.T) {
 
 	server, _ := makeStreamServer(t, events)
 	defer server.Close()
-	defer setTestEnv(t, server.URL)()
+	setTestEnv(t, server.URL)
 
 	client, _ := NewClientWithModel("m")
 	blocksChan, result := client.SendMessageStream(
@@ -260,7 +253,7 @@ func TestAC2_StopReasonExtraction(t *testing.T) {
 
 	server, _ := makeStreamServer(t, events)
 	defer server.Close()
-	defer setTestEnv(t, server.URL)()
+	setTestEnv(t, server.URL)
 
 	client, _ := NewClientWithModel("m")
 	blocksChan, result := client.SendMessageStream(
@@ -296,7 +289,7 @@ func TestAC1_CacheTokensExtractedFromMessageDelta(t *testing.T) {
 
 	server, _ := makeStreamServer(t, events)
 	defer server.Close()
-	defer setTestEnv(t, server.URL)()
+	setTestEnv(t, server.URL)
 
 	client, _ := NewClientWithModel("m")
 	blocksChan, result := client.SendMessageStream(
@@ -337,7 +330,7 @@ func TestAC1_CacheOnlyMessageDeltaEdgeCase(t *testing.T) {
 
 	server, _ := makeStreamServer(t, events)
 	defer server.Close()
-	defer setTestEnv(t, server.URL)()
+	setTestEnv(t, server.URL)
 
 	client, _ := NewClientWithModel("m")
 	blocksChan, result := client.SendMessageStream(
@@ -368,7 +361,7 @@ func TestAC1_NonStreamingCacheTokensExtracted(t *testing.T) {
 		w.Write([]byte(resp))
 	}))
 	defer server.Close()
-	defer setTestEnv(t, server.URL)()
+	setTestEnv(t, server.URL)
 
 	client, _ := NewClientWithModel("m")
 	client.SetMaxTokensOverride(8192)
@@ -408,7 +401,7 @@ func TestAC3_FallbackOnIncompleteStream(t *testing.T) {
 
 	server, _ := makeStreamServer(t, events)
 	defer server.Close()
-	defer setTestEnv(t, server.URL)()
+	setTestEnv(t, server.URL)
 
 	client, _ := NewClientWithModel("m")
 
@@ -471,7 +464,7 @@ func TestAC3_FallbackOnNonSSEResponse(t *testing.T) {
 		w.Write([]byte("not an SSE stream"))
 	}))
 	defer server.Close()
-	defer setTestEnv(t, server.URL)()
+	setTestEnv(t, server.URL)
 
 	client, _ := NewClientWithModel("m")
 
@@ -539,7 +532,7 @@ func TestAC5_IdleTimeoutDetectedAfterDelayButFallbackNotCalled(t *testing.T) {
 
 	server := makeDelayedServer(t, initial, delay, final)
 	defer server.Close()
-	defer setTestEnv(t, server.URL)()
+	setTestEnv(t, server.URL)
 
 	client, _ := NewClientWithModel("m")
 
@@ -608,7 +601,7 @@ func TestStreamingMultipleContentBlocks(t *testing.T) {
 
 	server, _ := makeStreamServer(t, events)
 	defer server.Close()
-	defer setTestEnv(t, server.URL)()
+	setTestEnv(t, server.URL)
 
 	client, _ := NewClientWithModel("m")
 	blocksChan, _ := client.SendMessageStream(
@@ -651,7 +644,7 @@ func TestFallback_NonStreamingMaxTokens64000(t *testing.T) {
 		w.Write([]byte(resp))
 	}))
 	defer server.Close()
-	defer setTestEnv(t, server.URL)()
+	setTestEnv(t, server.URL)
 
 	client, _ := NewClientWithModel("m")
 	// No SetMaxTokensOverride — must use the universal 64000 default.

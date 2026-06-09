@@ -29,14 +29,8 @@ func TestAC4_StreamRequestStartEmitted(t *testing.T) {
 	defer server.Close()
 
 	// Redirect SDK to our mock server
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key-00000")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key-00000")
 
 	// Redirect stdout to a pipe
 	oldStdout := os.Stdout
@@ -110,14 +104,8 @@ func TestAC4_NoStreamRequestStartWhenDisabled(t *testing.T) {
 	server := makeMockStreamServer(t)
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key-00000")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key-00000")
 
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
@@ -425,14 +413,8 @@ func TestStreamEvent_ThinkingAndSignature(t *testing.T) {
 	}))
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
@@ -1068,14 +1050,8 @@ func TestStreamJSON_HasParentToolUseID(t *testing.T) {
 	server := makeMockStreamServer(t)
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key-00000")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key-00000")
 
 	cfg := StreamConfig{Enabled: true}
 	output, err := captureStreamOutput(t, cfg)
@@ -1113,14 +1089,8 @@ func TestStreamJSON_EmitsAggregatedAssistant(t *testing.T) {
 	server := makeMockStreamServer(t)
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key-00000")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key-00000")
 
 	cfg := StreamConfig{Enabled: true}
 	output, err := captureStreamOutput(t, cfg)
@@ -1165,14 +1135,8 @@ func TestStreamJSON_EmitsAggregatedUser(t *testing.T) {
 	server := makeMockStreamServer(t)
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key-00000")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key-00000")
 
 	cfg := StreamConfig{Enabled: true}
 	output, err := captureStreamOutput(t, cfg)
@@ -1204,14 +1168,8 @@ func TestStreamJSON_EmitsTerminalResult(t *testing.T) {
 	server := makeMockStreamServer(t)
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key-00000")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key-00000")
 
 	cfg := StreamConfig{Enabled: true}
 	output, err := captureStreamOutput(t, cfg)
@@ -1244,14 +1202,8 @@ func TestStreamJSON_FieldOrderMatchesReference(t *testing.T) {
 	server := makeMockStreamServer(t)
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key-00000")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key-00000")
 
 	cfg := StreamConfig{Enabled: true}
 	output, err := captureStreamOutput(t, cfg)
@@ -1430,14 +1382,8 @@ func TestStreamJSON_CostOnlyOnResult(t *testing.T) {
 	server := makeMockStreamServer(t)
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key-00000")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key-00000")
 
 	cfg := StreamConfig{Enabled: true}
 	output, err := captureStreamOutput(t, cfg)

@@ -73,14 +73,8 @@ func TestAC1_PersistBeforeAPI(t *testing.T) {
 	})
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 
 	cfg := StreamConfig{
 		Enabled:        false,
@@ -137,14 +131,8 @@ func TestAC2_MaxTurnsEnforcement(t *testing.T) {
 	})
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 
 	cfg := StreamConfig{
 		Enabled:        false,
@@ -191,14 +179,8 @@ func TestAC5_TurnCounterResets(t *testing.T) {
 	})
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 
 	cfg := StreamConfig{
 		Enabled:        false,
@@ -253,14 +235,8 @@ func TestAC3_CostStateFlushed(t *testing.T) {
 	})
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 
 	cfg := StreamConfig{
 		Enabled:        false,
@@ -348,14 +324,8 @@ func TestAC1_SubmitMessageWithoutSessionManager(t *testing.T) {
 	})
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 
 	// No session manager — sessionManager is nil
 	cfg := StreamConfig{Enabled: false}
@@ -405,14 +375,8 @@ func TestAC1_ResumeDoesNotDuplicateUserMessage(t *testing.T) {
 	})
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 
 	cfg := StreamConfig{
 		Enabled:        false,
@@ -462,14 +426,8 @@ func TestAC2_MaxTurnsZeroIsUnlimited(t *testing.T) {
 	})
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 
 	cfg := StreamConfig{Enabled: false}
 	engine := NewQueryEngine(cfg, nil, "")
@@ -512,14 +470,8 @@ func TestAC3_CostFlushOnMaxTurnsError(t *testing.T) {
 	})
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 
 	cfg := StreamConfig{
 		Enabled:        false,
@@ -558,14 +510,8 @@ func TestAC4_RunStreamReturnsTextContent(t *testing.T) {
 	server := makeMockStreamServer(t)
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key-00000")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key-00000")
 
 	tmpDir := t.TempDir()
 	sessMgr, err := session.NewManager(tmpDir, false)
@@ -607,14 +553,8 @@ func TestAC5_TurnCounterIsAccurate(t *testing.T) {
 	})
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 
 	cfg := StreamConfig{Enabled: false}
 	engine := NewQueryEngine(cfg, nil, "")
@@ -682,14 +622,8 @@ func TestAC3_StreamJsonCallsSetOutput(t *testing.T) {
 	})
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 
 	// Save original stdout
 	oldStdout := os.Stdout
@@ -929,14 +863,8 @@ func TestAC1_MemdirCreatedAtPromptBuild(t *testing.T) {
 	})
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 
 	cfg := StreamConfig{
 		Enabled:           false,
@@ -1107,14 +1035,8 @@ func TestAC3_NotEmittedError(t *testing.T) {
 	})
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 
 	cfg := StreamConfig{
 		Enabled:          true,
@@ -1172,14 +1094,8 @@ func TestAC3_ResultExtraction(t *testing.T) {
 	})
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 
 	cfg := StreamConfig{
 		Enabled:          true,
@@ -1242,14 +1158,8 @@ func TestToolCallEvents(t *testing.T) {
 	})
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 
 	// Save original stdout
 	oldStdout := os.Stdout
@@ -1400,14 +1310,8 @@ func TestInterruptSyntheticToolResults_AC5(t *testing.T) {
 	}))
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 
 	// One fast tool (completes immediately, exercises AC2) and one blocking
 	// tool that only returns when the context is cancelled (exercises AC1).
@@ -1561,14 +1465,8 @@ func TestEngine_InterruptedField_TriggersSynthetic(t *testing.T) {
 	}))
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 
 	// Three tools: fast (completes), blocking (gets interrupted), failing (triggers abort)
 	// read is concurrency-safe and runs in parallel with bash tools
@@ -1647,14 +1545,8 @@ func TestEngine_BenignContent_NotInterpretedAsInterrupt(t *testing.T) {
 	})
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 
 	// A tool that returns benign content containing "aborted" — NOT interrupted.
 	// This simulates a build tool whose stdout is "make: *** [build] aborted".
@@ -1775,14 +1667,8 @@ func TestToolCallEvents_Negative(t *testing.T) {
 	})
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 
 	// Save original stdout
 	oldStdout := os.Stdout
@@ -2263,14 +2149,8 @@ func TestEngine_OutputCapHit_EmitsStructuredError(t *testing.T) {
 	})
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 
 	cfg := StreamConfig{
 		Enabled:        true, // Enable stream-json output
@@ -2354,14 +2234,8 @@ func TestEngine_ContextExhausted_EmitsStructuredError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 
 	cfg := StreamConfig{
 		Enabled:        true, // Enable stream-json output
@@ -2492,14 +2366,8 @@ func TestEngine_AutoCompactFiresAboveThreshold(t *testing.T) {
 	}))
 	defer mainServer.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", mainServer.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", mainServer.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 
 	cfg := StreamConfig{
 		Enabled:        false,
@@ -2552,14 +2420,8 @@ func TestEngine_ContextExhausted_MiniMax_EmitsStructuredError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 
 	cfg := StreamConfig{
 		Enabled:        true,

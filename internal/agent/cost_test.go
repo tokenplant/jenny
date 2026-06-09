@@ -227,14 +227,8 @@ func TestAC2_PersistsEndTurnPath(t *testing.T) {
 	server := makeMockStreamServerWithCacheTokens(t)
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key-00000")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key-00000")
 
 	tmpDir := t.TempDir()
 	origWd, _ := os.Getwd()
@@ -471,14 +465,8 @@ func TestAC4_ResultLineContainsCacheAndCostFields(t *testing.T) {
 	server := makeMockStreamServerWithCacheTokens(t)
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key-00000")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key-00000")
 
 	tmpDir := t.TempDir()
 	origWd, _ := os.Getwd()
@@ -601,14 +589,8 @@ func TestAC5_BudgetStopInRunStream(t *testing.T) {
 	server := makeMockStreamServerWithCacheTokens(t)
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key-00000")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key-00000")
 
 	tmpDir := t.TempDir()
 	origWd, _ := os.Getwd()
@@ -707,14 +689,8 @@ func TestAC5_BudgetNoLimitWhenMaxBudgetUSDIsZero(t *testing.T) {
 	server := makeMockStreamServerWithCacheTokens(t)
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key-00000")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key-00000")
 
 	tmpDir := t.TempDir()
 	origWd, _ := os.Getwd()

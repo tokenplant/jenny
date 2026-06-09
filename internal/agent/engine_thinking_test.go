@@ -10,7 +10,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -116,14 +115,8 @@ func TestAC1_ThinkingBlockEmittedSeparately(t *testing.T) {
 	server := makeTestMockStreamServer(thinkingTextToolEvents(thinking, "sig-abc", text))
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 
 	tmpDir := t.TempDir()
 	sessMgr, err := session.NewManager(tmpDir, false)
@@ -185,14 +178,8 @@ func TestAC2_ThinkingSignatureIncluded(t *testing.T) {
 	server := makeTestMockStreamServer(thinkingTextToolEvents("thought", signature, "answer"))
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 
 	tmpDir := t.TempDir()
 	sessMgr, err := session.NewManager(tmpDir, false)
@@ -232,14 +219,8 @@ func TestAC2_ThinkingSignatureOmittedWhenEmpty(t *testing.T) {
 	server := makeTestMockStreamServer(thinkingTextToolEvents("thought", "", "answer"))
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 
 	tmpDir := t.TempDir()
 	sessMgr, err := session.NewManager(tmpDir, false)
@@ -276,14 +257,8 @@ func TestAC3_ContentOrdering_ThinkingTextToolUse(t *testing.T) {
 	server := makeTestMockStreamServer(thinkingTextToolUseEvents("reasoning", "sig", "summary", "tool_1", "Bash"))
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 
 	tmpDir := t.TempDir()
 	sessMgr, err := session.NewManager(tmpDir, false)
@@ -335,14 +310,8 @@ func TestAC4_TextOnlyUnaffected(t *testing.T) {
 	})
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 
 	tmpDir := t.TempDir()
 	sessMgr, err := session.NewManager(tmpDir, false)
@@ -390,14 +359,8 @@ func TestAC5_ToolUseOnlyNoEmptyText(t *testing.T) {
 	})
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 
 	tmpDir := t.TempDir()
 	sessMgr, err := session.NewManager(tmpDir, false)
@@ -488,14 +451,8 @@ func TestAC6_FallbackPathThinkingBlock(t *testing.T) {
 	}))
 	defer server.Close()
 
-	origBaseURL := os.Getenv("ANTHROPIC_BASE_URL")
-	origAPIKey := os.Getenv("ANTHROPIC_API_KEY")
-	os.Setenv("ANTHROPIC_BASE_URL", server.URL)
-	os.Setenv("ANTHROPIC_API_KEY", "test-key")
-	defer func() {
-		os.Setenv("ANTHROPIC_BASE_URL", origBaseURL)
-		os.Setenv("ANTHROPIC_API_KEY", origAPIKey)
-	}()
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 
 	tmpDir := t.TempDir()
 	sessMgr, err := session.NewManager(tmpDir, false)

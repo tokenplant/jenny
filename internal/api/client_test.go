@@ -6,25 +6,13 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 	"time"
 )
 
 func TestNewClientWithModelEnvVar(t *testing.T) {
-	// Save original env var
-	origModel := os.Getenv("ANTHROPIC_MODEL")
-	defer func() {
-		if origModel != "" {
-			os.Setenv("ANTHROPIC_MODEL", origModel)
-		} else {
-			os.Unsetenv("ANTHROPIC_MODEL")
-		}
-	}()
-
-	// Set ANTHROPIC_MODEL env var
-	os.Setenv("ANTHROPIC_MODEL", "test-env-model")
+	t.Setenv("ANTHROPIC_MODEL", "test-env-model")
 
 	// Create client with empty model - should use env var
 	client, err := NewClientWithModel("")
@@ -42,18 +30,7 @@ func TestNewClientWithModelEnvVar(t *testing.T) {
 }
 
 func TestNewClientWithModelEmpty(t *testing.T) {
-	// Save original env var
-	origModel := os.Getenv("ANTHROPIC_MODEL")
-	defer func() {
-		if origModel != "" {
-			os.Setenv("ANTHROPIC_MODEL", origModel)
-		} else {
-			os.Unsetenv("ANTHROPIC_MODEL")
-		}
-	}()
-
-	// Ensure ANTHROPIC_MODEL is not set
-	os.Unsetenv("ANTHROPIC_MODEL")
+	t.Setenv("ANTHROPIC_MODEL", "")
 
 	client, err := NewClientWithModel("")
 	if err != nil {
@@ -69,18 +46,7 @@ func TestNewClientWithModelEmpty(t *testing.T) {
 }
 
 func TestNewClientWithModelOverride(t *testing.T) {
-	// Save original env var
-	origModel := os.Getenv("ANTHROPIC_MODEL")
-	defer func() {
-		if origModel != "" {
-			os.Setenv("ANTHROPIC_MODEL", origModel)
-		} else {
-			os.Unsetenv("ANTHROPIC_MODEL")
-		}
-	}()
-
-	// Set ANTHROPIC_MODEL env var
-	os.Setenv("ANTHROPIC_MODEL", "env-model")
+	t.Setenv("ANTHROPIC_MODEL", "env-model")
 
 	// Create client with model override - should use override
 	client, err := NewClientWithModel("override-model")
