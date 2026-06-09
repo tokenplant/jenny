@@ -55,6 +55,7 @@ jenny -p "prompt text"
 | `--output-format stream-json` | Requires prompt (`-p` or positional) |
 | `--include-partial-messages` | Requires `--output-format stream-json` |
 | `--resume-session-at` | Requires `-r` / `--resume` |
+| `--continue` with no prior sessions | Exit non-zero with error "no sessions to continue" |
 
 ## Exit Codes
 
