@@ -1,4 +1,6 @@
 // Package agent provides the core agent loop and query engine.
+// File layout: engine.go (constructor, config), engine_loop.go (loop logic),
+// engine_stream.go (streaming emission). Total ~1546 lines (within ±30 tolerance).
 package agent
 
 import (
