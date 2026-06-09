@@ -1496,12 +1496,13 @@ func (e *QueryEngine) emitConsolidatedAssistant(
 		messageObj["usage"] = usageMap
 	}
 
+	// Reference order for assistant: type, message, parent_tool_use_id, session_id, uuid
 	msg := StreamMessage{
 		Type:            "assistant",
+		Message:         messageObj,
 		ParentToolUseID: nil,
 		SessionID:       sessionID,
 		Uuid:            GenerateUUID(),
-		Message:         messageObj,
 	}
 	data, _ := json.Marshal(msg)
 	fmt.Fprintln(os.Stdout, string(data))

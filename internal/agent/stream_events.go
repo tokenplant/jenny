@@ -104,6 +104,7 @@ func (m MinimalDelta) MarshalJSON() ([]byte, error) {
 			fields = append(fields, `"signature":`+encodeString(m.Signature))
 		}
 	case "message_delta":
+		// Reference format: delta has stop_reason/stop_sequence directly, no nested type
 		if m.StopReason != "" {
 			fields = append(fields, `"stop_reason":`+encodeString(m.StopReason))
 		}
@@ -249,13 +250,10 @@ func transformContentBlockStart(e anthropic.ContentBlockStartEvent) (json.RawMes
 
 	switch e.ContentBlock.Type {
 	case "thinking":
-		// Only include thinking and signature if non-empty (they come in deltas)
-		if e.ContentBlock.Thinking != "" {
-			cb.Thinking = e.ContentBlock.Thinking
-		}
-		if e.ContentBlock.Signature != "" {
-			cb.Signature = e.ContentBlock.Signature
-		}
+		// Always include thinking and signature in content_block_start (empty if not yet streamed)
+		// Reference format includes these even if empty
+		cb.Thinking = e.ContentBlock.Thinking
+		cb.Signature = e.ContentBlock.Signature
 	case "text":
 		if e.ContentBlock.Text != "" {
 			cb.Text = e.ContentBlock.Text
@@ -272,7 +270,7 @@ func transformContentBlockStart(e anthropic.ContentBlockStartEvent) (json.RawMes
 		}
 	}
 
-	// Use struct with MarshalJSON for proper field ordering and zero-value omission
+	// Reference order: type, index, content_block
 	msg := struct {
 		Type         string              `json:"type"`
 		Index        int                 `json:"index"`
