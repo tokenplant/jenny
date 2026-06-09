@@ -21,6 +21,8 @@ type RunResult struct {
 	// lines and non-JSON lines are skipped. The order matches the order
 	// they appeared in Lines.
 	Parsed []map[string]any
+	// Stdout is the complete raw stdout of the jenny process.
+	Stdout string
 	// Stderr is the captured stderr of the jenny process.
 	Stderr string
 	// ExitCode is the process exit code. 0 on success; non-zero on
@@ -112,6 +114,7 @@ func RunJennyInDir(t testing.TB, dir string, env []string, args ...string) RunRe
 	return RunResult{
 		Lines:    lines,
 		Parsed:   parsed,
+		Stdout:   stdoutBuf.String(),
 		Stderr:   stderrBuf.String(),
 		ExitCode: exitCode,
 		Dir:      cmd.Dir,

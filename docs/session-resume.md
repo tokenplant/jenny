@@ -128,3 +128,5 @@ Drop or repair on load:
 - **AC3:** Cost counters restore only on matching session ID.
 - **AC4:** Queue-only transcripts rejected.
 - **AC5:** Compaction boundaries truncate pre-boundary messages from API payload.
+- **AC-e2e-1:** Running `jenny -r <session_id> -p "<new prompt>"` with a valid prior transcript causes the Anthropic API request to include the prior user and assistant turns before the new user message.
+- **AC-e2e-2:** The resumed run exits 0 and emits an `assistant` event on stdout.
