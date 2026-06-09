@@ -361,29 +361,41 @@ func RunSimple(ctx context.Context, prompt string, tools []tool.Tool) (string, e
 // Field order matches the headless-agent reference format: type, then event|message|payload,
 // then session_id, parent_tool_use_id, uuid, then remaining fields.
 type StreamMessage struct {
-	Type            string                `json:"type"`
-	Subtype         string                `json:"subtype,omitempty"`
-	Content         string                `json:"content,omitempty"`
-	Event           any                   `json:"event,omitempty"`
-	Message         any                   `json:"message,omitempty"`
-	SessionID       string                `json:"session_id,omitempty"`
-	ParentToolUseID *string               `json:"parent_tool_use_id"`
-	Uuid            string                `json:"uuid,omitempty"`
-	Result          string                `json:"result,omitempty"`
-	Model           string                `json:"model,omitempty"`
-	Usage           *Usage                `json:"usage,omitempty"`
-	ToolName        string                `json:"tool_name,omitempty"`
-	ToolInput       any                   `json:"input,omitempty"`
-	ToolUseID       string                `json:"tool_use_id,omitempty"`
-	IsError         bool                  `json:"is_error,omitempty"`
-	IsPartial       bool                  `json:"is_partial,omitempty"`
-	StopReason      string                `json:"stop_reason,omitempty"`
-	DurationMs      int64                 `json:"duration_ms,omitempty"`
-	DurationAPIMs   int64                 `json:"duration_api_ms,omitempty"`
-	TotalCostUSD    float64               `json:"total_cost_usd,omitempty"`
-	TotalCostCNY    float64               `json:"total_cost_cny,omitempty"`
-	ModelUsage      any                   `json:"modelUsage,omitempty"`
-	ErrorMaxTokens  *ErrorMaxTokensDetail `json:"error_max_tokens,omitempty"`
+	Type              string                `json:"type"`
+	Subtype           string                `json:"subtype,omitempty"`
+	Content           string                `json:"content,omitempty"`
+	Event             any                   `json:"event,omitempty"`
+	Message           any                   `json:"message,omitempty"`
+	SessionID         string                `json:"session_id,omitempty"`
+	ParentToolUseID   *string               `json:"parent_tool_use_id"`
+	Uuid              string                `json:"uuid,omitempty"`
+	Result            string                `json:"result,omitempty"`
+	Model             string                `json:"model,omitempty"`
+	Usage             *Usage                `json:"usage,omitempty"`
+	ToolName          string                `json:"tool_name,omitempty"`
+	ToolInput         any                   `json:"input,omitempty"`
+	ToolUseID         string                `json:"tool_use_id,omitempty"`
+	IsError           bool                  `json:"is_error,omitempty"`
+	IsPartial         bool                  `json:"is_partial,omitempty"`
+	StopReason        string                `json:"stop_reason,omitempty"`
+	DurationMs        int64                 `json:"duration_ms,omitempty"`
+	DurationAPIMs     int64                 `json:"duration_api_ms,omitempty"`
+	NumTurns          int                   `json:"num_turns,omitempty"`
+	TotalCostUSD      float64               `json:"total_cost_usd,omitempty"`
+	TotalCostCNY      float64               `json:"total_cost_cny,omitempty"`
+	ModelUsage        any                   `json:"modelUsage,omitempty"`
+	ErrorMaxTokens    *ErrorMaxTokensDetail `json:"error_max_tokens,omitempty"`
+	Timestamp         string                `json:"timestamp,omitempty"`
+	ToolUseResult     any                   `json:"tool_use_result,omitempty"`
+	PermissionDenials []PermissionDenial    `json:"permission_denials,omitempty"`
+	FastModeState     string                `json:"fast_mode_state,omitempty"`
+}
+
+// PermissionDenial represents a tool use denial for permission_denials array.
+type PermissionDenial struct {
+	ToolName  string `json:"tool_name,omitempty"`
+	ToolUseID string `json:"tool_use_id,omitempty"`
+	ToolInput any    `json:"tool_input,omitempty"`
 }
 
 // ErrorMaxTokensDetail holds structured information for error_max_tokens result events.
@@ -406,10 +418,28 @@ func GenerateUUID() string {
 
 // Usage represents token usage information for streaming output.
 type Usage struct {
-	InputTokens              int `json:"input_tokens"`
-	OutputTokens             int `json:"output_tokens"`
-	CacheReadInputTokens     int `json:"cache_read_input_tokens,omitempty"`
-	CacheCreationInputTokens int `json:"cache_creation_input_tokens,omitempty"`
+	InputTokens              int            `json:"input_tokens"`
+	OutputTokens             int            `json:"output_tokens"`
+	CacheReadInputTokens     int            `json:"cache_read_input_tokens,omitempty"`
+	CacheCreationInputTokens int            `json:"cache_creation_input_tokens,omitempty"`
+	ServerToolUse            *ServerToolUse `json:"server_tool_use,omitempty"`
+	ServiceTier              string         `json:"service_tier,omitempty"`
+	CacheCreation            *CacheCreation `json:"cache_creation,omitempty"`
+	InferenceGeo             string         `json:"inference_geo,omitempty"`
+	Iterations               []any          `json:"iterations,omitempty"`
+	Speed                    string         `json:"speed,omitempty"`
+}
+
+// ServerToolUse represents server-side tool use statistics.
+type ServerToolUse struct {
+	WebSearchRequests int `json:"web_search_requests,omitempty"`
+	WebFetchRequests  int `json:"web_fetch_requests,omitempty"`
+}
+
+// CacheCreation represents cache creation token statistics.
+type CacheCreation struct {
+	Ephemeral1hInputTokens int `json:"ephemeral_1h_input_tokens,omitempty"`
+	Ephemeral5mInputTokens int `json:"ephemeral_5m_input_tokens,omitempty"`
 }
 
 // RunStream executes the agent loop with streaming JSON output.

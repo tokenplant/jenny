@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/ipy/jenny/internal/api"
 	"github.com/ipy/jenny/internal/git"
 	"github.com/ipy/jenny/internal/log"
@@ -52,6 +53,12 @@ type QueryEngine struct {
 	// API timing (AC3: duration_api_ms)
 	lastAPIStartTime   time.Time
 	totalAPIDurationMs int64
+
+	// Stream event state (for assistant event construction)
+	currentMessageID    string
+	currentStopReason   string
+	currentStopSequence string
+	currentUsage        api.Usage
 }
 
 // NewQueryEngine creates a new QueryEngine with the given configuration.
@@ -511,13 +518,35 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 		for block := range blocksChan {
 			// Handle raw stream_event passthrough
 			if block.Type == "stream_event" && e.streamCfg.Enabled && e.streamCfg.IncludePartial {
+				// Capture message ID from MessageStartEvent
+				if msgStart, ok := block.RawEvent.(anthropic.MessageStartEvent); ok {
+					e.currentMessageID = string(msgStart.Message.ID)
+					e.currentUsage = api.Usage{
+						InputTokens:              int(msgStart.Message.Usage.InputTokens),
+						CacheReadInputTokens:     int(msgStart.Message.Usage.CacheReadInputTokens),
+						CacheCreationInputTokens: int(msgStart.Message.Usage.CacheCreationInputTokens),
+					}
+				}
+				// Capture stop_reason and usage from MessageDeltaEvent
+				if msgDelta, ok := block.RawEvent.(anthropic.MessageDeltaEvent); ok {
+					e.currentStopReason = string(msgDelta.Delta.StopReason)
+					e.currentStopSequence = msgDelta.Delta.StopSequence
+					if msgDelta.Usage.OutputTokens > 0 {
+						e.currentUsage.OutputTokens = int(msgDelta.Usage.OutputTokens)
+					}
+				}
+				// Transform SDK event to minimal representation (AC1: no bloated zero-value fields)
+				transformedEvent, err := TransformStreamEvent(block.RawEvent)
+				if err != nil {
+					continue
+				}
 				// Emit spec-compliant stream_event wire shape (AC5)
 				msg := StreamMessage{
 					Type:            "stream_event",
 					SessionID:       sessionID,
 					ParentToolUseID: nil,
 					Uuid:            GenerateUUID(),
-					Event:           block.RawEvent,
+					Event:           transformedEvent,
 				}
 				data, err := json.Marshal(msg)
 				if err == nil {
@@ -553,7 +582,8 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 
 		// Emit ONE consolidated assistant message for all collected content from streaming
 		// (AC1-AC4: one assistant event per API turn, not per tool_use block)
-		e.emitConsolidatedAssistant(sessionID, thinkingBlocks, &textOutput, toolUseBlocks)
+		e.emitConsolidatedAssistant(sessionID, thinkingBlocks, &textOutput, toolUseBlocks,
+			e.currentMessageID, e.currentStopReason, e.currentStopSequence, toLoopUsage(e.currentUsage), e.model)
 
 		// Check if streaming completed with error
 		if streamResult.Error != "" && len(streamResult.Blocks) == 0 {
@@ -653,7 +683,8 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 			}
 
 			// AC4: Emit ONE consolidated assistant message for all collected content
-			e.emitConsolidatedAssistant(sessionID, thinkingBlocks, &textOutput, toolUseBlocks)
+			e.emitConsolidatedAssistant(sessionID, thinkingBlocks, &textOutput, toolUseBlocks,
+				e.currentMessageID, e.currentStopReason, e.currentStopSequence, toLoopUsage(e.currentUsage), e.model)
 
 			// AC4: Emit user message wrappers for web search tool results
 			for _, result := range pendingWebSearchResults {
@@ -670,12 +701,21 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 				userContent := []map[string]any{
 					{"type": "tool_result", "tool_use_id": result.WebSearchResult.ToolUseID, "content": toolResultContent},
 				}
+				// Format tool_use_result for user event
+				var toolUseResult any
+				if result.WebSearchResult.IsError {
+					toolUseResult = fmt.Sprintf("web search error: %s", result.WebSearchResult.ErrorCode)
+				} else {
+					toolUseResult = map[string]any{"stdout": toolResultContent, "stderr": "", "interrupted": false, "isImage": false, "noOutputExpected": false}
+				}
 				userMsg := StreamMessage{
 					Type:            "user",
 					SessionID:       sessionID,
 					ParentToolUseID: nil,
 					Uuid:            GenerateUUID(),
 					Message:         map[string]any{"role": "user", "content": userContent},
+					Timestamp:       TimestampNow(),
+					ToolUseResult:   toolUseResult,
 				}
 				data, _ := json.Marshal(userMsg)
 				fmt.Fprintln(os.Stdout, string(data))
@@ -823,12 +863,21 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 				userContent := []map[string]any{
 					{"type": "tool_result", "tool_use_id": emitToolUseID, "content": emitContent, "is_error": emitIsError},
 				}
+				// Format tool_use_result for user event
+				var toolUseResult any
+				if emitIsError {
+					toolUseResult = fmt.Sprintf("Error: %s", emitContent)
+				} else {
+					toolUseResult = map[string]any{"stdout": emitContent, "stderr": "", "interrupted": false, "isImage": false, "noOutputExpected": false}
+				}
 				msg := StreamMessage{
 					Type:            "user",
 					SessionID:       sessionID,
 					ParentToolUseID: nil,
 					Uuid:            GenerateUUID(),
 					Message:         map[string]any{"role": "user", "content": userContent},
+					Timestamp:       TimestampNow(),
+					ToolUseResult:   toolUseResult,
 				}
 				data, _ = json.Marshal(msg)
 				fmt.Fprintln(os.Stdout, string(data))
@@ -896,23 +945,28 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 						OutputTokens:             resp.Usage.OutputTokens,
 						CacheReadInputTokens:     resp.Usage.CacheReadInputTokens,
 						CacheCreationInputTokens: resp.Usage.CacheCreationInputTokens,
+						ServerToolUse:            &ServerToolUse{},
+						ServiceTier:              "standard",
+						CacheCreation:            &CacheCreation{},
+						InferenceGeo:             "",
+						Iterations:               []any{},
+						Speed:                    "standard",
 					}
 					msg := StreamMessage{
-						Type:            "result",
-						Subtype:         "success",
-						Result:          finalResult,
-						SessionID:       sessionID,
-						ParentToolUseID: nil,
-						Uuid:            GenerateUUID(),
-						Model:           resp.Model,
-						Usage:           usage,
-						IsError:         false,
-						StopReason:      string(resp.StopReason),
-						DurationMs:      time.Since(e.startTime).Milliseconds(),
-						DurationAPIMs:   e.totalAPIDurationMs,
-						TotalCostUSD:    e.costState.TotalCostUSD,
-						TotalCostCNY:    e.costState.TotalCostCNY,
-						ModelUsage:      e.buildModelUsage(),
+						Type:          "result",
+						Subtype:       "success",
+						Result:        finalResult,
+						SessionID:     sessionID,
+						Uuid:          GenerateUUID(),
+						Usage:         usage,
+						IsError:       false,
+						StopReason:    string(resp.StopReason),
+						DurationMs:    time.Since(e.startTime).Milliseconds(),
+						DurationAPIMs: e.totalAPIDurationMs,
+						NumTurns:      e.turnCount,
+						TotalCostUSD:  e.costState.TotalCostUSD,
+						ModelUsage:    e.buildModelUsage(),
+						FastModeState: "off",
 					}
 					data, _ := json.Marshal(msg)
 					fmt.Fprintln(os.Stdout, string(data))
@@ -928,23 +982,28 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 					OutputTokens:             resp.Usage.OutputTokens,
 					CacheReadInputTokens:     resp.Usage.CacheReadInputTokens,
 					CacheCreationInputTokens: resp.Usage.CacheCreationInputTokens,
+					ServerToolUse:            &ServerToolUse{},
+					ServiceTier:              "standard",
+					CacheCreation:            &CacheCreation{},
+					InferenceGeo:             "",
+					Iterations:               []any{},
+					Speed:                    "standard",
 				}
 				msg := StreamMessage{
-					Type:            "result",
-					Subtype:         "success",
-					Result:          finalResult,
-					SessionID:       sessionID,
-					ParentToolUseID: nil,
-					Uuid:            GenerateUUID(),
-					Model:           resp.Model,
-					Usage:           usage,
-					IsError:         false,
-					StopReason:      string(resp.StopReason),
-					DurationMs:      time.Since(e.startTime).Milliseconds(),
-					DurationAPIMs:   e.totalAPIDurationMs,
-					TotalCostUSD:    e.costState.TotalCostUSD,
-					TotalCostCNY:    e.costState.TotalCostCNY,
-					ModelUsage:      e.buildModelUsage(),
+					Type:          "result",
+					Subtype:       "success",
+					Result:        finalResult,
+					SessionID:     sessionID,
+					Uuid:          GenerateUUID(),
+					Usage:         usage,
+					IsError:       false,
+					StopReason:    string(resp.StopReason),
+					DurationMs:    time.Since(e.startTime).Milliseconds(),
+					DurationAPIMs: e.totalAPIDurationMs,
+					NumTurns:      e.turnCount,
+					TotalCostUSD:  e.costState.TotalCostUSD,
+					ModelUsage:    e.buildModelUsage(),
+					FastModeState: "off",
 				}
 				data, _ := json.Marshal(msg)
 				fmt.Fprintln(os.Stdout, string(data))
@@ -1119,8 +1178,9 @@ func (e *QueryEngine) buildModelUsage() any {
 			"outputTokens":             usage.OutputTokens,
 			"cacheReadInputTokens":     usage.CacheReadInputTokens,
 			"cacheCreationInputTokens": usage.CacheCreationInputTokens,
-			"costUSD":                  usage.CostUSD,
-			"costCNY":                  usage.CostCNY,
+			"webSearchRequests":        0,      // Not tracked separately
+			"contextWindow":            200000, // Default context window
+			"maxOutputTokens":          32000,  // Default max output
 		}
 	}
 	return result
@@ -1328,6 +1388,16 @@ func seedReadFileCacheFromTranscript(cache *tool.ReadFileCache, sessionManager *
 	return nil
 }
 
+// toLoopUsage converts api.Usage to *Usage (loop.go Usage type).
+func toLoopUsage(src api.Usage) *Usage {
+	return &Usage{
+		InputTokens:              src.InputTokens,
+		OutputTokens:             src.OutputTokens,
+		CacheReadInputTokens:     src.CacheReadInputTokens,
+		CacheCreationInputTokens: src.CacheCreationInputTokens,
+	}
+}
+
 // thinkingBlock holds the text and optional signature of a thinking block
 // collected during streaming or fallback processing. Used as the unit of
 // emission by emitConsolidatedAssistant.
@@ -1347,6 +1417,11 @@ func (e *QueryEngine) emitConsolidatedAssistant(
 	thinkingBlocks []thinkingBlock,
 	textOutput *strings.Builder,
 	toolUseBlocks []api.ToolUseBlock,
+	messageID string,
+	stopReason string,
+	stopSequence string,
+	usage *Usage,
+	model string,
 ) {
 	if !e.streamCfg.Enabled {
 		return
@@ -1382,12 +1457,37 @@ func (e *QueryEngine) emitConsolidatedAssistant(
 		})
 	}
 
+	// Build full message structure per spec: id, type, role, model, content, stop_reason, stop_sequence, usage
+	messageObj := map[string]any{
+		"id":      messageID,
+		"type":    "message",
+		"role":    "assistant",
+		"model":   model,
+		"content": assistantContent,
+	}
+	if stopReason != "" {
+		messageObj["stop_reason"] = stopReason
+	}
+	if stopSequence != "" {
+		messageObj["stop_sequence"] = stopSequence
+	}
+	if usage != nil {
+		usageMap := map[string]any{
+			"input_tokens":                usage.InputTokens,
+			"output_tokens":               usage.OutputTokens,
+			"cache_read_input_tokens":     usage.CacheReadInputTokens,
+			"cache_creation_input_tokens": usage.CacheCreationInputTokens,
+			"service_tier":                "standard",
+		}
+		messageObj["usage"] = usageMap
+	}
+
 	msg := StreamMessage{
 		Type:            "assistant",
-		SessionID:       sessionID,
 		ParentToolUseID: nil,
+		SessionID:       sessionID,
 		Uuid:            GenerateUUID(),
-		Message:         map[string]any{"role": "assistant", "content": assistantContent},
+		Message:         messageObj,
 	}
 	data, _ := json.Marshal(msg)
 	fmt.Fprintln(os.Stdout, string(data))
