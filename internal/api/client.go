@@ -1117,10 +1117,15 @@ func toolToSDK(t ToolParam, isLast bool) anthropic.ToolUnionParam {
 		return anthropic.ToolUnionParam{OfWebSearchTool20250305: tool}
 	}
 
-	// Ensure Properties and Required are non-null for MiniMax compatibility (AC2)
+	// Ensure Properties is non-empty for MiniMax compatibility.
+	// MiniMax rejects tools with empty properties object: "function name or parameters is empty (2013)".
+	// AC2: Add a placeholder property so the schema is not empty.
 	props := t.InputSchema.Properties
 	if props == nil {
 		props = make(map[string]any)
+	}
+	if len(props) == 0 {
+		props["__arg__"] = map[string]any{"type": "string", "description": "Placeholder argument for empty schema"}
 	}
 	required := t.InputSchema.Required
 	if required == nil {

@@ -106,6 +106,30 @@ The `anthropic-beta: prompt-caching-2024-07-31` header is sent on all requests. 
 - **AC4:** Media errors map to specific user-facing strings.
 - **AC5:** Trailing thinking stripped from last assistant block.
 
+## Provider Compatibility
+
+Tool serialization is provider-aware to maintain compatibility with alternate API providers that have different validation requirements.
+
+### MiniMax Compatibility
+
+When `ANTHROPIC_BASE_URL` points to a MiniMax endpoint (e.g., `https://api.minimaxi.com/anthropic`), tool serialization includes a compatibility fix for MiniMax error code 2013: "function name or parameters is empty".
+
+**Rule:** No tool may have an empty `input_schema.properties` object. When a tool's `InputSchema.Properties` would be empty or nil, a placeholder property `__arg__` is added with `type: "string"` to satisfy MiniMax's validation.
+
+```json
+// Before fix (rejected by MiniMax):
+{"name": "empty_tool", "input_schema": {"type": "object", "properties": {}}}
+
+// After fix (accepted by MiniMax):
+{"name": "empty_tool", "input_schema": {"type": "object", "properties": {"__arg__": {"type": "string", "description": "Placeholder argument for empty schema"}}}}
+```
+
+This fix is applied only to tools that would otherwise have empty `properties`. Well-formed tools with non-empty schemas are unchanged.
+
+### Detection
+
+Provider detection is based on the `ANTHROPIC_BASE_URL` environment variable. If the URL contains a known alternate provider host (e.g., `minimaxi.com`), the MiniMax compatibility fix is applied during tool serialization in `toolToSDK()`.
+
 ## Related
 
 - Message normalization: [`message-normalization.md`](./message-normalization.md)

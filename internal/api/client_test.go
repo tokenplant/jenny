@@ -915,7 +915,12 @@ func TestToolToSDK_EmptyProperties(t *testing.T) {
 	if !ok {
 		t.Fatal("properties missing from serialized input_schema")
 	}
-	if len(props) != 0 {
-		t.Errorf("expected empty properties, got %d items", len(props))
+	// AC2: MiniMax compatibility - empty properties get a placeholder
+	if len(props) != 1 {
+		t.Errorf("expected 1 placeholder property for MiniMax compatibility, got %d items", len(props))
+	}
+	// Verify the placeholder property exists and has correct structure
+	if _, hasArg := props["__arg__"]; !hasArg {
+		t.Error("expected __arg__ placeholder property")
 	}
 }
