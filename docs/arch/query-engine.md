@@ -82,6 +82,18 @@ Loaded per turn; merge coordinator userContext when enabled.
 | maxTurns = 1 | Single API iteration max |
 | Structured output invalid schema | Error at tool registration |
 
+## File structure
+
+`internal/agent/` splits the engine across three files to keep each under ~300–1100 lines:
+
+| File | Responsibility |
+|------|---------------|
+| `engine.go` | Constructor, compaction counters, WireReadFileCache, SetMaxTurns |
+| `engine_loop.go` | SubmitMessage, runLoop |
+| `engine_stream.go` | emitConsolidatedAssistant, finalizeAsEndTurn, TurnCount, Model, Drain |
+
+When splitting files, each needs its own import block; expect total line count to grow by up to ±30 lines over the pre-split single file due to per-file import headers.
+
 ## Acceptance Criteria
 
 - **AC1:** User message on disk before API call starts.
