@@ -215,3 +215,7 @@ The very first message emitted. Includes environment context.
 - **AC-result-1:** The `result` event includes a `usage` object with `input_tokens` (integer ≥ 0) and `output_tokens` (integer ≥ 0).
 - **AC-result-2:** The `result` event includes `total_cost_usd` (float ≥ 0.0). The field must be present even when the value is 0.
 - **AC-result-3:** `duration_ms` is a non-negative number present on every `result` event.
+
+## See Also
+
+- [`stream-json.md`](./stream-json.md) — Detailed implementation guide and event type documentation

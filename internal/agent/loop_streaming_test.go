@@ -1382,34 +1382,28 @@ func TestStreamJSON_FieldOrderMatchesReference(t *testing.T) {
 		if line == "" {
 			continue
 		}
-		// Use json.Decoder to get key order
-		decoder := json.NewDecoder(strings.NewReader(line))
+		// Decode into map to verify all required fields exist
 		var obj map[string]any
-		if err := decoder.Decode(&obj); err != nil {
+		if err := json.Unmarshal([]byte(line), &obj); err != nil {
 			t.Logf("Warning: line %d failed to decode: %v", li, err)
 			continue
 		}
-		// Get the ordered keys from the decoder
-		// We verify by checking specific known patterns
-		_, hasType := obj["type"]
-		_, hasSessionID := obj["session_id"]
-		_, hasParentToolUseID := obj["parent_tool_use_id"]
-		_, hasUUID := obj["uuid"]
 
-		if !hasType {
+		// Check required fields exist
+		if _, ok := obj["type"]; !ok {
 			t.Errorf("AC5 FAIL: line %d missing 'type' field", li)
 		}
-		if !hasSessionID {
+		if _, ok := obj["session_id"]; !ok {
 			t.Errorf("AC5 FAIL: line %d missing 'session_id' field", li)
 		}
-		if !hasParentToolUseID {
+		if _, ok := obj["parent_tool_use_id"]; !ok {
 			t.Errorf("AC5 FAIL: line %d missing 'parent_tool_use_id' field", li)
 		}
-		if !hasUUID {
+		if _, ok := obj["uuid"]; !ok {
 			t.Errorf("AC5 FAIL: line %d missing 'uuid' field", li)
 		}
 	}
-	t.Log("AC5 PASS: all required fields present in correct positions")
+	t.Log("AC5 PASS: all required fields present")
 }
 
 // TestStreamJSON_CostOnlyOnResult verifies that total_cost_usd appears on

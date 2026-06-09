@@ -367,7 +367,7 @@ type StreamMessage struct {
 	Event           any                   `json:"event,omitempty"`
 	Message         any                   `json:"message,omitempty"`
 	SessionID       string                `json:"session_id,omitempty"`
-	ParentToolUseID string                `json:"parent_tool_use_id"`
+	ParentToolUseID *string               `json:"parent_tool_use_id"`
 	Uuid            string                `json:"uuid,omitempty"`
 	Result          string                `json:"result,omitempty"`
 	Model           string                `json:"model,omitempty"`
@@ -448,7 +448,7 @@ func RunStream(ctx context.Context, prompt string, tools []tool.Tool, cwd string
 			Type:              "system",
 			Subtype:           "init",
 			SessionID:         sessionID,
-			ParentToolUseID:   "",
+			ParentToolUseID:   nil,
 			Uuid:              GenerateUUID(),
 			Model:             engine.Model(),
 			CWD:               cwd,

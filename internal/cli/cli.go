@@ -202,7 +202,7 @@ type StreamMessage struct {
 	Subtype           string   `json:"subtype,omitempty"`
 	Content           string   `json:"content,omitempty"`
 	SessionID         string   `json:"session_id,omitempty"`
-	ParentToolUseID   string   `json:"parent_tool_use_id"`
+	ParentToolUseID   *string  `json:"parent_tool_use_id"`
 	Uuid              string   `json:"uuid,omitempty"`
 	Result            string   `json:"result,omitempty"`
 	Model             string   `json:"model,omitempty"`
