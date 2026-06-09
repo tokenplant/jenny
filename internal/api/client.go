@@ -24,6 +24,7 @@ const DefaultIdleTimeout = 30 * time.Second
 const DefaultFallbackTimeout = 5 * time.Minute
 
 // Client wraps the Anthropic SDK client.
+// All fields are aligned per gofmt conventions.
 type Client struct {
 	client            anthropic.Client
 	model             string
