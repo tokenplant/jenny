@@ -343,3 +343,84 @@ func TestMergeConsecutiveSameRole(t *testing.T) {
 		t.Errorf("expected merged user content 'Hello\\nWorld', got %q", result[0].Content)
 	}
 }
+
+func TestMergeConsecutiveSameRole_DedupToolResults(t *testing.T) {
+	// AC1: mergeConsecutiveSameRole dedupes tool_results by ToolUseID (last writer wins)
+	messages := []api.Message{
+		{
+			Role:    "user",
+			Content: "First user message",
+			ToolResults: []api.ToolResultBlock{
+				{ToolUseID: "id_1", Content: "Result1"},
+			},
+		},
+		{
+			Role:    "user",
+			Content: "Second user message",
+			ToolResults: []api.ToolResultBlock{
+				{ToolUseID: "id_1", Content: "Result 1 - updated"},
+			},
+		},
+	}
+	result := mergeConsecutiveSameRole(messages)
+
+	if len(result) != 1 {
+		t.Fatalf("expected 1 merged user message, got %d", len(result))
+	}
+
+	if len(result[0].ToolResults) != 1 {
+		t.Errorf("expected 1 tool_result after dedup, got %d", len(result[0].ToolResults))
+	}
+
+	if result[0].ToolResults[0].ToolUseID != "id_1" {
+		t.Errorf("expected tool_use_id 'id_1', got %q", result[0].ToolResults[0].ToolUseID)
+	}
+
+	// Last writer wins - should have "Result 1 - updated"
+	if result[0].ToolResults[0].Content != "Result 1 - updated" {
+		t.Errorf("expected 'Result 1 - updated' (last writer wins), got %q", result[0].ToolResults[0].Content)
+	}
+}
+
+func TestMergeConsecutiveSameRole_PreservesUnique(t *testing.T) {
+	// AC2: mergeConsecutiveSameRole preserves unique tool_results
+	messages := []api.Message{
+		{
+			Role:    "user",
+			Content: "First user message",
+			ToolResults: []api.ToolResultBlock{
+				{ToolUseID: "id_A", Content: "Result A"},
+				{ToolUseID: "id_B", Content: "Result B"},
+			},
+		},
+		{
+			Role:    "user",
+			Content: "Second user message",
+			ToolResults: []api.ToolResultBlock{
+				{ToolUseID: "id_C", Content: "Result C"},
+			},
+		},
+	}
+	result := mergeConsecutiveSameRole(messages)
+
+	if len(result) != 1 {
+		t.Fatalf("expected 1 merged user message, got %d", len(result))
+	}
+
+	if len(result[0].ToolResults) != 3 {
+		t.Errorf("expected 3 unique tool_results, got %d", len(result[0].ToolResults))
+	}
+
+	// Verify all three IDs are present
+	idSet := make(map[string]bool)
+	for _, tr := range result[0].ToolResults {
+		idSet[tr.ToolUseID] = true
+	}
+
+	expectedIDs := []string{"id_A", "id_B", "id_C"}
+	for _, id := range expectedIDs {
+		if !idSet[id] {
+			t.Errorf("expected tool_use_id %q to be preserved", id)
+		}
+	}
+}

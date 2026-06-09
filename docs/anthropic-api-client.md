@@ -142,6 +142,23 @@ For tools with genuinely empty `properties`, a placeholder `__arg__` property is
 
 Both fixes are provider-aware: they apply only when `ANTHROPIC_BASE_URL` contains "minimaxi". For non-MiniMax providers (e.g., the standard Anthropic endpoint), tool serialization is unchanged.
 
+### DeepSeek Compatibility
+
+DeepSeek enforces that each `tool_use` must have a single `tool_result`. When duplicate `tool_result` blocks with the same `tool_use_id` are present (e.g., from merging consecutive user messages), DeepSeek returns a 400 error:
+
+```
+messages.2.content.3: each tool_use must have a single result.
+Found multiple `tool_result` blocks with id: call_01_...
+```
+
+**Fix:** Tool results are deduplicated by `tool_use_id` at two layers:
+
+1. **Primary (normalize.go):** `mergeConsecutiveSameRole` deduplicates `ToolResults` when merging consecutive user messages, keeping the last occurrence (last-writer-wins).
+
+2. **Safety net (client.go):** `deduplicateToolResults()` is called during SDK serialization as a defensive measure, ensuring no duplicate `tool_use_id` values reach the API regardless of how the message was constructed.
+
+This fix is provider-agnostic and benefits all providers - DeepSeek is the primary beneficiary since it strictly enforces the uniqueness requirement.
+
 ### Detection
 
 Provider detection is based on the `ANTHROPIC_BASE_URL` environment variable via `providerFromBaseURL()`. The function inspects the URL for known alternate provider substrings (currently `"minimaxi"`). If the URL contains a known substring, the MiniMax compatibility fix is applied during tool serialization in `toolToSDK()`. Otherwise, the standard Anthropic tool shape is used unchanged.

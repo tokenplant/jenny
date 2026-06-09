@@ -85,6 +85,7 @@ Implement in this order:
    - Assistant messages with `tool_use` must include the full `tool_use` block before tool results
    - Tool results go in user messages as `tool_result` blocks keyed by `tool_use_id`
    - Image validation and SSE streaming default both shipped ✓
+   - [x] DeepSeek tool_result dedup fix — duplicate `tool_result` blocks deduplicated by `tool_use_id` in `mergeConsecutiveSameRole` and SDK serialization safety net ✓
 
 4. - [x] Core agent loop — partial — [`agent-loop.md`](./agent-loop.md)
    - Basic tool_use → execute → tool_result loop

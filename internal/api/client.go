@@ -96,6 +96,25 @@ func (c *Client) SetMaxTokensOverride(maxTokens int) {
 	c.maxTokensOverride = maxTokens
 }
 
+// deduplicateToolResults removes duplicate tool_result blocks by ToolUseID.
+// When duplicates are found, the last occurrence wins (last-writer-wins strategy).
+func deduplicateToolResults(results []ToolResultBlock) []ToolResultBlock {
+	seen := make(map[string]int) // map ToolUseID -> index in result
+	var unique []ToolResultBlock
+
+	for _, tr := range results {
+		if idx, exists := seen[tr.ToolUseID]; exists {
+			// Replace the existing entry with the newer one
+			unique[idx] = tr
+		} else {
+			seen[tr.ToolUseID] = len(unique)
+			unique = append(unique, tr)
+		}
+	}
+
+	return unique
+}
+
 // Message represents a message in the conversation.
 // Internal fields (IsVirtual, ID, Timestamp, Type) are used for transcript
 // management but are stripped during API serialization.
@@ -442,8 +461,9 @@ func (c *Client) doSendMessage(ctx context.Context, messages []Message, tools []
 			})
 		}
 
-		// Add tool_result blocks if present
-		for _, tr := range msg.ToolResults {
+		// Add tool_result blocks if present (deduplicated as safety net for DeepSeek)
+		dedupedResults := deduplicateToolResults(msg.ToolResults)
+		for _, tr := range dedupedResults {
 			contentBlocks = append(contentBlocks, anthropic.ContentBlockParamUnion{
 				OfToolResult: &anthropic.ToolResultBlockParam{
 					ToolUseID: tr.ToolUseID,
@@ -806,7 +826,9 @@ func (c *Client) SendMessageStream(
 				})
 			}
 
-			for _, tr := range msg.ToolResults {
+			// Add tool_result blocks if present (deduplicated as safety net for DeepSeek)
+			dedupedResults := deduplicateToolResults(msg.ToolResults)
+			for _, tr := range dedupedResults {
 				contentBlocks = append(contentBlocks, anthropic.ContentBlockParamUnion{
 					OfToolResult: &anthropic.ToolResultBlockParam{
 						ToolUseID: tr.ToolUseID,

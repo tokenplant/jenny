@@ -973,3 +973,160 @@ func TestProviderFromBaseURL(t *testing.T) {
 		}
 	}
 }
+
+func TestClient_ToolResultDedup(t *testing.T) {
+	// AC3: API serialization deduplicates tool_results as safety net
+	var capturedBody []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedBody, _ = io.ReadAll(r.Body)
+		r.Body.Close()
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		resp := `{"id":"msg_1","type":"message","role":"assistant","content":[{"type":"text","text":"Hello"}],"model":"m","stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":10,"output_tokens":5}}`
+		w.Write([]byte(resp))
+	}))
+	defer server.Close()
+
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key-0000000000000000")
+
+	client, _ := NewClientWithModel("m")
+	client.SetMaxTokensOverride(8192)
+
+	messages := []Message{
+		{
+			Role:    "user",
+			Content: "Test",
+			ToolResults: []ToolResultBlock{
+				{ToolUseID: "id_1", Content: "First result for id_1"},
+				{ToolUseID: "id_1", Content: "Second result for id_1 (duplicate)"},
+			},
+		},
+	}
+
+	_, err := client.SendMessage(context.Background(), messages, nil, nil, "")
+	if err != nil {
+		t.Fatalf("SendMessage error = %v", err)
+	}
+
+	var parsed map[string]any
+	if err := json.Unmarshal(capturedBody, &parsed); err != nil {
+		t.Fatalf("failed to unmarshal request body: %v", err)
+	}
+
+	msgs, ok := parsed["messages"].([]any)
+	if !ok || len(msgs) == 0 {
+		t.Fatal("request body missing or empty messages array")
+	}
+
+	userMsg, ok := msgs[0].(map[string]any)
+	if !ok {
+		t.Fatal("first message is not a map")
+	}
+
+	content, ok := userMsg["content"].([]any)
+	if !ok {
+		t.Fatal("message missing content array")
+	}
+
+	// Count tool_result blocks with tool_use_id = "id_1"
+	toolResultCount := 0
+	var lastContent string
+	for _, block := range content {
+		blockMap, ok := block.(map[string]any)
+		if !ok {
+			continue
+		}
+		if blockMap["type"] == "tool_result" {
+			if tid, ok := blockMap["tool_use_id"].(string); ok && tid == "id_1" {
+				toolResultCount++
+				// Check content - should be the last writer's content
+				contentArr, ok := blockMap["content"].([]any)
+				if ok && len(contentArr) > 0 {
+					if textBlock, ok := contentArr[0].(map[string]any); ok {
+						if text, ok := textBlock["text"].(string); ok {
+							lastContent = text
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if toolResultCount != 1 {
+		t.Errorf("expected exactly 1 tool_result with id_1, got %d", toolResultCount)
+	}
+
+	// Last writer wins
+	if lastContent != "Second result for id_1 (duplicate)" {
+		t.Errorf("expected last content 'Second result for id_1 (duplicate)', got %q", lastContent)
+	}
+}
+
+func TestDeduplicateToolResults(t *testing.T) {
+	// Test the deduplicateToolResults helper directly
+	tests := []struct {
+		name     string
+		input    []ToolResultBlock
+		expected []ToolResultBlock
+	}{
+		{
+			name:     "empty input",
+			input:    []ToolResultBlock{},
+			expected: []ToolResultBlock{},
+		},
+		{
+			name: "no duplicates",
+			input: []ToolResultBlock{
+				{ToolUseID: "id_A", Content: "Result A"},
+				{ToolUseID: "id_B", Content: "Result B"},
+			},
+			expected: []ToolResultBlock{
+				{ToolUseID: "id_A", Content: "Result A"},
+				{ToolUseID: "id_B", Content: "Result B"},
+			},
+		},
+		{
+			name: "duplicate IDs - last writer wins",
+			input: []ToolResultBlock{
+				{ToolUseID: "id_1", Content: "First"},
+				{ToolUseID: "id_2", Content: "Second"},
+				{ToolUseID: "id_1", Content: "Third (last)"},
+			},
+			// Order is maintained by first-seen, but content is replaced by last writer
+			expected: []ToolResultBlock{
+				{ToolUseID: "id_1", Content: "Third (last)"}, // id_1 replaced by last writer
+				{ToolUseID: "id_2", Content: "Second"},      // id_2 unchanged
+			},
+		},
+		{
+			name: "all duplicates - last of each wins",
+			input: []ToolResultBlock{
+				{ToolUseID: "id_1", Content: "First"},
+				{ToolUseID: "id_1", Content: "Second"},
+				{ToolUseID: "id_1", Content: "Third"},
+			},
+			expected: []ToolResultBlock{
+				{ToolUseID: "id_1", Content: "Third"},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := deduplicateToolResults(tc.input)
+			if len(result) != len(tc.expected) {
+				t.Errorf("expected %d results, got %d", len(tc.expected), len(result))
+				return
+			}
+			for i, tr := range result {
+				if tr.ToolUseID != tc.expected[i].ToolUseID {
+					t.Errorf("result[%d].ToolUseID = %q, want %q", i, tr.ToolUseID, tc.expected[i].ToolUseID)
+				}
+				if tr.Content != tc.expected[i].Content {
+					t.Errorf("result[%d].Content = %q, want %q", i, tr.Content, tc.expected[i].Content)
+				}
+			}
+		})
+	}
+}

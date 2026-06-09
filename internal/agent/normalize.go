@@ -353,9 +353,22 @@ func mergeConsecutiveSameRole(messages []api.Message) []api.Message {
 			if msg.Role == "assistant" {
 				current.ToolUse = append(current.ToolUse, msg.ToolUse...)
 			}
-			// Merge tool_results for user
+			// Merge tool_results for user (dedup by ToolUseID - last-writer-wins)
 			if msg.Role == "user" {
-				current.ToolResults = append(current.ToolResults, msg.ToolResults...)
+				// Map ToolUseID -> index in current.ToolResults for last-writer-wins
+				seenIDToIdx := make(map[string]int)
+				for i, tr := range current.ToolResults {
+					seenIDToIdx[tr.ToolUseID] = i
+				}
+				for _, tr := range msg.ToolResults {
+					if idx, exists := seenIDToIdx[tr.ToolUseID]; exists {
+						// Replace existing entry (last writer wins)
+						current.ToolResults[idx] = tr
+					} else {
+						current.ToolResults = append(current.ToolResults, tr)
+						seenIDToIdx[tr.ToolUseID] = len(current.ToolResults) - 1
+					}
+				}
 			}
 		} else {
 			result = append(result, *current)
