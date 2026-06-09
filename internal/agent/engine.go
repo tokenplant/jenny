@@ -1444,45 +1444,47 @@ func (e *QueryEngine) emitConsolidatedAssistant(
 		return
 	}
 
-	assistantContent := make([]map[string]any, 0, len(thinkingBlocks)+1+len(toolUseBlocks))
-	// Spec order: thinking → text → tool_use.
+	// Build content array with ordered fields per reference format
+	// Reference order: thinking → text → tool_use
+	// Each block needs ordered fields (type first) - use string construction to avoid map key ordering
+	var contentFields []string
 	for _, tb := range thinkingBlocks {
-		block := map[string]any{
-			"type":     "thinking",
-			"thinking": tb.Text,
+		// Reference order: type, thinking, signature
+		blockFields := []string{
+			`"type":"thinking"`,
+			`"thinking":` + encodeString(tb.Text),
 		}
 		if tb.Signature != "" {
-			block["signature"] = tb.Signature
+			blockFields = append(blockFields, `"signature":`+encodeString(tb.Signature))
 		}
-		assistantContent = append(assistantContent, block)
+		contentFields = append(contentFields, "{"+strings.Join(blockFields, ",")+"}")
 	}
 	if textOutput.Len() > 0 {
-		assistantContent = append(assistantContent, map[string]any{
-			"type": "text",
-			"text": textOutput.String(),
-		})
+		// Reference order: type, text
+		contentFields = append(contentFields, `{"type":"text","text":`+encodeString(textOutput.String())+`}`)
 	}
 	for _, tb := range toolUseBlocks {
-		assistantContent = append(assistantContent, map[string]any{
-			"type":  "tool_use",
-			"id":    tb.ID,
-			"name":  tb.Name,
-			"input": tb.Input,
-		})
+		// Reference order: type, id, name, input
+		inputBytes, _ := json.Marshal(tb.Input)
+		blockFields := []string{
+			`"type":"tool_use"`,
+			`"id":` + encodeString(tb.ID),
+			`"name":` + encodeString(tb.Name),
+			`"input":` + string(inputBytes),
+		}
+		contentFields = append(contentFields, "{"+strings.Join(blockFields, ",")+"}")
 	}
+	contentJSON := "[" + strings.Join(contentFields, ",") + "]"
 
 	// Build full message structure per spec: id, type, role, model, content, stop_reason, stop_sequence, usage
 	// Using ordered field construction to match reference format
-	messageFields := []any{
+	messageFields := []string{
 		`"id":` + encodeString(messageID),
 		`"type":"message"`,
 		`"role":"assistant"`,
 		`"model":` + encodeString(model),
+		`"content":` + contentJSON,
 	}
-
-	// Marshal content
-	contentBytes, _ := json.Marshal(assistantContent)
-	messageFields = append(messageFields, `"content":`+string(contentBytes))
 
 	// Always include stop_reason and stop_sequence (possibly null)
 	if stopReason != "" {
@@ -1503,7 +1505,7 @@ func (e *QueryEngine) emitConsolidatedAssistant(
 		messageFields = append(messageFields, `"usage":`+usageJSON)
 	}
 
-	messageJSON := "{" + joinMessageFields(messageFields) + "}"
+	messageJSON := "{" + strings.Join(messageFields, ",") + "}"
 	messageObj := json.RawMessage(messageJSON)
 
 	// Reference order for assistant: type, message, parent_tool_use_id, session_id, uuid
