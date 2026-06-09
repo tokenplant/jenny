@@ -24,8 +24,9 @@ Every line in a transcript JSONL file carries two mandatory envelope fields:
 |-------|------|-------------|
 | `session_id` | string | Session ID; equal to the JSONL filename stem (filename without `.jsonl`) |
 | `uuid` | string | Lowercase UUID v4 matching `^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$` |
+| `cwd` | string | Absolute path of the working directory at session start |
 
-Both fields must be non-empty on every line. The `session_id` value is consistent across all lines within one session run.
+All three fields must be non-empty on every line. The `session_id` and `cwd` values are consistent across all lines within one session run.
 
 ## Transcript Location
 
@@ -105,6 +106,7 @@ When persistence is disabled (e.g. `--no-session-persistence`):
 - **AC4:** With persistence disabled, no files written under `.jenny/transcripts/`.
 - **AC5:** Append-only writes survive normal crash (at most one partial line lost).
 - **AC6:** The `session_id` emitted in the stream-json `system` event and `result` event equals the stem of the `.jsonl` transcript file created in the same run.
+- **AC7:** Every transcript line has a non-empty `cwd` field equal to the absolute path of the directory from which jenny was invoked.
 
 ## Related
 

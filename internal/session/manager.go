@@ -23,6 +23,7 @@ type TranscriptEntry struct {
 	Timestamp time.Time `json:"timestamp"`
 	SessionID string    `json:"session_id"`
 	UUID      string    `json:"uuid"`
+	CWD       string    `json:"cwd"`
 	Content   string    `json:"content,omitempty"`
 	ToolUse   []ToolUse `json:"tool_use,omitempty"`
 	ToolID    string    `json:"tool_id,omitempty"`

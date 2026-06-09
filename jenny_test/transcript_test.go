@@ -325,6 +325,69 @@ func TestStreamJsonSessionIdMatchesTranscriptStem(t *testing.T) {
 	}
 }
 
+// TestTranscriptEntriesHaveCWD verifies AC7: every transcript line carries a
+// non-empty cwd field equal to the absolute path from which jenny was invoked.
+func TestTranscriptEntriesHaveCWD(t *testing.T) {
+	mock := harness.NewMockServer(cassettesDir)
+	t.Cleanup(mock.Close)
+	transcriptDir := t.TempDir()
+	runDir := t.TempDir()
+
+	env := []string{
+		"ANTHROPIC_BASE_URL=" + mock.URL() + "/cassette/" + echoHelloCassette,
+		"ANTHROPIC_AUTH_TOKEN=test-token",
+		"ANTHROPIC_MODEL=",
+		"JENNY_TRANSCRIPT_DIR=" + transcriptDir,
+	}
+	res := harness.RunJennyInDir(t, runDir, env,
+		"--output-format", "stream-json", "-p", "hi")
+	if res.ExitCode != 0 {
+		t.Fatalf("jenny exited %d; stderr=%q", res.ExitCode, res.Stderr)
+	}
+
+	files := findJSONLFiles(t, transcriptDir)
+	if len(files) == 0 {
+		t.Fatal("no transcript file found")
+	}
+	data, err := os.ReadFile(files[0])
+	if err != nil {
+		t.Fatalf("reading transcript: %v", err)
+	}
+
+	// Resolve symlinks once for macOS /var -> /private/var aliasing.
+	resolvedRunDir, _ := filepath.EvalSymlinks(runDir)
+
+	seen := map[string]bool{}
+	for i, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		if line == "" {
+			continue
+		}
+		var entry map[string]any
+		if json.Unmarshal([]byte(line), &entry) != nil {
+			continue
+		}
+		cwd, _ := entry["cwd"].(string)
+		// AC1: non-empty
+		if cwd == "" {
+			t.Errorf("AC1: line %d missing cwd", i)
+			continue
+		}
+		// AC2: absolute path
+		if !filepath.IsAbs(cwd) {
+			t.Errorf("AC2: line %d cwd %q is not absolute", i, cwd)
+		}
+		// AC4: matches runDir (account for symlink aliasing)
+		if cwd != runDir && cwd != resolvedRunDir {
+			t.Errorf("AC4: line %d cwd=%q, want %q", i, cwd, runDir)
+		}
+		seen[cwd] = true
+	}
+	// AC3: exactly one distinct cwd
+	if len(seen) > 1 {
+		t.Errorf("AC3: expected 1 distinct cwd, got %d: %v", len(seen), seen)
+	}
+}
+
 // TestTranscriptHasUserAndAssistantEntries verifies AC4 and AC5.
 func TestTranscriptHasUserAndAssistantEntries(t *testing.T) {
 	mock := harness.NewMockServer(cassettesDir)

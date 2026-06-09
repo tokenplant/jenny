@@ -32,6 +32,7 @@ type QueryEngine struct {
 	startTime      time.Time
 	turnCount      int
 	maxTurns       int
+	cwd            string
 	mu             sync.Mutex
 
 	// Compaction state
@@ -210,6 +211,15 @@ func (e *QueryEngine) SubmitMessage(ctx context.Context, prompt string) (string,
 	historyMessages := e.streamCfg.HistoryMessages
 	e.mu.Unlock()
 
+	// Get working directory
+	cwd, err := os.Getwd()
+	if err != nil {
+		cwd = "/"
+	}
+	e.mu.Lock()
+	e.cwd = cwd
+	e.mu.Unlock()
+
 	// AC1: Persist user message to transcript BEFORE any API call
 	if sessionManager != nil {
 		// For resume sessions, check for duplicate user message
@@ -225,16 +235,11 @@ func (e *QueryEngine) SubmitMessage(ctx context.Context, prompt string) (string,
 			if err := sessionManager.AppendEntry(sessionID, session.TranscriptEntry{
 				Type:    "user",
 				Content: prompt,
+				CWD:     cwd,
 			}); err != nil {
 				return "", fmt.Errorf("persisting user message to transcript: %w", err)
 			}
 		}
-	}
-
-	// Get working directory
-	cwd, err := os.Getwd()
-	if err != nil {
-		cwd = "/"
 	}
 
 	// AC1: Create memdir and inject memory content into system prompt
@@ -638,6 +643,7 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 			entry := session.TranscriptEntry{
 				Type:    "assistant",
 				Content: textOutput.String(),
+				CWD:     cwd,
 			}
 			for _, tu := range toolUseBlocks {
 				entry.ToolUse = append(entry.ToolUse, session.ToolUse{
@@ -731,6 +737,7 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 					ToolID:  emitToolUseID,
 					Content: emitContent,
 					IsError: emitIsError,
+					CWD:     cwd,
 				}); err != nil {
 					return "", fmt.Errorf("persisting tool result to transcript: %w", err)
 				}
@@ -1037,6 +1044,7 @@ func (e *QueryEngine) persistCompactFailCount() {
 		_ = e.sessionManager.AppendEntry(e.streamCfg.SessionID, session.TranscriptEntry{
 			Type:             "state",
 			CompactFailCount: e.compactFailCount,
+			CWD:              e.cwd,
 		})
 	}
 }
