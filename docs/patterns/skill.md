@@ -65,7 +65,7 @@ Skills use relative paths (e.g., `scripts/deploy.sh`).
 - **Environment:** When running `scripts/`, the `SKILL_ROOT` environment variable should be set to the skill's root path.
 
 ### 4. Tracking Active Skills
-To prevent losing skill context during [Context Compaction](context-compaction.md):
+To prevent losing skill context during [Context Compaction](../arch/context-compaction.md):
 - The system prompt should include an "Active Skills" section listing the names and root paths of all skills activated in the current session.
 - **Compaction:** When turns are summarized, the summary should preserve the fact that specific skills were activated.
 
