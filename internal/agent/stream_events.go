@@ -80,10 +80,11 @@ type MinimalDelta struct {
 }
 
 func (m MinimalDelta) MarshalJSON() ([]byte, error) {
-	fields := []any{`"type":` + encodeString(m.Type)}
+	var fields []any
 
 	switch m.Type {
 	case "thinking_delta":
+		fields = []any{`"type":"thinking_delta"`}
 		if m.Thinking != "" {
 			fields = append(fields, `"thinking":`+encodeString(m.Thinking))
 		}
@@ -91,25 +92,31 @@ func (m MinimalDelta) MarshalJSON() ([]byte, error) {
 			fields = append(fields, `"signature":`+encodeString(m.Signature))
 		}
 	case "text_delta":
+		fields = []any{`"type":"text_delta"`}
 		if m.Text != "" {
 			fields = append(fields, `"text":`+encodeString(m.Text))
 		}
 	case "input_json_delta":
+		fields = []any{`"type":"input_json_delta"`}
 		if m.PartialJSON != "" {
 			fields = append(fields, `"partial_json":`+encodeString(m.PartialJSON))
 		}
 	case "signature_delta":
+		fields = []any{`"type":"signature_delta"`}
 		if m.Signature != "" {
 			fields = append(fields, `"signature":`+encodeString(m.Signature))
 		}
 	case "message_delta":
 		// Reference format: delta has stop_reason/stop_sequence directly, no nested type
+		fields = []any{}
 		if m.StopReason != "" {
 			fields = append(fields, `"stop_reason":`+encodeString(m.StopReason))
 		}
 		if m.StopSeq != "" {
 			fields = append(fields, `"stop_sequence":`+encodeString(m.StopSeq))
 		}
+	default:
+		fields = []any{`"type":` + encodeString(m.Type)}
 	}
 
 	return []byte("{" + joinFields(fields) + "}"), nil
