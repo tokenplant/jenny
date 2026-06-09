@@ -150,15 +150,23 @@ func (m MinimalMessage) MarshalJSON() ([]byte, error) {
 		fields = append(fields, `"usage":`+string(usageBytes))
 	}
 
+	if m.StopReason != "" {
+		fields = append(fields, `"stop_reason":`+encodeString(m.StopReason))
+	}
+	if m.StopSeq != "" {
+		fields = append(fields, `"stop_sequence":`+encodeString(m.StopSeq))
+	}
+
 	return []byte("{" + joinFields(fields) + "}"), nil
 }
 
 // StreamUsage represents a minimal usage object for stream events.
 type StreamUsage struct {
-	InputTokens              int `json:"input_tokens,omitempty"`
-	OutputTokens             int `json:"output_tokens,omitempty"`
-	CacheReadInputTokens     int `json:"cache_read_input_tokens,omitempty"`
-	CacheCreationInputTokens int `json:"cache_creation_input_tokens,omitempty"`
+	InputTokens              int    `json:"input_tokens,omitempty"`
+	OutputTokens             int    `json:"output_tokens,omitempty"`
+	CacheReadInputTokens     int    `json:"cache_read_input_tokens,omitempty"`
+	CacheCreationInputTokens int    `json:"cache_creation_input_tokens,omitempty"`
+	ServiceTier              string `json:"service_tier,omitempty"`
 }
 
 func encodeString(s string) string {
@@ -214,6 +222,7 @@ func transformMessageStart(e anthropic.MessageStartEvent) (json.RawMessage, erro
 	if e.Message.Usage.OutputTokens > 0 {
 		usage.OutputTokens = int(e.Message.Usage.OutputTokens)
 	}
+	usage.ServiceTier = "standard"
 
 	msg := struct {
 		Type    string         `json:"type"`
@@ -221,15 +230,21 @@ func transformMessageStart(e anthropic.MessageStartEvent) (json.RawMessage, erro
 	}{
 		Type: "message_start",
 		Message: MinimalMessage{
-			ID:      string(e.Message.ID),
-			Type:    "message",
-			Role:    "assistant",
-			Model:   string(e.Message.Model),
-			Content: []any{},
-			Usage:   usage,
+			ID:         string(e.Message.ID),
+			Type:       "message",
+			Role:       "assistant",
+			Model:      string(e.Message.Model),
+			Content:    []any{},
+			Usage:      usage,
+			StopReason: string(e.Message.StopReason),
+			StopSeq:    e.Message.StopSequence,
 		},
 	}
 	return json.Marshal(msg)
+}
+
+func stringOrEmpty(s string) string {
+	return s
 }
 
 func transformContentBlockStart(e anthropic.ContentBlockStartEvent) (json.RawMessage, error) {
@@ -351,6 +366,7 @@ func transformMessageDelta(e anthropic.MessageDeltaEvent) (json.RawMessage, erro
 			OutputTokens:             int(e.Usage.OutputTokens),
 			CacheReadInputTokens:     int(e.Usage.CacheReadInputTokens),
 			CacheCreationInputTokens: int(e.Usage.CacheCreationInputTokens),
+			ServiceTier:              "standard",
 		}
 	}
 
