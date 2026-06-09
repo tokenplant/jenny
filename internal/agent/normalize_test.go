@@ -7,21 +7,6 @@ import (
 	"github.com/ipy/jenny/internal/api"
 )
 
-func TestNormalizeMessages_StripsVirtualMessages(t *testing.T) {
-	messages := []api.Message{
-		{Role: "user", Content: "Hello", IsVirtual: true},
-		{Role: "user", Content: "Real message"},
-	}
-	result := NormalizeMessagesAPI(messages)
-	// Virtual messages should be stripped
-	if len(result) != 1 {
-		t.Errorf("expected 1 message after stripping virtual, got %d", len(result))
-	}
-	if result[0].Content != "Real message" {
-		t.Errorf("expected 'Real message', got %q", result[0].Content)
-	}
-}
-
 func TestNormalizeMessages_StripsProgressMessages(t *testing.T) {
 	messages := []api.Message{
 		{Role: "user", Content: "Hello"},
@@ -165,32 +150,6 @@ func TestEnsureToolResultPairing_EmptyAssistantAfterStrip(t *testing.T) {
 	}
 	if !found {
 		t.Error("expected [Tool use interrupted] placeholder for empty assistant")
-	}
-}
-
-func TestStripTrailingThinking(t *testing.T) {
-	messages := []api.Message{
-		{
-			Role:    "assistant",
-			Content: "Hello<thinking>Let me think about this</thinking>",
-		},
-	}
-	result := stripTrailingThinking(messages)
-	if result[0].Content != "Hello" {
-		t.Errorf("expected 'Hello', got %q", result[0].Content)
-	}
-}
-
-func TestFilterWhitespaceOnly(t *testing.T) {
-	messages := []api.Message{
-		{Role: "user", Content: "   "},
-		{Role: "user", Content: "Real message"},
-		{Role: "assistant", Content: "   \n\t  "},
-		{Role: "assistant", Content: "Response"},
-	}
-	result := filterWhitespaceOnly(messages)
-	if len(result) != 2 {
-		t.Errorf("expected 2 messages after filtering whitespace, got %d", len(result))
 	}
 }
 

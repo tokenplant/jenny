@@ -22,39 +22,6 @@ func sseLine(event, data string) string {
 	return fmt.Sprintf("event: %s\ndata: %s\n\n", event, data)
 }
 
-func makeMockStreamServer(t *testing.T) *httptest.Server {
-	t.Helper()
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Consume and discard request body
-		io.ReadAll(r.Body)
-		r.Body.Close()
-
-		w.Header().Set("Content-Type", "text/event-stream")
-		w.Header().Set("Cache-Control", "no-cache")
-		w.WriteHeader(http.StatusOK)
-
-		flusher, ok := w.(http.Flusher)
-		if !ok {
-			return
-		}
-		flusher.Flush()
-
-		// Send a complete streaming response (text block, end_turn)
-		events := []string{
-			sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test-model","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
-			sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
-			sseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello from stream"}}`),
-			sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
-			sseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":2}}`),
-			sseLine("message_stop", `{"type":"message_stop"}`),
-		}
-		for _, e := range events {
-			io.WriteString(w, e)
-			flusher.Flush()
-		}
-	}))
-}
-
 // TestAC4_StreamRequestStartEmitted verifies that RunStream emits
 // stream_request_start before each API iteration when streaming is enabled.
 func TestAC4_StreamRequestStartEmitted(t *testing.T) {
@@ -189,41 +156,6 @@ func TestAC4_NoStreamRequestStartWhenDisabled(t *testing.T) {
 	} else {
 		t.Log("AC4 PASS: no stream_request_start when disabled")
 	}
-}
-
-// makeMockStreamServerWithPartialEvents creates an httptest server that sends
-// a canned SSE event sequence including partial message events.
-func makeMockStreamServerWithPartialEvents(t *testing.T) *httptest.Server {
-	t.Helper()
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		io.ReadAll(r.Body)
-		r.Body.Close()
-
-		w.Header().Set("Content-Type", "text/event-stream")
-		w.Header().Set("Cache-Control", "no-cache")
-		w.WriteHeader(http.StatusOK)
-
-		flusher, ok := w.(http.Flusher)
-		if !ok {
-			return
-		}
-		flusher.Flush()
-
-		// Send a streaming sequence with message_start, content_block_delta, message_stop
-		events := []string{
-			sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test-model","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
-			sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
-			sseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}`),
-			sseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":" world"}}`),
-			sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
-			sseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":2}}`),
-			sseLine("message_stop", `{"type":"message_stop"}`),
-		}
-		for _, e := range events {
-			io.WriteString(w, e)
-			flusher.Flush()
-		}
-	}))
 }
 
 // TestStreamEvent_EmittedWhenFlagOn verifies that stream_event wire shape is
@@ -619,49 +551,6 @@ func TestStreamingFallbackParityPreserved(t *testing.T) {
 	} else {
 		t.Log("AC5 PASS: fallback path emits one assistant")
 	}
-}
-
-// captureStdout redirects os.Stdout to a pipe for the duration of fn, then
-// returns everything written. Uses a named return so the deferred close/
-// drain can populate the result after all data has been read from the pipe
-// (avoids a race where return evaluates before the reader finishes).
-func captureStdout(t *testing.T, fn func()) (result string) {
-	t.Helper()
-	oldStdout := os.Stdout
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("os.Pipe() error: %v", err)
-	}
-	os.Stdout = w
-
-	defer func() {
-		w.Close()
-		os.Stdout = oldStdout
-		var buf bytes.Buffer
-		io.Copy(&buf, r)
-		result = buf.String()
-	}()
-
-	fn()
-	return ""
-}
-
-// parseAssistantEvents returns all parsed StreamMessage envelopes of type
-// "assistant" found in the NDJSON output, preserving original order.
-func parseAssistantEvents(t *testing.T, ndjson string) []map[string]any {
-	t.Helper()
-	var out []map[string]any
-	for line := range strings.SplitSeq(ndjson, "\n") {
-		if !strings.Contains(line, `"type":"assistant"`) {
-			continue
-		}
-		var msg map[string]any
-		if err := json.Unmarshal([]byte(line), &msg); err != nil {
-			t.Fatalf("unmarshal assistant line: %v\nline: %s", err, line)
-		}
-		out = append(out, msg)
-	}
-	return out
 }
 
 // multiTurnTextPlusToolUsesServer returns a mock server that streams a turn
@@ -1171,25 +1060,6 @@ func captureStreamOutput(t *testing.T, cfg StreamConfig) (string, error) {
 		t.Fatalf("reading stdout: %v", ioErr)
 	}
 	return outputBuf.String(), err
-}
-
-// parseNDJSONLines parses output into a slice of map[string]any for each line.
-func parseNDJSONLines(t *testing.T, output string) []map[string]any {
-	var result []map[string]any
-	lines := strings.SplitSeq(output, "\n")
-	for line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		var m map[string]any
-		if err := json.Unmarshal([]byte(line), &m); err != nil {
-			t.Logf("Warning: failed to parse JSON line: %q, error: %v", line, err)
-			continue
-		}
-		result = append(result, m)
-	}
-	return result
 }
 
 // TestStreamJSON_HasParentToolUseID verifies that every emitted JSON line

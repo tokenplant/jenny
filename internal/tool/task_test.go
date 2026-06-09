@@ -1,4 +1,4 @@
-// Package tool — iteration 50 black-box tests for Background Tasks.
+// Package tool provides tests for background task management.
 package tool
 
 import (

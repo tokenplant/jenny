@@ -5,7 +5,6 @@
 package agent
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -54,32 +53,6 @@ func findAssistantContentBlock(t *testing.T, stdoutOutput string) []map[string]a
 		return content
 	}
 	return nil
-}
-
-// captureStdoutForEngine runs fn while redirecting os.Stdout, returning the
-// captured NDJSON stream. Used to inspect the assistant envelopes that the
-// engine emits.
-func captureStdoutForEngine(t *testing.T, fn func()) string {
-	t.Helper()
-	oldStdout := os.Stdout
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("os.Pipe error: %v", err)
-	}
-	os.Stdout = w
-
-	done := make(chan struct{})
-	var buf bytes.Buffer
-	go func() {
-		_, _ = io.Copy(&buf, r)
-		close(done)
-	}()
-
-	fn()
-	_ = w.Close()
-	os.Stdout = oldStdout
-	<-done
-	return buf.String()
 }
 
 // thinkingTextToolEvents returns SSE events for a response containing one
@@ -164,7 +137,7 @@ func TestAC1_ThinkingBlockEmittedSeparately(t *testing.T) {
 		SessionID:      "sess_ac1_thinking",
 	}
 
-	stdout := captureStdoutForEngine(t, func() {
+	stdout := captureStdout(t, func() {
 		engine := NewQueryEngine(cfg, nil, "")
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -233,7 +206,7 @@ func TestAC2_ThinkingSignatureIncluded(t *testing.T) {
 		SessionID:      "sess_ac2_sig",
 	}
 
-	stdout := captureStdoutForEngine(t, func() {
+	stdout := captureStdout(t, func() {
 		engine := NewQueryEngine(cfg, nil, "")
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -280,7 +253,7 @@ func TestAC2_ThinkingSignatureOmittedWhenEmpty(t *testing.T) {
 		SessionID:      "sess_ac2_sig_empty",
 	}
 
-	stdout := captureStdoutForEngine(t, func() {
+	stdout := captureStdout(t, func() {
 		engine := NewQueryEngine(cfg, nil, "")
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -324,7 +297,7 @@ func TestAC3_ContentOrdering_ThinkingTextToolUse(t *testing.T) {
 		SessionID:      "sess_ac3_order",
 	}
 
-	stdout := captureStdoutForEngine(t, func() {
+	stdout := captureStdout(t, func() {
 		engine := NewQueryEngine(cfg, nil, "")
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -383,7 +356,7 @@ func TestAC4_TextOnlyUnaffected(t *testing.T) {
 		SessionID:      "sess_ac4_text",
 	}
 
-	stdout := captureStdoutForEngine(t, func() {
+	stdout := captureStdout(t, func() {
 		engine := NewQueryEngine(cfg, nil, "")
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -438,7 +411,7 @@ func TestAC5_ToolUseOnlyNoEmptyText(t *testing.T) {
 		SessionID:      "sess_ac5_tool",
 	}
 
-	stdout := captureStdoutForEngine(t, func() {
+	stdout := captureStdout(t, func() {
 		engine := NewQueryEngine(cfg, nil, "")
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -536,7 +509,7 @@ func TestAC6_FallbackPathThinkingBlock(t *testing.T) {
 		SessionID:      "sess_ac6_fallback",
 	}
 
-	stdout := captureStdoutForEngine(t, func() {
+	stdout := captureStdout(t, func() {
 		engine := NewQueryEngine(cfg, nil, "")
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()

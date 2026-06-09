@@ -4,10 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1090,41 +1087,4 @@ func TestPricing_AC5_UnknownModelFallback(t *testing.T) {
 	}
 
 	t.Log("AC5 PASS: unknown model fallback correct")
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-func makeMockStreamServerWithCacheTokens(t *testing.T) *httptest.Server {
-	t.Helper()
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		io.ReadAll(r.Body)
-		r.Body.Close()
-
-		w.Header().Set("Content-Type", "text/event-stream")
-		w.Header().Set("Cache-Control", "no-cache")
-		w.WriteHeader(http.StatusOK)
-
-		flusher, ok := w.(http.Flusher)
-		if !ok {
-			return
-		}
-		flusher.Flush()
-
-		// SSE events with all four token types in message_delta usage
-		events := []string{
-			sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test-model","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":5,"output_tokens":1}}}`),
-			sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
-			sseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello from stream"}}`),
-			sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
-			// message_delta with all four token types including cache tokens (AC1, AC4)
-			sseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":5,"output_tokens":2,"cache_read_input_tokens":3,"cache_creation_input_tokens":1}}`),
-			sseLine("message_stop", `{"type":"message_stop"}`),
-		}
-		for _, e := range events {
-			fmt.Fprint(w, e)
-			flusher.Flush()
-		}
-	}))
 }
