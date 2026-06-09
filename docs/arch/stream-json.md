@@ -182,6 +182,8 @@ For `content_block_start`, inner `content_block` has only relevant fields (e.g.,
 
 For `message_delta`, inner `delta` has only `stop_reason` and `stop_sequence` (no `container` or `stop_details`).
 
+For `message_start`, the `message` object always includes `stop_reason` and `stop_sequence` fields (null when not yet set).
+
 Requires live SSE streaming from API (see [`sse-streaming.md`](./sse-streaming.md)).
 
 ### `system` / `compact_boundary`
@@ -202,7 +204,7 @@ Emitted after context compaction:
 
 ### `result` (Terminal)
 
-Always the last line on successful run. Field order: `is_error` → `duration_ms` → `num_turns` → `session_id` → `total_cost_usd` → `usage` → `modelUsage` → `permission_denials` → `uuid`.
+Always the last line on successful run. Note: `parent_tool_use_id` is NOT present in result events (this differs from other event types). Field order matches reference format:
 
 ```json
 {
@@ -244,6 +246,8 @@ Always the last line on successful run. Field order: `is_error` → `duration_ms
   "uuid": "…"
 }
 ```
+
+Field order: `type`, `subtype`, `is_error`, `duration_ms`, `duration_api_ms`, `num_turns`, `result`, `stop_reason`, `session_id`, `total_cost_usd`, `usage`, `modelUsage`, `permission_denials`, `fast_mode_state`, `uuid`.
 
 Error subtypes: `error`, `error_max_tokens`, `error_max_turns`, `error_budget`.
 

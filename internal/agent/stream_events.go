@@ -46,9 +46,8 @@ func (m MinimalContentBlock) MarshalJSON() ([]byte, error) {
 			fields = append(fields, `"signature":`+encodeString(m.Signature))
 		}
 	case "text":
-		if m.Text != "" {
-			fields = append(fields, `"text":`+encodeString(m.Text))
-		}
+		// Always include text field even when empty (per reference format for content_block_start)
+		fields = append(fields, `"text":`+encodeString(m.Text))
 	case "tool_use":
 		fields = append(fields, `"id":`+encodeString(m.ID))
 		fields = append(fields, `"name":`+encodeString(m.Name))
@@ -108,12 +107,17 @@ func (m MinimalDelta) MarshalJSON() ([]byte, error) {
 		}
 	case "message_delta":
 		// Reference format: delta has stop_reason/stop_sequence directly, no nested type
+		// Always include stop_reason and stop_sequence (possibly null)
 		fields = []any{}
 		if m.StopReason != "" {
 			fields = append(fields, `"stop_reason":`+encodeString(m.StopReason))
+		} else {
+			fields = append(fields, `"stop_reason":null`)
 		}
 		if m.StopSeq != "" {
 			fields = append(fields, `"stop_sequence":`+encodeString(m.StopSeq))
+		} else {
+			fields = append(fields, `"stop_sequence":null`)
 		}
 	default:
 		fields = []any{`"type":` + encodeString(m.Type)}
@@ -123,15 +127,16 @@ func (m MinimalDelta) MarshalJSON() ([]byte, error) {
 }
 
 // MinimalMessage represents a minimal message for message_start events.
+// Uses *string for StopReason and StopSeq so they marshal as null when empty.
 type MinimalMessage struct {
 	ID         string
 	Type       string
 	Role       string
 	Model      string
 	Content    any
-	StopReason string
-	StopSeq    string
 	Usage      *StreamUsage
+	StopReason *string
+	StopSeq    *string
 }
 
 func (m MinimalMessage) MarshalJSON() ([]byte, error) {
@@ -149,19 +154,24 @@ func (m MinimalMessage) MarshalJSON() ([]byte, error) {
 		fields = append(fields, `"content":`+string(contentBytes))
 	}
 
+	// Always include stop_reason and stop_sequence (possibly null per reference format)
+	if m.StopReason != nil {
+		fields = append(fields, `"stop_reason":`+encodeString(*m.StopReason))
+	} else {
+		fields = append(fields, `"stop_reason":null`)
+	}
+	if m.StopSeq != nil {
+		fields = append(fields, `"stop_sequence":`+encodeString(*m.StopSeq))
+	} else {
+		fields = append(fields, `"stop_sequence":null`)
+	}
+
 	if m.Usage != nil {
 		usageBytes, err := json.Marshal(m.Usage)
 		if err != nil {
 			return nil, err
 		}
 		fields = append(fields, `"usage":`+string(usageBytes))
-	}
-
-	if m.StopReason != "" {
-		fields = append(fields, `"stop_reason":`+encodeString(m.StopReason))
-	}
-	if m.StopSeq != "" {
-		fields = append(fields, `"stop_sequence":`+encodeString(m.StopSeq))
 	}
 
 	return []byte("{" + joinFields(fields) + "}"), nil
@@ -182,6 +192,18 @@ func encodeString(s string) string {
 }
 
 func joinFields(fields []any) string {
+	var result strings.Builder
+	for i, f := range fields {
+		if i > 0 {
+			result.WriteString(",")
+		}
+		result.WriteString(fmt.Sprintf("%v", f))
+	}
+	return result.String()
+}
+
+// joinMessageFields joins fields for JSON serialization with proper comma handling.
+func joinMessageFields(fields []any) string {
 	var result strings.Builder
 	for i, f := range fields {
 		if i > 0 {
@@ -237,15 +259,22 @@ func transformMessageStart(e anthropic.MessageStartEvent) (json.RawMessage, erro
 	}{
 		Type: "message_start",
 		Message: MinimalMessage{
-			ID:         string(e.Message.ID),
-			Type:       "message",
-			Role:       "assistant",
-			Model:      string(e.Message.Model),
-			Content:    []any{},
-			Usage:      usage,
-			StopReason: string(e.Message.StopReason),
-			StopSeq:    e.Message.StopSequence,
+			ID:      string(e.Message.ID),
+			Type:    "message",
+			Role:    "assistant",
+			Model:   string(e.Message.Model),
+			Content: []any{},
+			Usage:   usage,
 		},
+	}
+	// Set StopReason as *string - nil means null, pointer means value
+	if e.Message.StopReason != "" {
+		sr := string(e.Message.StopReason)
+		msg.Message.StopReason = &sr
+	}
+	// Set StopSeq as *string - nil means null, pointer means value
+	if e.Message.StopSequence != "" {
+		msg.Message.StopSeq = &e.Message.StopSequence
 	}
 	return json.Marshal(msg)
 }
@@ -336,26 +365,22 @@ func transformContentBlockStop(e anthropic.ContentBlockStopEvent) (json.RawMessa
 }
 
 func transformMessageDelta(e anthropic.MessageDeltaEvent) (json.RawMessage, error) {
-	// Build minimal delta - only include if stop_reason or stop_sequence is present
-	hasContent := e.Delta.StopReason != "" || e.Delta.StopSequence != ""
-
-	msg := struct {
-		Type  string        `json:"type"`
-		Delta *MinimalDelta `json:"delta,omitempty"`
-		Usage *StreamUsage  `json:"usage,omitempty"`
-	}{
-		Type: "message_delta",
+	// Always emit delta for message_delta (per reference format)
+	delta := MinimalDelta{Type: "message_delta"}
+	if e.Delta.StopReason != "" {
+		delta.StopReason = string(e.Delta.StopReason)
+	}
+	if e.Delta.StopSequence != "" {
+		delta.StopSeq = e.Delta.StopSequence
 	}
 
-	if hasContent {
-		delta := MinimalDelta{Type: "message_delta"}
-		if e.Delta.StopReason != "" {
-			delta.StopReason = string(e.Delta.StopReason)
-		}
-		if e.Delta.StopSequence != "" {
-			delta.StopSeq = e.Delta.StopSequence
-		}
-		msg.Delta = &delta
+	msg := struct {
+		Type  string       `json:"type"`
+		Delta MinimalDelta `json:"delta"`
+		Usage *StreamUsage `json:"usage,omitempty"`
+	}{
+		Type:  "message_delta",
+		Delta: delta,
 	}
 
 	// Add usage if present

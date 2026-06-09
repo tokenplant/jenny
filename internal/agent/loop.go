@@ -4,6 +4,7 @@ package agent
 import (
 	"context"
 	crypto_rand "crypto/rand"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -360,7 +361,7 @@ func RunSimple(ctx context.Context, prompt string, tools []tool.Tool) (string, e
 
 // StreamMessage represents a message in the stream-json output.
 // Field order matches the headless-agent reference format: type, then event|message|payload,
-// then session_id, parent_tool_use_id, uuid, then remaining fields.
+// then parent_tool_use_id, session_id, uuid, then remaining fields.
 type StreamMessage struct {
 	Type              string             `json:"type"`
 	Subtype           string             `json:"subtype,omitempty"`
@@ -370,8 +371,8 @@ type StreamMessage struct {
 	NumTurns          int                `json:"num_turns,omitempty"`
 	Result            string             `json:"result,omitempty"`
 	StopReason        string             `json:"stop_reason,omitempty"`
-	SessionID         string             `json:"session_id,omitempty"`
 	ParentToolUseID   *string            `json:"parent_tool_use_id"`
+	SessionID         string             `json:"session_id,omitempty"`
 	TotalCostUSD      float64            `json:"total_cost_usd,omitempty"`
 	TotalCostCNY      float64            `json:"total_cost_cny,omitempty"`
 	Uuid              string             `json:"uuid,omitempty"`
@@ -391,6 +392,186 @@ type StreamMessage struct {
 	ErrorMaxTokens *ErrorMaxTokensDetail `json:"error_max_tokens,omitempty"`
 	Timestamp      string                `json:"timestamp,omitempty"`
 	ToolUseResult  any                   `json:"tool_use_result,omitempty"`
+}
+
+// MarshalJSON implements custom marshaling for StreamMessage to:
+// - Omit parent_tool_use_id for result events (per reference format)
+// - Maintain correct field ordering for result events
+func (s StreamMessage) MarshalJSON() ([]byte, error) {
+	if s.Type == "result" {
+		// Reference result order: type, subtype, is_error, duration_ms, duration_api_ms,
+		// num_turns, result, stop_reason, session_id, total_cost_usd, usage, modelUsage,
+		// permission_denials, fast_mode_state, uuid
+		var fields []string
+		fields = append(fields, `"type":`+encodeString(s.Type))
+		if s.Subtype != "" {
+			fields = append(fields, `"subtype":`+encodeString(s.Subtype))
+		}
+		fields = append(fields, `"is_error":`+boolString(s.IsError))
+		if s.DurationMs != 0 {
+			fields = append(fields, fmt.Sprintf(`"duration_ms":%d`, s.DurationMs))
+		}
+		if s.DurationAPIMs != 0 {
+			fields = append(fields, fmt.Sprintf(`"duration_api_ms":%d`, s.DurationAPIMs))
+		}
+		if s.NumTurns != 0 {
+			fields = append(fields, fmt.Sprintf(`"num_turns":%d`, s.NumTurns))
+		}
+		if s.Result != "" {
+			fields = append(fields, `"result":`+encodeString(s.Result))
+		}
+		if s.StopReason != "" {
+			fields = append(fields, `"stop_reason":`+encodeString(s.StopReason))
+		}
+		if s.SessionID != "" {
+			fields = append(fields, `"session_id":`+encodeString(s.SessionID))
+		}
+		if s.TotalCostUSD != 0 {
+			fields = append(fields, fmt.Sprintf(`"total_cost_usd":%g`, s.TotalCostUSD))
+		}
+		if s.Usage != nil {
+			usageBytes, err := json.Marshal(s.Usage)
+			if err != nil {
+				return nil, err
+			}
+			fields = append(fields, `"usage":`+string(usageBytes))
+		}
+		if s.ModelUsage != nil {
+			modelBytes, err := json.Marshal(s.ModelUsage)
+			if err != nil {
+				return nil, err
+			}
+			fields = append(fields, `"modelUsage":`+string(modelBytes))
+		}
+		if len(s.PermissionDenials) > 0 {
+			pdBytes, err := json.Marshal(s.PermissionDenials)
+			if err != nil {
+				return nil, err
+			}
+			fields = append(fields, `"permission_denials":`+string(pdBytes))
+		}
+		if s.FastModeState != "" {
+			fields = append(fields, `"fast_mode_state":`+encodeString(s.FastModeState))
+		}
+		if s.Uuid != "" {
+			fields = append(fields, `"uuid":`+encodeString(s.Uuid))
+		}
+		return []byte("{" + strings.Join(fields, ",") + "}"), nil
+	}
+
+	// Default marshaling for all other event types - build manually to avoid recursion
+	var fields []string
+	fields = append(fields, `"type":`+encodeString(s.Type))
+	if s.Subtype != "" {
+		fields = append(fields, `"subtype":`+encodeString(s.Subtype))
+	}
+	if s.IsError {
+		fields = append(fields, `"is_error":true`)
+	}
+	if s.DurationMs != 0 {
+		fields = append(fields, fmt.Sprintf(`"duration_ms":%d`, s.DurationMs))
+	}
+	if s.DurationAPIMs != 0 {
+		fields = append(fields, fmt.Sprintf(`"duration_api_ms":%d`, s.DurationAPIMs))
+	}
+	if s.NumTurns != 0 {
+		fields = append(fields, fmt.Sprintf(`"num_turns":%d`, s.NumTurns))
+	}
+	if s.Result != "" {
+		fields = append(fields, `"result":`+encodeString(s.Result))
+	}
+	if s.StopReason != "" {
+		fields = append(fields, `"stop_reason":`+encodeString(s.StopReason))
+	}
+	if s.ParentToolUseID != nil {
+		fields = append(fields, `"parent_tool_use_id":`+encodeString(*s.ParentToolUseID))
+	} else if s.Type != "result" {
+		// Always include parent_tool_use_id as null for non-result events
+		fields = append(fields, `"parent_tool_use_id":null`)
+	}
+	if s.SessionID != "" {
+		fields = append(fields, `"session_id":`+encodeString(s.SessionID))
+	}
+	if s.TotalCostUSD != 0 {
+		fields = append(fields, fmt.Sprintf(`"total_cost_usd":%g`, s.TotalCostUSD))
+	}
+	if s.TotalCostCNY != 0 {
+		fields = append(fields, fmt.Sprintf(`"total_cost_cny":%g`, s.TotalCostCNY))
+	}
+	if s.Uuid != "" {
+		fields = append(fields, `"uuid":`+encodeString(s.Uuid))
+	}
+	if s.Usage != nil {
+		usageBytes, _ := json.Marshal(s.Usage)
+		fields = append(fields, `"usage":`+string(usageBytes))
+	}
+	if s.ModelUsage != nil {
+		modelBytes, _ := json.Marshal(s.ModelUsage)
+		fields = append(fields, `"modelUsage":`+string(modelBytes))
+	}
+	if s.Event != nil {
+		eventBytes, _ := json.Marshal(s.Event)
+		fields = append(fields, `"event":`+string(eventBytes))
+	}
+	if s.Message != nil {
+		// Message is already a json.RawMessage or map - marshal appropriately
+		switch m := s.Message.(type) {
+		case json.RawMessage:
+			fields = append(fields, `"message":`+string(m))
+		default:
+			msgBytes, _ := json.Marshal(s.Message)
+			fields = append(fields, `"message":`+string(msgBytes))
+		}
+	}
+	if s.Content != "" {
+		fields = append(fields, `"content":`+encodeString(s.Content))
+	}
+	if s.Model != "" {
+		fields = append(fields, `"model":`+encodeString(s.Model))
+	}
+	if s.ToolName != "" {
+		fields = append(fields, `"tool_name":`+encodeString(s.ToolName))
+	}
+	if s.ToolInput != nil {
+		toolBytes, _ := json.Marshal(s.ToolInput)
+		fields = append(fields, `"input":`+string(toolBytes))
+	}
+	if s.ToolUseID != "" {
+		fields = append(fields, `"tool_use_id":`+encodeString(s.ToolUseID))
+	}
+	if s.IsPartial {
+		fields = append(fields, `"is_partial":true`)
+	}
+	if s.ErrorMaxTokens != nil {
+		errBytes, _ := json.Marshal(s.ErrorMaxTokens)
+		fields = append(fields, `"error_max_tokens":`+string(errBytes))
+	}
+	if s.Timestamp != "" {
+		fields = append(fields, `"timestamp":`+encodeString(s.Timestamp))
+	}
+	if s.ToolUseResult != nil {
+		toolBytes, _ := json.Marshal(s.ToolUseResult)
+		fields = append(fields, `"tool_use_result":`+string(toolBytes))
+	}
+	return []byte("{" + strings.Join(fields, ",") + "}"), nil
+}
+
+func boolString(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
+}
+
+func joinJSONFields(fields []any) string {
+	var result strings.Builder
+	for i, f := range fields {
+		if i > 0 {
+			result.WriteString(",")
+		}
+		result.WriteString(fmt.Sprintf("%v", f))
+	}
+	return result.String()
 }
 
 // PermissionDenial represents a tool use denial for permission_denials array.

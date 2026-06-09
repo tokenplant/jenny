@@ -1472,29 +1472,39 @@ func (e *QueryEngine) emitConsolidatedAssistant(
 	}
 
 	// Build full message structure per spec: id, type, role, model, content, stop_reason, stop_sequence, usage
-	messageObj := map[string]any{
-		"id":      messageID,
-		"type":    "message",
-		"role":    "assistant",
-		"model":   model,
-		"content": assistantContent,
+	// Using ordered field construction to match reference format
+	messageFields := []any{
+		`"id":` + encodeString(messageID),
+		`"type":"message"`,
+		`"role":"assistant"`,
+		`"model":` + encodeString(model),
 	}
+
+	// Marshal content
+	contentBytes, _ := json.Marshal(assistantContent)
+	messageFields = append(messageFields, `"content":`+string(contentBytes))
+
+	// Always include stop_reason and stop_sequence (possibly null)
 	if stopReason != "" {
-		messageObj["stop_reason"] = stopReason
+		messageFields = append(messageFields, `"stop_reason":`+encodeString(stopReason))
+	} else {
+		messageFields = append(messageFields, `"stop_reason":null`)
 	}
 	if stopSequence != "" {
-		messageObj["stop_sequence"] = stopSequence
+		messageFields = append(messageFields, `"stop_sequence":`+encodeString(stopSequence))
+	} else {
+		messageFields = append(messageFields, `"stop_sequence":null`)
 	}
+
+	// Include usage if present
 	if usage != nil {
-		usageMap := map[string]any{
-			"input_tokens":                usage.InputTokens,
-			"output_tokens":               usage.OutputTokens,
-			"cache_read_input_tokens":     usage.CacheReadInputTokens,
-			"cache_creation_input_tokens": usage.CacheCreationInputTokens,
-			"service_tier":                "standard",
-		}
-		messageObj["usage"] = usageMap
+		usageJSON := fmt.Sprintf(`{"input_tokens":%d,"output_tokens":%d,"cache_read_input_tokens":%d,"cache_creation_input_tokens":%d,"service_tier":"standard"}`,
+			usage.InputTokens, usage.OutputTokens, usage.CacheReadInputTokens, usage.CacheCreationInputTokens)
+		messageFields = append(messageFields, `"usage":`+usageJSON)
 	}
+
+	messageJSON := "{" + joinMessageFields(messageFields) + "}"
+	messageObj := json.RawMessage(messageJSON)
 
 	// Reference order for assistant: type, message, parent_tool_use_id, session_id, uuid
 	msg := StreamMessage{
