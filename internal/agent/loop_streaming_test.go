@@ -1176,8 +1176,8 @@ func captureStreamOutput(t *testing.T, cfg StreamConfig) (string, error) {
 // parseNDJSONLines parses output into a slice of map[string]any for each line.
 func parseNDJSONLines(t *testing.T, output string) []map[string]any {
 	var result []map[string]any
-	lines := strings.Split(output, "\n")
-	for _, line := range lines {
+	lines := strings.SplitSeq(output, "\n")
+	for line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
@@ -1382,28 +1382,89 @@ func TestStreamJSON_FieldOrderMatchesReference(t *testing.T) {
 		if line == "" {
 			continue
 		}
-		// Decode into map to verify all required fields exist
-		var obj map[string]any
-		if err := json.Unmarshal([]byte(line), &obj); err != nil {
-			t.Logf("Warning: line %d failed to decode: %v", li, err)
-			continue
+
+		// Use json.Decoder to extract all top-level strings in order
+		// Note: json.Decoder.Token() does NOT return ':' and ',' delimiters.
+		// This gives us all strings at depth1 in order.
+		decoder := json.NewDecoder(strings.NewReader(line))
+		var topLevelStrings []string
+		var depth int = 0
+		for {
+			token, err := decoder.Token()
+			if err != nil {
+				break
+			}
+			if delim, ok := token.(json.Delim); ok {
+				switch delim {
+				case '{':
+					depth++
+					continue
+				case '}':
+					depth--
+					continue
+				}
+			}
+			// Collect all strings at depth 1 (top level only)
+			if depth == 1 {
+				if s, ok := token.(string); ok {
+					topLevelStrings = append(topLevelStrings, s)
+				}
+			}
 		}
 
-		// Check required fields exist
-		if _, ok := obj["type"]; !ok {
-			t.Errorf("AC5 FAIL: line %d missing 'type' field", li)
+		// Find indices of required fields in the string sequence
+		typeIdx := -1
+		sessionIdx := -1
+		parentIdx := -1
+		uuidIdx := -1
+		for i, s := range topLevelStrings {
+			switch s {
+			case "type":
+				if typeIdx == -1 {
+					typeIdx = i
+				}
+			case "session_id":
+				if sessionIdx == -1 {
+					sessionIdx = i
+				}
+			case "parent_tool_use_id":
+				if parentIdx == -1 {
+					parentIdx = i
+				}
+			case "uuid":
+				if uuidIdx == -1 {
+					uuidIdx = i
+				}
+			}
 		}
-		if _, ok := obj["session_id"]; !ok {
-			t.Errorf("AC5 FAIL: line %d missing 'session_id' field", li)
+
+		// Verify all required fields are present
+		if typeIdx == -1 {
+			t.Errorf("AC5 FAIL: line %d missing 'type'", li)
 		}
-		if _, ok := obj["parent_tool_use_id"]; !ok {
-			t.Errorf("AC5 FAIL: line %d missing 'parent_tool_use_id' field", li)
+		if sessionIdx == -1 {
+			t.Errorf("AC5 FAIL: line %d missing 'session_id'", li)
 		}
-		if _, ok := obj["uuid"]; !ok {
-			t.Errorf("AC5 FAIL: line %d missing 'uuid' field", li)
+		if parentIdx == -1 {
+			t.Errorf("AC5 FAIL: line %d missing 'parent_tool_use_id'", li)
+		}
+		if uuidIdx == -1 {
+			t.Errorf("AC5 FAIL: line %d missing 'uuid'", li)
+		}
+
+		// Verify order: type < session_id < parent_tool_use_id < uuid
+		// (with possible event|message|payload between type and session_id)
+		if typeIdx != -1 && sessionIdx != -1 && typeIdx >= sessionIdx {
+			t.Errorf("AC5 FAIL: line %d 'session_id' does not follow 'type'", li)
+		}
+		if sessionIdx != -1 && parentIdx != -1 && sessionIdx >= parentIdx {
+			t.Errorf("AC5 FAIL: line %d 'parent_tool_use_id' does not follow 'session_id'", li)
+		}
+		if parentIdx != -1 && uuidIdx != -1 && parentIdx >= uuidIdx {
+			t.Errorf("AC5 FAIL: line %d 'uuid' does not follow 'parent_tool_use_id'", li)
 		}
 	}
-	t.Log("AC5 PASS: all required fields present")
+	t.Log("AC5 PASS: key order matches reference format")
 }
 
 // TestStreamJSON_CostOnlyOnResult verifies that total_cost_usd appears on
