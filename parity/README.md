@@ -1,10 +1,10 @@
 # Parity Test Suite
 
-Blackbox end-to-end test suite for comparing jenny behavior with Claude Code compatibility targets.
+Blackbox end-to-end test suite for comparing jenny behavior with reference agent compatibility targets.
 
 ## Overview
 
-The parity suite is designed to verify that jenny produces behavior compatible with Claude Code across:
+The parity suite is designed to verify that jenny produces behavior compatible with the reference agent across:
 
 - CLI flag parsing and behavior
 - API protocol conformance
@@ -106,11 +106,11 @@ The suite supports multiple reporter formats:
 
 ## Comparison with Reference
 
-This suite is inspired by the Claude Code parity-tests project at `/Users/sin/work/agents/claude-code-source-code/parity-tests` but implemented in Go for native jenny testing.
+This suite is inspired by reference agent parity testing but implemented in Go for native jenny testing.
 
 Key differences:
 
-- Go-based instead of TypeScript
+- Go-based test harness
 - Reuses existing jenny_test harness infrastructure
 - Native Go test integration via `go test`
 - Mock API server from jenny_test/harness

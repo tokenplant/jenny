@@ -1,5 +1,5 @@
 // Package harness provides blackbox end-to-end test infrastructure for parity
-// testing between jenny and Claude Code.
+// testing of jenny behavior.
 //
 // The harness supports:
 //   - Spawning the target binary with configurable environment

@@ -10,8 +10,9 @@ import (
 
 // SuiteRunner orchestrates running parity test cases.
 type SuiteRunner struct {
-	Config *Config
-	Tests  []*TestCase
+	Config     *Config
+	Tests      []*TestCase
+	mockServer *MockServer
 }
 
 // NewSuiteRunner creates a new test suite runner.
@@ -34,7 +35,16 @@ func (sr *SuiteRunner) RunAll(reporter Reporter) []TestResult {
 	}
 
 	reporter.OnEnd(results)
+	sr.Close()
 	return results
+}
+
+// Close cleans up resources held by the suite runner.
+func (sr *SuiteRunner) Close() {
+	if sr.mockServer != nil {
+		sr.mockServer.Close()
+		sr.mockServer = nil
+	}
 }
 
 // RunOne runs a single test case.
@@ -64,17 +74,26 @@ func (sr *SuiteRunner) RunOne(tc *TestCase) TestResult {
 	}
 	defer os.RemoveAll(workDir)
 
-	// Build args based on invocation kind
-	args := sr.buildArgs(tc)
+	// Build args and env based on invocation kind
+	args, env := sr.buildArgs(tc), sr.buildEnv(tc)
 
 	// Run the target
-	res := RunTargetInDir(nil, sr.Config, workDir, nil, args...)
+	res := RunTargetInDir(nil, sr.Config, workDir, env, args...)
 
 	// Capture output
 	actual := &CapturedOutput{
 		ExitCode: res.ExitCode,
 		Stdout:   res.Stdout,
 		Stderr:   res.Stderr,
+	}
+
+	// If mock server was used, capture requests
+	if tc.Target.Kind == "prompt" && sr.mockServer != nil {
+		reqs := sr.mockServer.Requests()
+		actual.Requests = make([]RecordedRequest, len(reqs))
+		for i, r := range reqs {
+			actual.Requests[i] = RecordedRequest{Body: r.Body}
+		}
 	}
 
 	// Compare against expectations
@@ -115,6 +134,24 @@ func (sr *SuiteRunner) buildArgs(tc *TestCase) []string {
 	}
 
 	return args
+}
+
+// buildEnv constructs environment variables for the target invocation.
+func (sr *SuiteRunner) buildEnv(tc *TestCase) []string {
+	var env []string
+
+	// For prompt-kind tests, start mock server and set base URL
+	if tc.Target.Kind == "prompt" && tc.Target.Cassette != "" && sr.Config.CassetteDir != "" {
+		// Start mock server if not already running
+		if sr.mockServer == nil {
+			sr.mockServer = NewMockServer(sr.Config.CassetteDir)
+		}
+		// URL includes /cassette/<id> prefix so jenny's /v1/messages calls
+		// are routed to /cassette/<id>/v1/messages by the mock server
+		env = append(env, "ANTHROPIC_BASE_URL="+sr.mockServer.URL()+"/cassette/"+tc.Target.Cassette)
+	}
+
+	return env
 }
 
 // LoadCasesFromDir discovers test cases from Go test files in the directory.

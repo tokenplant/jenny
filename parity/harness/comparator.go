@@ -16,7 +16,7 @@ func Compare(tc *TestCase, actual *CapturedOutput) CompareResult {
 	var diffs []DiffDetail
 
 	// Exit code check
-	if tc.Expected.ExitCode != 0 && actual.ExitCode != tc.Expected.ExitCode {
+	if actual.ExitCode != tc.Expected.ExitCode {
 		diffs = append(diffs, DiffDetail{
 			Path:     "exitCode",
 			Expected: tc.Expected.ExitCode,

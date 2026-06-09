@@ -1,8 +1,8 @@
 package harness
 
 import (
+	"encoding/json"
 	"fmt"
-	"strings"
 )
 
 // Reporter formats test results for output.
@@ -83,41 +83,44 @@ func (r *JSONReporter) OnResult(result TestResult) {
 func (r *JSONReporter) OnEnd(results []TestResult) {}
 
 func formatResultJSON(result TestResult) (string, error) {
-	var b strings.Builder
-	b.WriteString(`{"id":"`)
-	b.WriteString(result.ID)
-	b.WriteString(`","category":"`)
-	b.WriteString(result.Category)
-	b.WriteString(`","status":"`)
-	b.WriteString(result.Status)
-	b.WriteString(`","duration_ms":`)
-	b.WriteString(itoa(int(result.Duration)))
-	if result.Message != "" {
-		b.WriteString(`,"message":"`)
-		b.WriteString(result.Message)
-		b.WriteString(`"`)
+	// Use a struct for proper JSON marshaling with correct escaping
+	type diffEntry struct {
+		Path     string `json:"path"`
+		Expected any    `json:"expected"`
+		Actual   any    `json:"actual"`
 	}
-	if result.SkipReason != "" {
-		b.WriteString(`,"skip_reason":"`)
-		b.WriteString(result.SkipReason)
-		b.WriteString(`"`)
+	type jsonResult struct {
+		ID         string      `json:"id"`
+		Category   string      `json:"category"`
+		Status     string      `json:"status"`
+		DurationMs int64       `json:"duration_ms"`
+		Message    string      `json:"message,omitempty"`
+		SkipReason string      `json:"skip_reason,omitempty"`
+		Diff       []diffEntry `json:"diff,omitempty"`
+	}
+
+	jd := jsonResult{
+		ID:         result.ID,
+		Category:   result.Category,
+		Status:     result.Status,
+		DurationMs: result.Duration,
+		Message:    result.Message,
+		SkipReason: result.SkipReason,
 	}
 	if len(result.Diff) > 0 {
-		b.WriteString(`,"diff":[`)
+		jd.Diff = make([]diffEntry, len(result.Diff))
 		for i, d := range result.Diff {
-			if i > 0 {
-				b.WriteString(",")
+			jd.Diff[i] = diffEntry{
+				Path:     d.Path,
+				Expected: d.Expected,
+				Actual:   d.Actual,
 			}
-			b.WriteString(`{"path":"`)
-			b.WriteString(d.Path)
-			b.WriteString(`","expected":`)
-			fmt.Fprintf(&b, "%v", d.Expected)
-			b.WriteString(`,"actual":`)
-			fmt.Fprintf(&b, "%v", d.Actual)
-			b.WriteString(`}`)
 		}
-		b.WriteString(`]`)
 	}
-	b.WriteString("}")
-	return b.String(), nil
+
+	data, err := json.Marshal(jd)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
 }
