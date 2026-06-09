@@ -29,6 +29,7 @@ jenny -p "prompt text"
 | Flag | Description |
 |------|-------------|
 | `-p`, `--print <prompt>` | Prompt string (non-interactive) |
+| `--version`, `-v` | Prints `<semver> (jenny)` and exits 0. |
 | `--model <name>` | Override model (beats `ANTHROPIC_MODEL` env) |
 | `-r`, `--resume <session_id>` | Resume session from transcript |
 | `--continue` | Resume most recent session in project |
@@ -61,6 +62,7 @@ jenny -p "prompt text"
 |------|-----------|
 | 0 | Success |
 | Non-zero | Missing prompt, API error, agent error, session not found |
+| Non-zero | Unknown or invalid flag |
 
 Help (`-h`) exits 0.
 

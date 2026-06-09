@@ -36,7 +36,7 @@ func run() error {
 	// --version / -v: print the version and exit before any session,
 	// API client, or MCP setup so no network call is made.
 	if flags.Version {
-		fmt.Println(version)
+		fmt.Printf("%s (jenny)\n", version)
 		return nil
 	}
 
