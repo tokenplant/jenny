@@ -1,7 +1,9 @@
 package api
 
 import (
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -36,5 +38,28 @@ func TestNormalize_NoProviderNameStringsInProduction(t *testing.T) {
 
 	if len(violations) > 0 {
 		t.Errorf("provider name strings found in production code:\n%s", strings.Join(violations, "\n"))
+	}
+}
+
+// TestNormalize_UniversalArchitectureCrossLinked locks in the docs cross-link to
+// universal-normalization-architecture.md (AC8). The spec requires README.md, when
+// present, to reference the architecture doc. This test fails if the link is removed
+// from docs/README.md.
+func TestNormalize_UniversalArchitectureCrossLinked(t *testing.T) {
+	// Find project root: the directory containing go.mod, two levels up from internal/api.
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	root := filepath.Join(wd, "..", "..")
+	readme := filepath.Join(root, "docs", "README.md")
+
+	contents, err := os.ReadFile(readme)
+	if err != nil {
+		t.Fatalf("read %s: %v", readme, err)
+	}
+
+	if !strings.Contains(string(contents), "universal-normalization-architecture.md") {
+		t.Errorf("docs/README.md must cross-link to universal-normalization-architecture.md (AC8)")
 	}
 }
