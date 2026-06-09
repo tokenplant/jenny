@@ -26,7 +26,7 @@ const DefaultFallbackTimeout = 5 * time.Minute
 // Client wraps the Anthropic SDK client.
 type Client struct {
 	client            anthropic.Client
-	model string
+	model             string
 	maxTokensOverride int // Override for max_tokens; 0 means use default
 	retryConfig       RetryConfig
 	isBackground      bool
