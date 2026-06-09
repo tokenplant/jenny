@@ -70,8 +70,8 @@ func TestCLISystemPromptFlag(t *testing.T) {
 	if !strings.Contains(text, "CUSTOM_SYS_SENTINEL") {
 		t.Errorf("AC2: system prompt does not contain CUSTOM_SYS_SENTINEL; got %q", text[:min(len(text), 200)])
 	}
-	if strings.Contains(text, "You are Claude Code") {
-		t.Errorf("AC2: system prompt still contains default text 'You are Claude Code'")
+	if strings.Contains(text, "You are an AI assistant") {
+		t.Errorf("AC2: system prompt still contains default text 'You are an AI assistant'")
 	}
 }
 
@@ -100,8 +100,8 @@ func TestCLIAppendSystemPromptFlag(t *testing.T) {
 		t.Fatalf("AC3: %v", err)
 	}
 
-	if !strings.Contains(text, "You are Claude Code") {
-		t.Errorf("AC3: system prompt missing default text 'You are Claude Code'")
+	if !strings.Contains(text, "You are an AI assistant") {
+		t.Errorf("AC3: system prompt missing default text 'You are an AI assistant'")
 	}
 	if !strings.Contains(text, "APPEND_SENTINEL") {
 		t.Errorf("AC3: system prompt does not contain APPEND_SENTINEL; got length=%d", len(text))
@@ -140,8 +140,8 @@ func TestCLICombinedSystemPromptFlags(t *testing.T) {
 	if !strings.Contains(text, "APPEND_SENTINEL") {
 		t.Errorf("AC4: system prompt does not contain APPEND_SENTINEL")
 	}
-	if strings.Contains(text, "You are Claude Code") {
-		t.Errorf("AC4: system prompt still contains default text 'You are Claude Code'")
+	if strings.Contains(text, "You are an AI assistant") {
+		t.Errorf("AC4: system prompt still contains default text 'You are an AI assistant'")
 	}
 }
 
@@ -161,7 +161,7 @@ func TestCLIPrintSystemPromptWithOverride(t *testing.T) {
 	if !strings.Contains(text, "OFFLINE_SENTINEL") {
 		t.Errorf("AC5: output does not contain OFFLINE_SENTINEL; got %q", text[:min(len(text), 300)])
 	}
-	if strings.Contains(text, "You are Claude Code") {
-		t.Errorf("AC5: output still contains default text 'You are Claude Code'")
+	if strings.Contains(text, "You are an AI assistant") {
+		t.Errorf("AC5: output still contains default text 'You are an AI assistant'")
 	}
 }

@@ -61,8 +61,8 @@ func TestSystemPromptSubstantial(t *testing.T) {
 func TestSystemPromptIdentity(t *testing.T) {
 	res := runPrintSystemPrompt(t)
 	text := strings.Join(res.Lines, "\n")
-	if !strings.Contains(text, "You are Claude Code") {
-		t.Error("system prompt does not contain 'You are Claude Code'")
+	if !strings.Contains(text, "You are an AI assistant") {
+		t.Error("system prompt does not contain 'You are an AI assistant'")
 	}
 }
 

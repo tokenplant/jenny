@@ -60,7 +60,7 @@ func TestAssembleSystemPrompt_CustomReplacesDefaults(t *testing.T) {
 	}
 
 	// Default intro should NOT be present
-	if strings.Contains(prompt, "You are Claude Code") {
+	if strings.Contains(prompt, "You are an AI assistant") {
 		t.Error("default intro should not be present when custom is set")
 	}
 
@@ -219,7 +219,7 @@ func TestAssembleSystemPrompt_EmptyAppendIsNoOp(t *testing.T) {
 
 	// Should not have trailing newlines or weird formatting
 	// The intro should be the last thing if no append
-	if !strings.Contains(prompt, "You are Claude Code") {
+	if !strings.Contains(prompt, "You are an AI assistant") {
 		t.Error("should have default intro")
 	}
 }
@@ -274,7 +274,7 @@ func TestAssembleSystemPrompt_DefaultSections(t *testing.T) {
 	prompt := AssembleSystemPrompt(cfg, tools, cwd)
 
 	// Default intro
-	if !strings.Contains(prompt, "You are Claude Code") {
+	if !strings.Contains(prompt, "You are an AI assistant") {
 		t.Error("default intro should be present")
 	}
 
@@ -335,7 +335,7 @@ func TestDefaultIntroSection(t *testing.T) {
 		t.Fatal("expected default intro section to be included")
 	}
 
-	if !strings.Contains(section, "You are Claude Code") {
+	if !strings.Contains(section, "You are an AI assistant") {
 		t.Error("should contain intro text")
 	}
 }
