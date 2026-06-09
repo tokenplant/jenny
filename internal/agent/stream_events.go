@@ -179,11 +179,11 @@ func (m MinimalMessage) MarshalJSON() ([]byte, error) {
 
 // StreamUsage represents a minimal usage object for stream events.
 type StreamUsage struct {
-	InputTokens              int    `json:"input_tokens,omitempty"`
-	OutputTokens             int    `json:"output_tokens,omitempty"`
-	CacheReadInputTokens     int    `json:"cache_read_input_tokens,omitempty"`
-	CacheCreationInputTokens int    `json:"cache_creation_input_tokens,omitempty"`
-	ServiceTier              string `json:"service_tier,omitempty"`
+	InputTokens              int    `json:"input_tokens"`
+	OutputTokens             int    `json:"output_tokens"`
+	CacheReadInputTokens     int    `json:"cache_read_input_tokens"`
+	CacheCreationInputTokens int    `json:"cache_creation_input_tokens"`
+	ServiceTier              string `json:"service_tier"`
 }
 
 func encodeString(s string) string {
@@ -238,20 +238,14 @@ func TransformStreamEvent(event any) (json.RawMessage, error) {
 
 func transformMessageStart(e anthropic.MessageStartEvent) (json.RawMessage, error) {
 	// Build minimal message using proper struct with MarshalJSON
-	usage := &StreamUsage{}
-	if e.Message.Usage.InputTokens > 0 {
-		usage.InputTokens = int(e.Message.Usage.InputTokens)
+	// Always populate all usage fields (even with 0 values) per reference format
+	usage := &StreamUsage{
+		InputTokens:              int(e.Message.Usage.InputTokens),
+		OutputTokens:             int(e.Message.Usage.OutputTokens),
+		CacheReadInputTokens:     int(e.Message.Usage.CacheReadInputTokens),
+		CacheCreationInputTokens: int(e.Message.Usage.CacheCreationInputTokens),
+		ServiceTier:              "standard",
 	}
-	if e.Message.Usage.CacheReadInputTokens > 0 {
-		usage.CacheReadInputTokens = int(e.Message.Usage.CacheReadInputTokens)
-	}
-	if e.Message.Usage.CacheCreationInputTokens > 0 {
-		usage.CacheCreationInputTokens = int(e.Message.Usage.CacheCreationInputTokens)
-	}
-	if e.Message.Usage.OutputTokens > 0 {
-		usage.OutputTokens = int(e.Message.Usage.OutputTokens)
-	}
-	usage.ServiceTier = "standard"
 
 	msg := struct {
 		Type    string         `json:"type"`

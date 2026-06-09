@@ -409,12 +409,9 @@ func (s StreamMessage) MarshalJSON() ([]byte, error) {
 			fields = append(fields, `"subtype":`+encodeString(s.Subtype))
 		}
 		fields = append(fields, `"is_error":`+boolString(s.IsError))
-		if s.DurationMs != 0 {
-			fields = append(fields, fmt.Sprintf(`"duration_ms":%d`, s.DurationMs))
-		}
-		if s.DurationAPIMs != 0 {
-			fields = append(fields, fmt.Sprintf(`"duration_api_ms":%d`, s.DurationAPIMs))
-		}
+		// Always emit duration fields per reference format (even if 0)
+		fields = append(fields, fmt.Sprintf(`"duration_ms":%d`, s.DurationMs))
+		fields = append(fields, fmt.Sprintf(`"duration_api_ms":%d`, s.DurationAPIMs))
 		if s.NumTurns != 0 {
 			fields = append(fields, fmt.Sprintf(`"num_turns":%d`, s.NumTurns))
 		}
@@ -444,12 +441,15 @@ func (s StreamMessage) MarshalJSON() ([]byte, error) {
 			}
 			fields = append(fields, `"modelUsage":`+string(modelBytes))
 		}
+		// Always emit permission_denials as empty array when not set (per reference format)
 		if len(s.PermissionDenials) > 0 {
 			pdBytes, err := json.Marshal(s.PermissionDenials)
 			if err != nil {
 				return nil, err
 			}
 			fields = append(fields, `"permission_denials":`+string(pdBytes))
+		} else {
+			fields = append(fields, `"permission_denials":[]`)
 		}
 		if s.FastModeState != "" {
 			fields = append(fields, `"fast_mode_state":`+encodeString(s.FastModeState))
