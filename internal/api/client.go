@@ -481,8 +481,9 @@ func (c *Client) doSendMessage(ctx context.Context, messages []Message, tools []
 
 	// Convert tools to SDK format
 	sdkTools := make([]anthropic.ToolUnionParam, 0, len(tools))
+	baseURL := os.Getenv("ANTHROPIC_BASE_URL")
 	for i, t := range tools {
-		sdkTools = append(sdkTools, toolToSDK(t, i == len(tools)-1))
+		sdkTools = append(sdkTools, toolToSDK(t, i == len(tools)-1, baseURL))
 	}
 
 	// Build request
@@ -843,8 +844,9 @@ func (c *Client) SendMessageStream(
 
 		// Convert tools to SDK format
 		sdkTools := make([]anthropic.ToolUnionParam, 0, len(tools))
+		baseURL := os.Getenv("ANTHROPIC_BASE_URL")
 		for i, t := range tools {
-			sdkTools = append(sdkTools, toolToSDK(t, i == len(tools)-1))
+			sdkTools = append(sdkTools, toolToSDK(t, i == len(tools)-1, baseURL))
 		}
 
 		// Build request
@@ -1106,7 +1108,8 @@ type ToolInputSchema struct {
 // For web_search with MaxUses set, uses the specific WebSearchTool20250305Param
 // to support definition-level max_uses enforcement.
 // When isLast is true, cache_control is set on the tool to mark it as a cache breakpoint.
-func toolToSDK(t ToolParam, isLast bool) anthropic.ToolUnionParam {
+// baseURL is used for provider detection to apply MiniMax compatibility fix only when needed.
+func toolToSDK(t ToolParam, isLast bool, baseURL string) anthropic.ToolUnionParam {
 	if t.Name == "web_search" && t.MaxUses != nil {
 		tool := &anthropic.WebSearchTool20250305Param{
 			MaxUses: param.NewOpt(*t.MaxUses),
@@ -1117,14 +1120,15 @@ func toolToSDK(t ToolParam, isLast bool) anthropic.ToolUnionParam {
 		return anthropic.ToolUnionParam{OfWebSearchTool20250305: tool}
 	}
 
-	// Ensure Properties is non-empty for MiniMax compatibility.
+	// MiniMax compatibility: add placeholder property only for MiniMax provider.
 	// MiniMax rejects tools with empty properties object: "function name or parameters is empty (2013)".
-	// AC2: Add a placeholder property so the schema is not empty.
+	// AC2: Provider-aware: only add __arg__ when provider is "minimax".
+	provider := providerFromBaseURL(baseURL)
 	props := t.InputSchema.Properties
 	if props == nil {
 		props = make(map[string]any)
 	}
-	if len(props) == 0 {
+	if provider == "minimax" && len(props) == 0 {
 		props["__arg__"] = map[string]any{"type": "string", "description": "Placeholder argument for empty schema"}
 	}
 	required := t.InputSchema.Required

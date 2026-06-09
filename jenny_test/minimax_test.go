@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 
@@ -154,8 +155,13 @@ func TestMinimaxBadRequestReproduced(t *testing.T) {
 	mock := newMinimaxMockServer()
 	t.Cleanup(mock.Close)
 
+	// AC4: Use a MiniMax-like URL to trigger provider detection.
+	// Transform http://127.0.0.1:PORT to http://minimaxi.127.0.0.1:PORT
+	// so providerFromBaseURL returns "minimax" and __arg__ is added.
+	minimaxURL := strings.Replace(mock.URL, "http://", "http://minimaxi.", 1)
+
 	env := []string{
-		"ANTHROPIC_BASE_URL=" + mock.URL,
+		"ANTHROPIC_BASE_URL=" + minimaxURL,
 		"ANTHROPIC_AUTH_TOKEN=test-token",
 		"ANTHROPIC_MODEL=MiniMax-M2.7",
 	}
@@ -183,8 +189,11 @@ func TestMinimaxToolSerializationPasses(t *testing.T) {
 	mock := newMinimaxMockServer()
 	t.Cleanup(mock.Close)
 
+	// AC4: Use a MiniMax-like URL to trigger provider detection.
+	minimaxURL := strings.Replace(mock.URL, "http://", "http://minimaxi.", 1)
+
 	env := []string{
-		"ANTHROPIC_BASE_URL=" + mock.URL,
+		"ANTHROPIC_BASE_URL=" + minimaxURL,
 		"ANTHROPIC_AUTH_TOKEN=test-token",
 		"ANTHROPIC_MODEL=MiniMax-M2.7",
 	}
@@ -275,6 +284,61 @@ func TestMinimaxToolSerializationPasses(t *testing.T) {
 			props, ok := inputSchema["properties"].(map[string]any)
 			if !ok || len(props) == 0 {
 				t.Errorf("tool %d: input_schema.properties is empty or missing", j)
+			}
+		}
+	}
+}
+
+// TestAnthropicEndpointRegression is AC3: verify that when ANTHROPIC_BASE_URL
+// does NOT contain "minimaxi", the __arg__ placeholder is NOT added to tools.
+// This is a regression guard ensuring the Anthropic endpoint is not affected
+// by the MiniMax compatibility fix.
+func TestAnthropicEndpointRegression(t *testing.T) {
+	mock := harness.NewMockServer(cassettesDir)
+	t.Cleanup(mock.Close)
+
+	// Use a non-MiniMax URL (no "minimaxi" in it) so provider detection
+	// returns "anthropic" and __arg__ is NOT added.
+	env := []string{
+		"ANTHROPIC_BASE_URL=" + mock.URL() + "/cassette/" + echoHelloCassette,
+		"ANTHROPIC_AUTH_TOKEN=test-token",
+		"ANTHROPIC_MODEL=",
+	}
+
+	res := harness.RunJenny(t, env, "--output-format", "stream-json", "-p", "echo hello")
+
+	// AC3: exit 0 means successful completion
+	if res.ExitCode != 0 {
+		t.Fatalf("jenny exited %d; stderr=%q", res.ExitCode, res.Stderr)
+	}
+
+	// AC3: verify no __arg__ appears in any request's tools array
+	reqs := mock.Requests()
+	for i, req := range reqs {
+		tools, ok := req.Body["tools"].([]any)
+		if !ok {
+			continue // no tools in this request is fine
+		}
+		for j, toolEntry := range tools {
+			tool, ok := toolEntry.(map[string]any)
+			if !ok {
+				continue
+			}
+			// Skip web_search tools
+			if toolType, ok := tool["type"].(string); ok && (toolType == "web_search" || toolType == "web_search_20250305") {
+				continue
+			}
+			inputSchema, ok := tool["input_schema"].(map[string]any)
+			if !ok {
+				continue
+			}
+			props, ok := inputSchema["properties"].(map[string]any)
+			if !ok {
+				t.Errorf("request %d tool %d: properties is not a map", i, j)
+				continue
+			}
+			if _, hasArg := props["__arg__"]; hasArg {
+				t.Errorf("request %d tool %d: found __arg__ in properties; should not be present for non-MiniMax provider", i, j)
 			}
 		}
 	}

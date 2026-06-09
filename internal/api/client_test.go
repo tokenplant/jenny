@@ -237,7 +237,7 @@ func TestToolToSDK_WebSearchMaxUses(t *testing.T) {
 		MaxUses: &maxUses,
 	}
 
-	sdkTool := toolToSDK(webSearchTool, false)
+	sdkTool := toolToSDK(webSearchTool, false, "")
 
 	// Verify it uses OfWebSearchTool20250305 variant
 	if sdkTool.OfWebSearchTool20250305 == nil {
@@ -265,7 +265,7 @@ func TestToolToSDK_GenericTool(t *testing.T) {
 		},
 	}
 
-	sdkTool := toolToSDK(tool, false)
+	sdkTool := toolToSDK(tool, false, "")
 
 	// Verify it uses OfTool variant
 	if sdkTool.OfTool == nil {
@@ -289,7 +289,7 @@ func TestToolToSDK_WebSearchWithoutMaxUses(t *testing.T) {
 		MaxUses: nil,
 	}
 
-	sdkTool := toolToSDK(tool, false)
+	sdkTool := toolToSDK(tool, false, "")
 
 	// Verify it uses OfTool variant (not OfWebSearchTool20250305)
 	if sdkTool.OfTool == nil {
@@ -834,7 +834,7 @@ func TestToolToSDK_ExtraFields(t *testing.T) {
 		},
 	}
 
-	sdkTool := toolToSDK(tool, false)
+	sdkTool := toolToSDK(tool, false, "")
 
 	if sdkTool.OfTool == nil {
 		t.Fatal("expected OfTool to be non-nil")
@@ -874,7 +874,9 @@ func TestToolToSDK_ExtraFields(t *testing.T) {
 }
 
 func TestToolToSDK_EmptyProperties(t *testing.T) {
-	// AC2: Verify properties is non-null {} even if input properties is nil
+	// AC2: Provider-aware behavior
+	// With MiniMax URL: empty properties get __arg__ placeholder
+	// With non-MiniMax URL: empty properties stay empty {}
 	tool := ToolParam{
 		Name:        "empty_tool",
 		Description: "A tool with no properties",
@@ -885,18 +887,15 @@ func TestToolToSDK_EmptyProperties(t *testing.T) {
 		},
 	}
 
-	sdkTool := toolToSDK(tool, false)
+	// Test MiniMax provider: __arg__ should be added
+	minimaxURL := "https://api.minimaxi.com/anthropic"
+	sdkToolMinimax := toolToSDK(tool, false, minimaxURL)
 
-	if sdkTool.OfTool == nil {
+	if sdkToolMinimax.OfTool == nil {
 		t.Fatal("expected OfTool to be non-nil")
 	}
 
-	if sdkTool.OfTool.InputSchema.Properties == nil {
-		t.Fatal("expected Properties to be non-nil")
-	}
-
-	// Marshal to JSON to ensure it's {} and not null
-	data, err := json.Marshal(sdkTool.OfTool)
+	data, err := json.Marshal(sdkToolMinimax.OfTool)
 	if err != nil {
 		t.Fatalf("failed to marshal tool: %v", err)
 	}
@@ -917,10 +916,60 @@ func TestToolToSDK_EmptyProperties(t *testing.T) {
 	}
 	// AC2: MiniMax compatibility - empty properties get a placeholder
 	if len(props) != 1 {
-		t.Errorf("expected 1 placeholder property for MiniMax compatibility, got %d items", len(props))
+		t.Errorf("MiniMax: expected 1 placeholder property, got %d items", len(props))
 	}
-	// Verify the placeholder property exists and has correct structure
 	if _, hasArg := props["__arg__"]; !hasArg {
-		t.Error("expected __arg__ placeholder property")
+		t.Error("MiniMax: expected __arg__ placeholder property")
+	}
+
+	// Test non-MiniMax (Anthropic) provider: empty properties stay empty
+	anthropicURL := "https://api.anthropic.com"
+	sdkToolAnthropic := toolToSDK(tool, false, anthropicURL)
+
+	data, err = json.Marshal(sdkToolAnthropic.OfTool)
+	if err != nil {
+		t.Fatalf("failed to marshal tool: %v", err)
+	}
+
+	if err := json.Unmarshal(data, &result); err != nil {
+		t.Fatalf("failed to unmarshal tool: %v", err)
+	}
+
+	inputSchema, ok = result["input_schema"].(map[string]any)
+	if !ok {
+		t.Fatal("input_schema not found in marshaled output")
+	}
+
+	props, ok = inputSchema["properties"].(map[string]any)
+	if !ok {
+		t.Fatal("properties missing from serialized input_schema")
+	}
+	// AC2: Non-MiniMax: empty properties stay empty {}
+	if len(props) != 0 {
+		t.Errorf("Anthropic: expected 0 properties, got %d items", len(props))
+	}
+}
+
+func TestProviderFromBaseURL(t *testing.T) {
+	// AC1: providerFromBaseURL returns correct values
+	tests := []struct {
+		baseURL  string
+		expected string
+	}{
+		{"https://api.minimaxi.com/anthropic", "minimax"},
+		{"https://api.minimaxi.com", "minimax"},
+		{"http://minimaxi.local:8080/anthropic", "minimax"},
+		{"https://api.anthropic.com", "anthropic"},
+		{"https://api.anthropic.com/v1/messages", "anthropic"},
+		{"http://localhost:8080", "anthropic"},
+		{"http://127.0.0.1:8080", "anthropic"},
+		{"", "anthropic"},
+	}
+
+	for _, tc := range tests {
+		result := providerFromBaseURL(tc.baseURL)
+		if result != tc.expected {
+			t.Errorf("providerFromBaseURL(%q) = %q; want %q", tc.baseURL, result, tc.expected)
+		}
 	}
 }
