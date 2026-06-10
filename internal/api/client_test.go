@@ -503,6 +503,136 @@ func TestClient_NonStreaming_SendsPromptCachingBetaHeader(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// AC2: Additional ANTHROPIC_BETAS env var headers
+// ---------------------------------------------------------------------------
+
+func TestClient_ANTHROPIC_BETAS_AdditionalHeaders(t *testing.T) {
+	var capturedBeta string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedBeta = r.Header.Get("anthropic-beta")
+		io.ReadAll(r.Body)
+		r.Body.Close()
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		resp := `{"id":"msg_1","type":"message","role":"assistant","content":[{"type":"text","text":"Hello"}],"model":"m","stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":10,"output_tokens":5}}`
+		w.Write([]byte(resp))
+	}))
+	defer server.Close()
+
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key-0000000000000000")
+	t.Setenv("ANTHROPIC_BETAS", "beta1, beta2,beta3") // test spaces around commas
+
+	client, _ := NewClientWithModel("m")
+	client.SetMaxTokensOverride(8192)
+	_, err := client.SendMessage(context.Background(), nil, nil, nil, "")
+	if err != nil {
+		t.Fatalf("SendMessage error = %v", err)
+	}
+
+	// Default beta should be present
+	if !strings.Contains(capturedBeta, "prompt-caching-2024-07-31") {
+		t.Errorf("expected default beta 'prompt-caching-2024-07-31' in header, got %q", capturedBeta)
+	}
+	// Additional betas should be present
+	if !strings.Contains(capturedBeta, "beta1") {
+		t.Errorf("expected 'beta1' in anthropic-beta header, got %q", capturedBeta)
+	}
+	if !strings.Contains(capturedBeta, "beta2") {
+		t.Errorf("expected 'beta2' in anthropic-beta header, got %q", capturedBeta)
+	}
+	if !strings.Contains(capturedBeta, "beta3") {
+		t.Errorf("expected 'beta3' in anthropic-beta header, got %q", capturedBeta)
+	}
+}
+
+func TestClient_ANTHROPIC_BETAS_Streaming(t *testing.T) {
+	var capturedBeta string
+	events := []string{
+		"event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_1\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"model\":\"m\",\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{\"input_tokens\":5,\"output_tokens\":1}}}\n\n",
+		"event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n",
+		"event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Hi\"}}\n\n",
+		"event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\n",
+		"event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null},\"usage\":{\"input_tokens\":5,\"output_tokens\":1}}\n\n",
+		"event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n",
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedBeta = r.Header.Get("anthropic-beta")
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.WriteHeader(http.StatusOK)
+		for _, e := range events {
+			w.Write([]byte(e))
+		}
+	}))
+	defer server.Close()
+
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key-0000000000000000")
+	t.Setenv("ANTHROPIC_BETAS", "prompt_eval_cache,some_other_beta")
+
+	client, _ := NewClientWithModel("m")
+	blocksChan, _ := client.SendMessageStream(context.Background(), nil, nil, nil, "", 5*time.Second, 5*time.Second, nil)
+	for range blocksChan {
+		// drain
+	}
+
+	// Default beta + custom betas should be present
+	if !strings.Contains(capturedBeta, "prompt-caching-2024-07-31") {
+		t.Errorf("expected default beta 'prompt-caching-2024-07-31' in header, got %q", capturedBeta)
+	}
+	if !strings.Contains(capturedBeta, "prompt_eval_cache") {
+		t.Errorf("expected 'prompt_eval_cache' in anthropic-beta header, got %q", capturedBeta)
+	}
+	if !strings.Contains(capturedBeta, "some_other_beta") {
+		t.Errorf("expected 'some_other_beta' in anthropic-beta header, got %q", capturedBeta)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// AC3: API_TIMEOUT_MS env var
+// ---------------------------------------------------------------------------
+
+func TestClient_API_TIMEOUT_MS_Creation(t *testing.T) {
+	// Test that client creation works with API_TIMEOUT_MS set
+	t.Setenv("API_TIMEOUT_MS", "300000") // 5 minutes
+
+	client, err := NewClientWithModel("")
+	if err != nil {
+		t.Fatalf("NewClientWithModel error = %v", err)
+	}
+	if client == nil {
+		t.Fatal("expected non-nil client")
+	}
+}
+
+func TestClient_API_TIMEOUT_MS_InvalidValue(t *testing.T) {
+	// Test that invalid values fall back to default (1 hour)
+	t.Setenv("API_TIMEOUT_MS", "invalid")
+
+	client, err := NewClientWithModel("")
+	if err != nil {
+		t.Fatalf("NewClientWithModel error = %v", err)
+	}
+	if client == nil {
+		t.Fatal("expected non-nil client")
+	}
+}
+
+func TestClient_API_TIMEOUT_MS_NegativeValue(t *testing.T) {
+	// Test that negative values fall back to default
+	t.Setenv("API_TIMEOUT_MS", "-1000")
+
+	client, err := NewClientWithModel("")
+	if err != nil {
+		t.Fatalf("NewClientWithModel error = %v", err)
+	}
+	if client == nil {
+		t.Fatal("expected non-nil client")
+	}
+}
+
+// ---------------------------------------------------------------------------
 // AC3: Beta header sent on the wire (streaming)
 // ---------------------------------------------------------------------------
 

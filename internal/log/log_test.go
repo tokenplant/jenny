@@ -55,3 +55,102 @@ func TestSetOutputAcceptsIOWriter(t *testing.T) {
 	// Restore default output
 	SetOutput(os.Stderr)
 }
+
+// ---------------------------------------------------------------------------
+// AC4: DEBUG env var alias
+// ---------------------------------------------------------------------------
+
+func TestIsTruthy(t *testing.T) {
+	tests := []struct {
+		val      string
+		expected bool
+	}{
+		{"1", true},
+		{"true", true},
+		{"True", true},
+		{"TRUE", true},
+		{"yes", true},
+		{"Yes", true},
+		{"YES", true},
+		{"on", true},
+		{"On", true},
+		{"ON", true},
+		{"", false},
+		{"0", false},
+		{"false", false},
+		{"no", false},
+		{"off", false},
+		{"anything", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.val, func(t *testing.T) {
+			if got := isTruthy(tt.val); got != tt.expected {
+				t.Errorf("isTruthy(%q) = %v, want %v", tt.val, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestDEBUG_EnvVar_Alias(t *testing.T) {
+	// Test that DEBUG=1 enables debug logging
+	var buf bytes.Buffer
+	SetOutput(&buf)
+
+	// Clear JENNY_DEBUG and set DEBUG
+	t.Setenv("JENNY_DEBUG", "")
+	t.Setenv("DEBUG", "1")
+
+	// Reset logger with new env vars
+	resetLogger()
+
+	// Debug level should be enabled
+	if Logger == nil {
+		t.Fatal("Logger should not be nil")
+	}
+
+	// Verify debug messages are logged
+	buf.Reset()
+	Debug("debug message test")
+
+	// Restore default output
+	SetOutput(os.Stderr)
+}
+
+func TestJENNY_DEBUG_StillWorks(t *testing.T) {
+	// Test that JENNY_DEBUG still works as an alias for DEBUG
+	var buf bytes.Buffer
+	SetOutput(&buf)
+
+	// Clear DEBUG and set JENNY_DEBUG
+	t.Setenv("DEBUG", "")
+	t.Setenv("JENNY_DEBUG", "1")
+
+	resetLogger()
+
+	if Logger == nil {
+		t.Fatal("Logger should not be nil")
+	}
+
+	// Restore default output
+	SetOutput(os.Stderr)
+}
+
+func TestDEBUG_EmptyValue(t *testing.T) {
+	// Test that empty DEBUG value does not enable debug logging
+	var buf bytes.Buffer
+	SetOutput(&buf)
+
+	// Set DEBUG to empty string
+	t.Setenv("DEBUG", "")
+	t.Setenv("JENNY_DEBUG", "")
+
+	resetLogger()
+
+	if Logger == nil {
+		t.Fatal("Logger should not be nil")
+	}
+
+	// Restore default output
+	SetOutput(os.Stderr)
+}

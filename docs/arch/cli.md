@@ -73,9 +73,16 @@ Help (`-h`) exits 0.
 |----------|-------------|
 | `ANTHROPIC_BASE_URL` | API endpoint |
 | `ANTHROPIC_AUTH_TOKEN` | Auth token — forwarded as `Authorization: Bearer <token>` |
+| `ANTHROPIC_API_KEY` | API key sent as `X-Api-Key` header. When set, takes precedence over `ANTHROPIC_AUTH_TOKEN`. |
+| `ANTHROPIC_BETAS` | Comma-separated list of additional `anthropic-beta` header values. |
 | `ANTHROPIC_MODEL` | Default model — overridden by `--model` flag when both are set |
+| `API_TIMEOUT_MS` | Timeout for API requests in milliseconds (default: 3600000, or 60 minutes). |
+| `DEBUG` | Enable debug logging. Values: `1`, `true`, `yes`, `on`. Alias for `JENNY_DEBUG`. |
+| `HTTP_PROXY` | HTTP proxy URL for API requests. |
+| `HTTPS_PROXY` | HTTPS proxy URL for API requests. |
 | `JENNY_DEBUG` | Enable debug slog (`1` = DEBUG) |
 | `JENNY_TRANSCRIPT_DIR` | Override transcript directory (default: `~/.jenny/transcripts`) |
+| `NO_PROXY` | Comma-separated list of domains to bypass proxy for. |
 
 ## Jenny Gaps vs Target Spec
 

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/anthropics/anthropic-sdk-go"
@@ -40,6 +42,39 @@ func NewClientWithModel(model string) (*Client, error) {
 		model = defaultModel
 	}
 
+	// Build client options: beta headers + request timeout
+	// Default prompt-caching beta header
+	defaultBeta := string(anthropic.AnthropicBetaPromptCaching2024_07_31)
+
+	// Additional beta headers from ANTHROPIC_BETAS env var
+	betas := os.Getenv("ANTHROPIC_BETAS")
+	if betas != "" {
+		// Combine all beta values into single header (comma-separated)
+		var allBetas []string
+		for beta := range strings.SplitSeq(betas, ",") {
+			beta = strings.TrimSpace(beta)
+			if beta != "" {
+				allBetas = append(allBetas, beta)
+			}
+		}
+		if len(allBetas) > 0 {
+			defaultBeta = defaultBeta + "," + strings.Join(allBetas, ",")
+		}
+	}
+
+	opts := []option.RequestOption{
+		option.WithHeader("anthropic-beta", defaultBeta),
+	}
+
+	// Request timeout from API_TIMEOUT_MS env var (default: 1 hour)
+	timeout := 1 * time.Hour
+	if timeoutMs := os.Getenv("API_TIMEOUT_MS"); timeoutMs != "" {
+		if ms, err := strconv.Atoi(timeoutMs); err == nil && ms > 0 {
+			timeout = time.Duration(ms) * time.Millisecond
+		}
+	}
+	opts = append(opts, option.WithRequestTimeout(timeout))
+
 	// SDK's NewClient already reads ANTHROPIC_BASE_URL and ANTHROPIC_AUTH_TOKEN.
 	//
 	// WithRequestTimeout(1h) bypasses the SDK's
@@ -50,10 +85,7 @@ func NewClientWithModel(model string) (*Client, error) {
 	// the streaming fallback path would never complete. The streaming
 	// path has no such guard; the request timeout only caps the
 	// per-attempt wall time.
-	client := anthropic.NewClient(
-		option.WithHeader("anthropic-beta", string(anthropic.AnthropicBetaPromptCaching2024_07_31)),
-		option.WithRequestTimeout(1*time.Hour),
-	)
+	client := anthropic.NewClient(opts...)
 
 	return &Client{
 		client:      client,

@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"strings"
 )
 
 // Logger is the package-level logger instance.
@@ -22,8 +23,8 @@ func resetLogger() {
 		Level: slog.LevelInfo,
 	}
 
-	// JENNY_DEBUG=1 enables debug-level logging
-	if os.Getenv("JENNY_DEBUG") != "" {
+	// DEBUG=1 or JENNY_DEBUG=1 enables debug-level logging
+	if isTruthy(os.Getenv("DEBUG")) || isTruthy(os.Getenv("JENNY_DEBUG")) {
 		opts.Level = slog.LevelDebug
 	}
 
@@ -33,6 +34,17 @@ func resetLogger() {
 	}
 
 	Logger = slog.New(slog.NewTextHandler(w, opts))
+}
+
+// isTruthy returns true if the given string represents a truthy value.
+// Matches Claude Code's behavior: "1", "true", "yes", "on" (case-insensitive).
+func isTruthy(val string) bool {
+	switch strings.ToLower(val) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
 }
 
 // SetOutput redirects log output to the specified writer.
