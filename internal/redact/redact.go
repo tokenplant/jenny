@@ -39,6 +39,9 @@ var additionalPatterns = []secretPattern{
 	// Only matches sequences with known credential prefixes to avoid false positives
 	// Matches: password=, secret=, token=, key=, api_key=, apikey=, auth=, bearer , sk-, ghp_, AKIA
 	{pattern: regexp.MustCompile(`(?i)\b((?:password|secret|token|key|api[_-]?key|auth|bearer)[=:]\s*[A-Za-z0-9/+=]{20,})\b`)},
+	// SSH private keys - PEM format with BEGIN/END markers
+	// Matches OPENSSH, RSA, DSA, EC, and other PEM private key formats
+	{pattern: regexp.MustCompile(`-----BEGIN[ A-Z]*PRIVATE KEY-----[\s\S]*?-----END[ A-Z]*PRIVATE KEY-----`)},
 }
 
 // SecretRedactor detects and redacts secrets in tool results.
