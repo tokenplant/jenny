@@ -97,6 +97,8 @@ func (r *SecretRedactor) replaceWithPattern(content string, pattern *regexp.Rege
 
 	result := content
 	// Process matches in reverse order to preserve positions
+	// Precondition fix: len(match) must be >= 2 to access match[0] and match[1]
+	// (match[0]=start, match[1]=end of full match; groups start at match[2])
 	for i := len(matches) - 1; i >= 0; i-- {
 		match := matches[i]
 		if len(match) < 2 {

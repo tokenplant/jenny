@@ -599,7 +599,7 @@ func TestLoadPluginMCPServers_Empty(t *testing.T) {
 }
 
 // TestPluginMCPServersWiring tests plugin MCP server loading and CLI override.
-// CLI --mcp-config overrides plugin MCP configs (first-seen wins across plugins).
+// CLI --mcp-config overrides plugin MCP configs (CLI wins on collision).
 func TestPluginMCPServersWiring(t *testing.T) {
 	tmpDir := t.TempDir()
 
