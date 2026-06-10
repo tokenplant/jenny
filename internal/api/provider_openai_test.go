@@ -602,8 +602,21 @@ func TestOpenAIProvider_StreamingReasoningContent(t *testing.T) {
 		nil,
 	)
 
-	for range blocksChan {
-		// drain channel
+	// Collect channel blocks - must see incremental thinking events (AC6)
+	var channelBlocks []StreamContentBlock
+	for block := range blocksChan {
+		channelBlocks = append(channelBlocks, block)
+	}
+
+	// Verify at least one thinking block was emitted incrementally during streaming (AC6)
+	var thinkingEmitted bool
+	for _, b := range channelBlocks {
+		if b.Block.Type == "thinking" {
+			thinkingEmitted = true
+		}
+	}
+	if !thinkingEmitted {
+		t.Error("expected thinking block to be emitted during streaming (AC6)")
 	}
 
 	// Final blocks should include thinking then text
