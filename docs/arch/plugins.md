@@ -4,7 +4,7 @@ slug: plugins
 priority: P3
 status: done
 spec: complete
-code: partial
+code: done
 package: internal/plugin
 gaps:
   - Lifecycle hooks execution

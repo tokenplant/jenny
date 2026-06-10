@@ -35,9 +35,6 @@ var additionalPatterns = []secretPattern{
 	{pattern: regexp.MustCompile(`\b(npm_[A-Za-z0-9]{30,})\b`)},
 	// PyPI token - pypi_ prefix
 	{pattern: regexp.MustCompile(`\b(pypi_[A-Za-z0-9_]{50,})\b`)},
-	// High-entropy string detection - requires specific secret prefixes
-	// Only matches sequences with known credential prefixes to avoid false positives
-	// Matches: password=, secret=, token=, key=, api_key=, apikey=, auth=, bearer
 	// SSH private keys - PEM format with BEGIN/END markers
 	// Matches OPENSSH, RSA, DSA, EC, and other PEM private key formats
 	{pattern: regexp.MustCompile(`-----BEGIN[ A-Z]*PRIVATE KEY-----[\s\S]*?-----END[ A-Z]*PRIVATE KEY-----`)},
