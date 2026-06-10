@@ -2,25 +2,20 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/anthropics/anthropic-sdk-go"
-	"github.com/anthropics/anthropic-sdk-go/option"
 )
 
-// Client wraps the Anthropic SDK client.
-// All fields are aligned per gofmt conventions.
+// Client wraps an API provider.
 type Client struct {
-	client            anthropic.Client
-	model             string
-	maxTokensOverride int // Override for max_tokens; 0 means use default
+	provider          Provider
+	maxTokensOverride int
 	retryConfig       RetryConfig
-	isBackground      bool
 }
 
 // defaultModel is the default model used when ANTHROPIC_MODEL is not set.
@@ -45,69 +40,124 @@ func NewClient() (*Client, error) {
 }
 
 // NewClientWithModel creates a new API client with an optional model override.
-// If model is empty, reads from ANTHROPIC_MODEL environment variable.
+// If model is empty, reads from environment variables.
+// OpenAI provider takes precedence if OPENAI_BASE_URL is set.
 func NewClientWithModel(model string) (*Client, error) {
-	// Read ANTHROPIC_MODEL from environment (SDK handles BASE_URL and AUTH_TOKEN automatically)
-	if model == "" {
-		model = os.Getenv("ANTHROPIC_MODEL")
-	}
-	if model == "" {
-		model = defaultModel
-	}
-
-	// Build client options: beta headers + request timeout
-	opts := []option.RequestOption{}
-
-	// Default prompt-caching beta header
-	opts = append(opts, option.WithHeader("anthropic-beta", string(anthropic.AnthropicBetaPromptCaching2024_07_31)))
-
-	// Additional beta headers from ANTHROPIC_BETAS env var - send each as separate header
-	betas := os.Getenv("ANTHROPIC_BETAS")
-	if betas != "" {
-		for beta := range strings.SplitSeq(betas, ",") {
-			beta = strings.TrimSpace(beta)
-			if beta != "" {
-				opts = append(opts, option.WithHeaderAdd("anthropic-beta", beta))
-			}
+	// Check for OpenAI provider first (AC5: OPENAI_* takes precedence)
+	if os.Getenv("OPENAI_BASE_URL") != "" {
+		provider, err := newOpenAIProvider(model)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create OpenAI provider: %w", err)
 		}
+		return &Client{
+			provider:    provider,
+			retryConfig: DefaultRetryConfig(),
+		}, nil
 	}
 
-	// Request timeout from API_TIMEOUT_MS env var (default: 1 hour)
-	timeout := ResolveTimeout(os.Getenv("API_TIMEOUT_MS"))
-	opts = append(opts, option.WithRequestTimeout(timeout))
-
-	// SDK's NewClient already reads ANTHROPIC_BASE_URL and ANTHROPIC_AUTH_TOKEN.
-	//
-	// WithRequestTimeout(1h) bypasses the SDK's
-	// CalculateNonStreamingTimeout 10-minute guard, which would otherwise
-	// reject any non-streaming request whose expected wall-time
-	// (maxTokens * 1h / 128000) exceeds 10 minutes. For our universal
-	// 64000-token budget that is ~30 minutes, so without this override
-	// the streaming fallback path would never complete. The streaming
-	// path has no such guard; the request timeout only caps the
-	// per-attempt wall time.
-	client := anthropic.NewClient(opts...)
-
+	// Use Anthropic provider
+	provider, err := newAnthropicProvider(model)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Anthropic provider: %w", err)
+	}
 	return &Client{
-		client:      client,
-		model:       model,
+		provider:    provider,
 		retryConfig: DefaultRetryConfig(),
 	}, nil
 }
 
 // SetModel sets the model to use.
 func (c *Client) SetModel(model string) {
-	c.model = model
+	if setter, ok := c.provider.(interface{ SetModel(string) }); ok {
+		setter.SetModel(model)
+	}
 }
 
 // GetModel returns the model being used.
 func (c *Client) GetModel() string {
-	return c.model
+	if modeler, ok := c.provider.(interface{ GetModel() string }); ok {
+		return modeler.GetModel()
+	}
+	return ""
 }
 
 // SetMaxTokensOverride sets the max_tokens override for API requests.
 func (c *Client) SetMaxTokensOverride(maxTokens int) {
 	c.maxTokensOverride = maxTokens
+	if setter, ok := c.provider.(interface{ SetMaxTokensOverride(int) }); ok {
+		setter.SetMaxTokensOverride(maxTokens)
+	}
+}
+
+// SendMessage sends a message to the API and returns the response.
+func (c *Client) SendMessage(ctx context.Context, messages []Message, tools []ToolParam, toolResults []ToolResult, systemPrompt string) (*Response, error) {
+	return c.provider.SendMessage(ctx, messages, tools, toolResults, systemPrompt)
+}
+
+// SendMessageStream sends a streaming message to the API.
+func (c *Client) SendMessageStream(
+	ctx context.Context,
+	messages []Message,
+	tools []ToolParam,
+	toolResults []ToolResult,
+	systemPrompt string,
+	idleTimeout time.Duration,
+	fallbackTimeout time.Duration,
+	onStreamingFallback func(context.Context) (*Response, error),
+) (<-chan StreamContentBlock, *StreamResult) {
+	blocksChan := make(chan StreamContentBlock, 10)
+	result := &StreamResult{}
+
+	go func() {
+		// Delegate to provider's streaming method
+		contentChan, providerResult := c.provider.SendMessageStream(ctx, messages, tools, toolResults, systemPrompt)
+
+		// Buffer blocks until we know if stream completed
+		var pendingBlocks []ContentBlock
+		for block := range contentChan {
+			pendingBlocks = append(pendingBlocks, block)
+		}
+
+		// Copy result
+		result.Blocks = providerResult.Blocks
+		result.StopReason = providerResult.StopReason
+		result.Usage = providerResult.Usage
+		result.Error = providerResult.Error
+		result.Model = providerResult.Model
+		result.MaxTokensErr = providerResult.MaxTokensErr
+		result.ContextRejected = providerResult.ContextRejected
+
+		// Check if stream was incomplete (no message_stop event)
+		streamIncomplete := !providerResult.StreamComplete
+		isIdleTimeout := strings.Contains(result.Error, "idle timeout")
+
+		// Handle fallback if needed
+		shouldFallback := streamIncomplete || isIdleTimeout || len(result.Blocks) == 0
+		if shouldFallback && onStreamingFallback != nil {
+			fallbackCtx, fallbackCancel := context.WithTimeout(context.Background(), fallbackTimeout)
+			defer fallbackCancel()
+			resp, err := onStreamingFallback(fallbackCtx)
+			if err != nil {
+				result.Error = err.Error()
+				// Close the channel on fallback error
+				close(blocksChan)
+				return
+			}
+			result.Blocks = resp.Content
+			result.StopReason = resp.StopReason
+			result.Usage = resp.Usage
+			// Don't send pending blocks when fallback was used
+		} else {
+			// Stream completed normally - send pending blocks
+			for _, block := range pendingBlocks {
+				blocksChan <- StreamContentBlock{Index: 0, Block: block}
+			}
+		}
+
+		close(blocksChan)
+	}()
+
+	return blocksChan, result
 }
 
 // deduplicateToolResults removes duplicate tool_result blocks by ToolUseID.

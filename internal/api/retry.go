@@ -212,5 +212,7 @@ func (c *Client) SetRetryConfig(cfg RetryConfig) {
 
 // SetBackground sets whether this client is used for background classifier calls.
 func (c *Client) SetBackground(isBackground bool) {
-	c.isBackground = isBackground
+	if bg, ok := c.provider.(interface{ SetBackground(bool) }); ok {
+		bg.SetBackground(isBackground)
+	}
 }
