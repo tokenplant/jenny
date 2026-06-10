@@ -493,7 +493,7 @@ func TestReadTool_SkipPermissions(t *testing.T) {
 	tmpDir := t.TempDir()
 	tool := NewReadTool(false, nil)
 
-	// Test that /etc/hostname is blocked without skipPermissions
+	// Test that /etc/passwd is blocked without skipPermissions
 	result, err := tool.Execute(context.Background(), map[string]any{
 		"file_path": "/etc/passwd",
 	}, tmpDir)
@@ -554,7 +554,7 @@ func TestReadTool_ScratchpadAccess(t *testing.T) {
 		t.Errorf("expected scratchpad content, got: %s", result.Content)
 	}
 
-	// Test that /etc/hostname still fails without skipPermissions
+	// Test that /etc/passwd still fails without skipPermissions
 	result, err = tool.Execute(context.Background(), map[string]any{
 		"file_path": "/etc/passwd",
 	}, tmpDir)
@@ -562,6 +562,6 @@ func TestReadTool_ScratchpadAccess(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !result.IsError {
-		t.Error("expected /etc/hostname to be blocked without skipPermissions")
+		t.Error("expected /etc/passwd to be blocked without skipPermissions")
 	}
 }
