@@ -333,6 +333,8 @@ func (t *EditTool) executeGlobal(filePath, oldString, newString string, replaceA
 }
 
 // executeScoped performs a line-by-line streaming edit restricted to a line range.
+// Only the scoped line range is buffered in memory; before and after sections
+// stream directly through to a temp file for O(1) memory usage.
 func (t *EditTool) executeScoped(filePath, oldString, newString string, replaceAll bool, startLine, endLine, numExpected int, entry *ReadFileEntry) (*ToolResult, error) {
 	// Open the file for streaming
 	file, err := os.Open(filePath)
@@ -358,41 +360,53 @@ func (t *EditTool) executeScoped(filePath, oldString, newString string, replaceA
 	tmpPath := tmpFile.Name()
 	defer os.Remove(tmpPath) // Clean up on any error path
 
-	scanner := bufio.NewScanner(file)
-	scanner.Buffer(make([]byte, 0, 1024*1024), 1024*1024) // 1MB buffer for large lines
+	// Use bufio.Reader with ReadBytes for line-level granularity
+	// that preserves delimiter info for streaming before/after sections.
+	reader := bufio.NewReader(file)
 
-	// Phase 1: Stream lines, categorize into before/scoped/after
-	lineNum := 0
-	var beforeLines []string // Lines before startLine
-	var scopedLines []string // Lines within [startLine, endLine]
-	var afterLines []string  // Lines after endLine
-
-	for scanner.Scan() {
-		lineNum++
-		line := scanner.Text()
-
-		if lineNum < startLine {
-			beforeLines = append(beforeLines, line)
-		} else if lineNum <= endLine {
-			// Within scoped range
-			scopedLines = append(scopedLines, line)
-		} else {
-			// After scoped range
-			afterLines = append(afterLines, line)
+	// Phase 1: Stream before-range lines directly to tmpFile (no buffering)
+	for lineNum := 1; lineNum < startLine; lineNum++ {
+		lineBytes, readErr := reader.ReadBytes('\n')
+		if len(lineBytes) == 0 {
+			// EOF before startLine — the range is past end of file
+			tmpFile.Close()
+			return &ToolResult{
+				Content: fmt.Sprintf("File has only %d lines, but scoped range starts at line %d", lineNum-1, startLine),
+				IsError: true,
+			}, nil
+		}
+		if _, writeErr := tmpFile.Write(normalizeLineEndingsBytes(lineBytes)); writeErr != nil {
+			tmpFile.Close()
+			return &ToolResult{
+				Content: fmt.Sprintf("Failed to write to temp file: %v", writeErr),
+				IsError: true,
+			}, nil
+		}
+		if readErr != nil {
+			break // EOF after last line read
 		}
 	}
 
-	if err := scanner.Err(); err != nil {
-		tmpFile.Close()
-		return &ToolResult{
-			Content: fmt.Sprintf("Error reading file: %v", err),
-			IsError: true,
-		}, nil
+	// Phase 2: Buffer scoped-range lines (bounded by [startLine, endLine])
+	var scopedLines []string // Lines within [startLine, endLine], trailing \n stripped
+	scopedEndsWithNewline := false // Whether the last scoped line had a \n delimiter
+
+	for lineNum := startLine; lineNum <= endLine; lineNum++ {
+		lineBytes, readErr := reader.ReadBytes('\n')
+		if len(lineBytes) == 0 {
+			break // EOF before endLine — use whatever was read
+		}
+		// Store normalized line (CRLF→LF) with trailing \n stripped
+		normalized := normalizeLineEndingsBytes(lineBytes)
+		scopedEndsWithNewline = len(normalized) > 0 && normalized[len(normalized)-1] == '\n'
+		scopedLines = append(scopedLines, trimNewline(string(normalized)))
+		if readErr != nil {
+			break
+		}
 	}
 
-	// Phase 2: Apply replacement on the scoped content
+	// Build scoped content for matching (joined by \n, no trailing \n)
 	scopedContent := strings.Join(scopedLines, "\n")
-	scopedContent = normalizeLineEndings(scopedContent)
 
 	// Count matches
 	count := strings.Count(scopedContent, oldString)
@@ -424,8 +438,7 @@ func (t *EditTool) executeScoped(filePath, oldString, newString string, replaceA
 	}
 
 	// Check for binary content in scoped lines
-	scopedJoined := strings.Join(scopedLines, "\n")
-	if isBinary(scopedJoined) {
+	if isBinary(scopedContent) {
 		tmpFile.Close()
 		return &ToolResult{
 			Content: "Cannot edit binary files",
@@ -441,60 +454,44 @@ func (t *EditTool) executeScoped(filePath, oldString, newString string, replaceA
 		modifiedScoped = strings.Replace(scopedContent, oldString, newString, 1)
 	}
 
-	// Phase 3: Write content in correct order: before-range, modified, after-range
-	// Write before-range lines
-	for _, line := range beforeLines {
-		if _, err := fmt.Fprintln(tmpFile, line); err != nil {
-			tmpFile.Close()
-			return &ToolResult{
-				Content: fmt.Sprintf("Failed to write to temp file: %v", err),
-				IsError: true,
-			}, nil
-		}
-	}
-
 	// Write modified scoped content
-	if _, err := fmt.Fprint(tmpFile, modifiedScoped); err != nil {
+	if _, writeErr := tmpFile.WriteString(modifiedScoped); writeErr != nil {
 		tmpFile.Close()
 		return &ToolResult{
-			Content: fmt.Sprintf("Failed to write modified content: %v", err),
+			Content: fmt.Sprintf("Failed to write modified content: %v", writeErr),
 			IsError: true,
 		}, nil
 	}
 
-	// Ensure there's a newline before after-lines, or at end if original had trailing newline
-	if len(afterLines) > 0 {
-		// Need newline to separate from first after-line
-		if !strings.HasSuffix(modifiedScoped, "\n") {
-			if _, err := fmt.Fprintln(tmpFile); err != nil {
-				tmpFile.Close()
-				return &ToolResult{
-					Content: fmt.Sprintf("Failed to write separator newline: %v", err),
-					IsError: true,
-				}, nil
-			}
-		}
-	} else if len(scopedLines) > 0 && scopedLines[len(scopedLines)-1] == "" {
-		// No after-lines: ensure trailing newline if original had one
-		if !strings.HasSuffix(modifiedScoped, "\n") {
-			if _, err := fmt.Fprintln(tmpFile); err != nil {
-				tmpFile.Close()
-				return &ToolResult{
-					Content: fmt.Sprintf("Failed to write trailing newline: %v", err),
-					IsError: true,
-				}, nil
-			}
+	// Add newline separator between scoped content and after-lines if the
+	// original file had a newline after the last scoped line.
+	if scopedEndsWithNewline && !strings.HasSuffix(modifiedScoped, "\n") {
+		if _, writeErr := tmpFile.WriteString("\n"); writeErr != nil {
+			tmpFile.Close()
+			return &ToolResult{
+				Content: fmt.Sprintf("Failed to write newline separator: %v", writeErr),
+				IsError: true,
+			}, nil
 		}
 	}
 
-	// Write after-range lines
-	for _, line := range afterLines {
-		if _, err := fmt.Fprintln(tmpFile, line); err != nil {
-			tmpFile.Close()
-			return &ToolResult{
-				Content: fmt.Sprintf("Failed to write to temp file: %v", err),
-				IsError: true,
-			}, nil
+	// Phase 3: Stream after-range lines directly to tmpFile (no buffering).
+	// Normalize line endings to maintain consistency (before-lines and scoped
+	// content are already LF-normalized).
+	for {
+		lineBytes, readErr := reader.ReadBytes('\n')
+		if len(lineBytes) > 0 {
+			normalized := normalizeLineEndingsBytes(lineBytes)
+			if _, writeErr := tmpFile.Write(normalized); writeErr != nil {
+				tmpFile.Close()
+				return &ToolResult{
+					Content: fmt.Sprintf("Failed to write remaining file content: %v", writeErr),
+					IsError: true,
+				}, nil
+			}
+		}
+		if readErr != nil {
+			break
 		}
 	}
 
@@ -517,6 +514,16 @@ func (t *EditTool) executeScoped(filePath, oldString, newString string, replaceA
 	}
 
 	return t.finalizeEdit(filePath, newContentStr, entry)
+}
+
+// normalizeLineEndingsBytes converts CRLF to LF in a byte slice.
+func normalizeLineEndingsBytes(data []byte) []byte {
+	return []byte(normalizeLineEndings(string(data)))
+}
+
+// trimNewline removes a single trailing \n if present.
+func trimNewline(s string) string {
+	return strings.TrimSuffix(s, "\n")
 }
 
 // handleMissingFile implements the "old_string == '' on missing file" create-semantic.

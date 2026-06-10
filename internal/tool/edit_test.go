@@ -2,6 +2,7 @@ package tool
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -980,5 +981,114 @@ func TestEditTool_EndLineBeforeStartLine(t *testing.T) {
 	}
 	if !strings.Contains(result.Content, "end_line") || !strings.Contains(result.Content, "must be >= start_line") {
 		t.Errorf("unexpected error: %s", result.Content)
+	}
+}
+
+// TestEditTool_ScopedEditDiffOutput verifies that scoped edit produces proper unified diff.
+func TestEditTool_ScopedEditDiffOutput(t *testing.T) {
+	tmpDir := t.TempDir()
+	readCache := NewReadFileCache()
+	readTool := NewReadTool(false, readCache)
+	editTool := NewEditTool(readCache)
+
+	testFile := filepath.Join(tmpDir, "scoped_diff.txt")
+	err := os.WriteFile(testFile, []byte("line A\nline B\nline C\nline D\nline E\n"), 0644)
+	if err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	_, err = readTool.Execute(context.Background(), map[string]any{
+		"file_path": testFile,
+	}, tmpDir)
+	if err != nil {
+		t.Fatalf("unexpected error during read: %v", err)
+	}
+
+	result, err := editTool.Execute(context.Background(), map[string]any{
+		"file_path":  testFile,
+		"old_string": "line C",
+		"new_string": "modified line C",
+		"start_line": float64(3),
+		"end_line":   float64(3),
+	}, tmpDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("scoped edit failed: %s", result.Content)
+	}
+
+	diff := result.Content
+	if !strings.Contains(diff, "---") || !strings.Contains(diff, "+++") {
+		t.Errorf("expected diff format with --- and +++, got: %s", diff)
+	}
+	if !strings.Contains(diff, "-line C") {
+		t.Errorf("expected diff to show removed '-line C', got: %s", diff)
+	}
+	if !strings.Contains(diff, "+modified line C") {
+		t.Errorf("expected diff to show added '+modified line C', got: %s", diff)
+	}
+}
+
+// TestEditTool_ScopedEditLargeAfterSection verifies correctness when after-section
+// is significantly larger than the scoped range (streaming path).
+func TestEditTool_ScopedEditLargeAfterSection(t *testing.T) {
+	tmpDir := t.TempDir()
+	readCache := NewReadFileCache()
+	readTool := NewReadTool(false, readCache)
+	editTool := NewEditTool(readCache)
+
+	var content strings.Builder
+	for i := 1; i <= 3; i++ {
+		fmt.Fprintf(&content, "before line %d\n", i)
+	}
+	content.WriteString("target line A\ntarget line B\n")
+	for i := 1; i <= 1000; i++ {
+		fmt.Fprintf(&content, "after line %d\n", i)
+	}
+
+	testFile := filepath.Join(tmpDir, "large_after.txt")
+	err := os.WriteFile(testFile, []byte(content.String()), 0644)
+	if err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	_, err = readTool.Execute(context.Background(), map[string]any{
+		"file_path": testFile,
+	}, tmpDir)
+	if err != nil {
+		t.Fatalf("unexpected error during read: %v", err)
+	}
+
+	result, err := editTool.Execute(context.Background(), map[string]any{
+		"file_path":  testFile,
+		"old_string": "target line A",
+		"new_string": "modified line A",
+		"start_line": float64(4),
+		"end_line":   float64(5),
+	}, tmpDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("scoped edit failed: %s", result.Content)
+	}
+
+	data, err := os.ReadFile(testFile)
+	if err != nil {
+		t.Fatalf("failed to read file: %v", err)
+	}
+	lines := strings.Split(string(data), "\n")
+	if len(lines) < 1006 {
+		t.Fatalf("expected at least 1006 lines, got %d", len(lines))
+	}
+	if !strings.Contains(lines[1004], "after line 1000") {
+		t.Errorf("last after-line not intact. Got line 1004: %q", lines[1004])
+	}
+	if !strings.Contains(lines[0], "before line 1") {
+		t.Errorf("first line not preserved: %q", lines[0])
+	}
+	if !strings.Contains(lines[3], "modified line A") {
+		t.Errorf("line 4 not modified: %q", lines[3])
 	}
 }
