@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/ipy/jenny/internal/constants"
 )
 
 // WriteTool writes content to files with read-before-write validation.
@@ -102,9 +104,9 @@ func (t *WriteTool) Execute(ctx context.Context, input map[string]any, cwd strin
 			}
 		}
 		if !allowed {
-			// Path not in allowlist - apply cwd gate
+			// Path not in allowlist - apply cwd gate with scratchpad exception
 			var pathErr error
-			filePath, pathErr = PathInWorkingDir(filePath, cwd)
+			filePath, pathErr = PathInWorkingDir(filePath, cwd, constants.ScratchpadDir())
 			if pathErr != nil {
 				return &ToolResult{
 					Content: pathErr.Error(),
@@ -113,9 +115,9 @@ func (t *WriteTool) Execute(ctx context.Context, input map[string]any, cwd strin
 			}
 		}
 	} else {
-		// No allowedPaths restriction - apply cwd gate
+		// No allowedPaths restriction - apply cwd gate with scratchpad exception
 		var pathErr error
-		filePath, pathErr = PathInWorkingDir(filePath, cwd)
+		filePath, pathErr = PathInWorkingDir(filePath, cwd, constants.ScratchpadDir())
 		if pathErr != nil {
 			return &ToolResult{
 				Content: pathErr.Error(),
@@ -200,8 +202,8 @@ func (t *WriteTool) Execute(ctx context.Context, input map[string]any, cwd strin
 	}, nil
 }
 
-// PathInWorkingDir checks if a path is within the working directory.
-func PathInWorkingDir(filePath, cwd string) (string, error) {
+// PathInWorkingDir checks if a path is within the working directory or scratchpadDir.
+func PathInWorkingDir(filePath, cwd string, scratchpadDirs ...string) (string, error) {
 	absCwd, err := filepath.Abs(cwd)
 	if err != nil {
 		absCwd = cwd
@@ -213,8 +215,16 @@ func PathInWorkingDir(filePath, cwd string) (string, error) {
 
 	absFilePath = filepath.Clean(absFilePath)
 	absCwd = filepath.Clean(absCwd)
+	sep := string(filepath.Separator)
 
-	if !strings.HasPrefix(absFilePath+string(filepath.Separator), absCwd+string(filepath.Separator)) && absFilePath != absCwd {
+	// Check if path is within scratchpad directories
+	for _, scratchpadDir := range scratchpadDirs {
+		if scratchpadDir != "" && strings.HasPrefix(absFilePath+sep, filepath.Clean(scratchpadDir)+sep) {
+			return absFilePath, nil
+		}
+	}
+
+	if !strings.HasPrefix(absFilePath+sep, absCwd+sep) && absFilePath != absCwd {
 		return "", fmt.Errorf("access to '%s' is not allowed: path would traverse outside working directory", filePath)
 	}
 

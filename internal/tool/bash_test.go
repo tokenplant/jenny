@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/ipy/jenny/internal/constants"
 )
 
 func TestBashTool_Execute(t *testing.T) {
@@ -502,5 +504,83 @@ func TestBashTool_SedSimulation(t *testing.T) {
 	}
 	if !strings.Contains(string(data), "goodbye world") {
 		t.Errorf("expected 'goodbye world' in file, got: %s", string(data))
+	}
+}
+
+// TestBashTool_SkipPermissions tests AC2: cwd bypass with skipPermissions flag
+func TestBashTool_SkipPermissions(t *testing.T) {
+	tool := NewBashTool(false)
+	cwd := "/tmp"
+
+	// Test that /etc/hostname is blocked without skipPermissions
+	result, err := tool.Execute(context.Background(), map[string]any{
+		"command": "cat /etc/passwd",
+	}, cwd)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.IsError {
+		t.Error("expected traversal error without skipPermissions")
+	}
+
+	// Test that access is allowed WITH skipPermissions
+	toolWithSkip := NewBashTool(true)
+	result, err = toolWithSkip.Execute(context.Background(), map[string]any{
+		"command": "cat /etc/passwd",
+	}, cwd)
+	if err != nil {
+		t.Fatalf("unexpected error with skipPermissions: %v", err)
+	}
+	if result.IsError {
+		t.Errorf("expected success with skipPermissions, got error: %s", result.Content)
+	}
+}
+
+// TestBashTool_ScratchpadAccess tests AC6: scratchpad is always accessible
+func TestBashTool_ScratchpadAccess(t *testing.T) {
+	tmpDir := t.TempDir()
+	tool := NewBashTool(false)
+
+	// Override JennyHomeDir to use tmpDir
+	originalFunc := constants.JennyHomeDirFunc
+	constants.JennyHomeDirFunc = func() string { return tmpDir }
+	defer func() { constants.JennyHomeDirFunc = originalFunc }()
+
+	// Create scratchpad directory
+	scratchpadDir := constants.ScratchpadDir()
+	if err := os.MkdirAll(scratchpadDir, 0755); err != nil {
+		t.Fatalf("failed to create scratchpad dir: %v", err)
+	}
+
+	// Create a test file in scratchpad
+	testFile := filepath.Join(scratchpadDir, "test.txt")
+	err := os.WriteFile(testFile, []byte("scratchpad content\n"), 0644)
+	if err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	// Test that scratchpad file is accessible WITHOUT skipPermissions
+	result, err := tool.Execute(context.Background(), map[string]any{
+		"command": "cat " + testFile,
+	}, tmpDir)
+	if err != nil {
+		t.Fatalf("unexpected error reading scratchpad: %v", err)
+	}
+	if result.IsError {
+		t.Errorf("scratchpad file should be accessible, got error: %s", result.Content)
+	}
+	if !strings.Contains(result.Content, "scratchpad content") {
+		t.Errorf("expected scratchpad content, got: %s", result.Content)
+	}
+
+	// Test that /etc/hostname still fails without skipPermissions
+	result, err = tool.Execute(context.Background(), map[string]any{
+		"command": "cat /etc/passwd",
+	}, tmpDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.IsError {
+		t.Error("expected /etc/hostname to be blocked without skipPermissions")
 	}
 }

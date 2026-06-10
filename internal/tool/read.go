@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/ipy/jenny/internal/constants"
 )
 
 const (
@@ -123,13 +125,16 @@ func (t *ReadTool) Execute(ctx context.Context, input map[string]any, cwd string
 	// Normalize cwd for comparison
 	absCwdClean := filepath.Clean(absCwd)
 
-	// The file path must be within or equal to cwd
+	// The file path must be within or equal to cwd, or scratchpad
 	// Use proper path boundary check with separator
-	if !strings.HasPrefix(absFilePathClean+string(filepath.Separator), absCwdClean+string(filepath.Separator)) && absFilePathClean != absCwdClean {
-		return &ToolResult{
-			Content: fmt.Sprintf("Error: Access to '%s' is not allowed. File path would traverse outside working directory.", filePath),
-			IsError: true,
-		}, nil
+	sep := string(filepath.Separator)
+	if !t.skipPermissions && !strings.HasPrefix(absFilePathClean+sep, constants.ScratchpadDir()+sep) {
+		if !strings.HasPrefix(absFilePathClean+sep, absCwdClean+sep) && absFilePathClean != absCwdClean {
+			return &ToolResult{
+				Content: fmt.Sprintf("Error: Access to '%s' is not allowed. File path would traverse outside working directory.", filePath),
+				IsError: true,
+			}, nil
+		}
 	}
 
 	// Trigger skill activation based on path access (after path validation, before file I/O)

@@ -136,8 +136,8 @@ func isPathWithinCwd(path string, cwd string) bool {
 	return strings.HasPrefix(absPath, cwdAbs+string(filepath.Separator))
 }
 
-// validateCommandPaths checks if all paths in the command are within cwd
-func validateCommandPaths(command string, cwd string) bool {
+// validateCommandPaths checks if all paths in the command are within cwd or scratchpadDir
+func validateCommandPaths(command string, cwd string, scratchpadDir string) bool {
 	tokens := strings.Fields(command)
 
 	if len(tokens) > 0 {
@@ -153,7 +153,7 @@ func validateCommandPaths(command string, cwd string) bool {
 		}
 
 		if filepath.IsAbs(token) || strings.HasPrefix(token, "./") || strings.HasPrefix(token, "../") || strings.Contains(token, "/") {
-			if !isPathWithinCwd(token, cwd) {
+			if !isPathWithinCwd(token, cwd) && (scratchpadDir == "" || !isPathWithinCwd(token, scratchpadDir)) {
 				return false
 			}
 		}

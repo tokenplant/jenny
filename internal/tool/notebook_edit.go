@@ -10,6 +10,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/ipy/jenny/internal/constants"
 )
 
 // NotebookEditTool modifies Jupyter .ipynb files.
@@ -97,7 +99,7 @@ func (t *NotebookEditTool) Execute(ctx context.Context, input map[string]any, cw
 
 	// Gate: ensure path is within working directory
 	var pathErr error
-	notebookPath, pathErr = PathInWorkingDir(notebookPath, cwd)
+	notebookPath, pathErr = PathInWorkingDir(notebookPath, cwd, constants.ScratchpadDir())
 	if pathErr != nil {
 		return &ToolResult{
 			Content: pathErr.Error(),

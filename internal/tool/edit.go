@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/ipy/jenny/internal/constants"
 )
 
 // EditTool performs exact string replacement in files.
@@ -117,9 +119,9 @@ func (t *EditTool) Execute(ctx context.Context, input map[string]any, cwd string
 			}
 		}
 		if !allowed {
-			// Path not in allowlist - apply cwd gate
+			// Path not in allowlist - apply cwd gate with scratchpad exception
 			var pathErr error
-			filePath, pathErr = PathInWorkingDir(resolvedPath, cwd)
+			filePath, pathErr = PathInWorkingDir(resolvedPath, cwd, constants.ScratchpadDir())
 			if pathErr != nil {
 				return &ToolResult{
 					Content: pathErr.Error(),
@@ -131,9 +133,9 @@ func (t *EditTool) Execute(ctx context.Context, input map[string]any, cwd string
 			filePath = resolvedPath
 		}
 	} else {
-		// No allowedPaths restriction - apply cwd gate
+		// No allowedPaths restriction - apply cwd gate with scratchpad exception
 		var pathErr error
-		filePath, pathErr = PathInWorkingDir(resolvedPath, cwd)
+		filePath, pathErr = PathInWorkingDir(resolvedPath, cwd, constants.ScratchpadDir())
 		if pathErr != nil {
 			return &ToolResult{
 				Content: pathErr.Error(),

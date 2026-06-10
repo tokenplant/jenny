@@ -35,6 +35,12 @@ func DefaultTranscriptDir() string {
 	return filepath.Join(JennyHomeDir(), "transcripts")
 }
 
+// ScratchpadDir returns the scratchpad directory path (~/.jenny/scratchpad).
+// The directory is created lazily by tools on first access.
+func ScratchpadDir() string {
+	return filepath.Join(JennyHomeDir(), "scratchpad")
+}
+
 // MaxTombstoneRewriteBytes is the maximum file size (50 MiB) before a tombstone
 // rewrite or full rewrite operation is refused to prevent OOM.
 const MaxTombstoneRewriteBytes = 50 * 1024 * 1024

@@ -149,9 +149,10 @@ func (t *BashTool) Execute(ctx context.Context, input map[string]any, cwd string
 		}, nil
 	}
 
-	// Check if all paths in the command are within the working directory
+	// Check if all paths in the command are within the working directory or scratchpad
 	// Skip validation for cd commands since they change directory state, not file content
-	if !isCdCommand(command) && !validateCommandPaths(command, t.commandCwd) {
+	// Also skip if skipPermissions is true (dangerous bypass)
+	if !t.skipPermissions && !isCdCommand(command) && !validateCommandPaths(command, t.commandCwd, constants.ScratchpadDir()) {
 		return &ToolResult{
 			Content: fmt.Sprintf("Error: Command '%s' is not allowed. Access outside working directory is prohibited.", command),
 			IsError: true,
