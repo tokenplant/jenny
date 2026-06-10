@@ -134,6 +134,7 @@ func resolveGitDir(startPath string) (string, error) {
 	return normalized, nil
 }
 
+// evictResolveCacheIfNeeded removes the oldest entry when cache exceeds max.
 func evictResolveCacheIfNeeded() {
 	if len(resolveGitDirOrder) > maxCacheEntries {
 		oldest := resolveGitDirOrder[0]
