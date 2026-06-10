@@ -23,32 +23,20 @@ import (
 	"github.com/ipy/jenny/internal/tool"
 )
 
-// testSseLine formats a line as SSE format for testing.
-func testSseLine(event, data string) string {
-	return fmt.Sprintf("event: %s\ndata: %s\n\n", event, data)
-}
-
-// makeTestMockStreamServer creates a mock SSE server for testing.
-func makeTestMockStreamServer(events []string) *httptest.Server {
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		io.ReadAll(r.Body)
-		r.Body.Close()
-
-		w.Header().Set("Content-Type", "text/event-stream")
-		w.Header().Set("Cache-Control", "no-cache")
-		w.WriteHeader(http.StatusOK)
-
-		flusher, ok := w.(http.Flusher)
-		if !ok {
-			return
-		}
-		flusher.Flush()
-
-		for _, e := range events {
-			io.WriteString(w, e)
-			flusher.Flush()
-		}
-	}))
+// mockStreamServer delegates to makeMockStreamServerWithEvents in testhelpers
+// when events are provided, or uses default events when called without events.
+func mockStreamServer(t *testing.T, events ...[]string) *httptest.Server {
+	if len(events) > 0 {
+		return makeMockStreamServerWithEvents(t, events[0])
+	}
+	return makeMockStreamServerWithEvents(t, []string{
+		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test-model","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
+		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
+		sseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello from stream"}}`),
+		sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
+		sseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":2}}`),
+		sseLine("message_stop", `{"type":"message_stop"}`),
+	})
 }
 
 // TestAC1_PersistBeforeAPI verifies that the user message is persisted to
@@ -63,13 +51,13 @@ func TestAC1_PersistBeforeAPI(t *testing.T) {
 	sessionID := "sess_ac1_test"
 	prompt := "test prompt for persist ordering"
 
-	server := makeTestMockStreamServer([]string{
-		testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
-		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
-		testSseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}`),
-		testSseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
-		testSseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":2}}`),
-		testSseLine("message_stop", `{"type":"message_stop"}`),
+	server := mockStreamServer(t, []string{
+		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
+		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
+		sseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}`),
+		sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
+		sseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":2}}`),
+		sseLine("message_stop", `{"type":"message_stop"}`),
 	})
 	defer server.Close()
 
@@ -122,12 +110,12 @@ func TestAC2_MaxTurnsEnforcement(t *testing.T) {
 	sessionID := "sess_ac2_test"
 
 	// Server that returns tool_use to keep the loop going
-	server := makeTestMockStreamServer([]string{
-		testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
-		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tool_1","name":"Bash","input":{}}}`),
-		testSseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
-		testSseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"tool_use","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":1}}`),
-		testSseLine("message_stop", `{"type":"message_stop"}`),
+	server := mockStreamServer(t, []string{
+		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
+		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tool_1","name":"Bash","input":{}}}`),
+		sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
+		sseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"tool_use","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":1}}`),
+		sseLine("message_stop", `{"type":"message_stop"}`),
 	})
 	defer server.Close()
 
@@ -169,13 +157,13 @@ func TestAC5_TurnCounterResets(t *testing.T) {
 
 	sessionID := "sess_ac5_test"
 
-	server := makeTestMockStreamServer([]string{
-		testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
-		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
-		testSseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}`),
-		testSseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
-		testSseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":2}}`),
-		testSseLine("message_stop", `{"type":"message_stop"}`),
+	server := mockStreamServer(t, []string{
+		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
+		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
+		sseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}`),
+		sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
+		sseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":2}}`),
+		sseLine("message_stop", `{"type":"message_stop"}`),
 	})
 	defer server.Close()
 
@@ -225,13 +213,13 @@ func TestAC3_CostStateFlushed(t *testing.T) {
 
 	sessionID := "sess_ac3_test"
 
-	server := makeTestMockStreamServer([]string{
-		testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test-model","stop_reason":null,"usage":{"input_tokens":100,"output_tokens":50}}}`),
-		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
-		testSseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}`),
-		testSseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
-		testSseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":100,"output_tokens":50}}`),
-		testSseLine("message_stop", `{"type":"message_stop"}`),
+	server := mockStreamServer(t, []string{
+		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test-model","stop_reason":null,"usage":{"input_tokens":100,"output_tokens":50}}}`),
+		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
+		sseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}`),
+		sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
+		sseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":100,"output_tokens":50}}`),
+		sseLine("message_stop", `{"type":"message_stop"}`),
 	})
 	defer server.Close()
 
@@ -314,13 +302,13 @@ func TestQueryEngine_SetMaxTurns(t *testing.T) {
 // TestAC1_SubmitMessageWithoutSessionManager verifies that SubmitMessage
 // works correctly when no session manager is configured (AC1 edge case).
 func TestAC1_SubmitMessageWithoutSessionManager(t *testing.T) {
-	server := makeTestMockStreamServer([]string{
-		testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
-		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
-		testSseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}`),
-		testSseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
-		testSseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":2}}`),
-		testSseLine("message_stop", `{"type":"message_stop"}`),
+	server := mockStreamServer(t, []string{
+		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
+		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
+		sseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}`),
+		sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
+		sseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":2}}`),
+		sseLine("message_stop", `{"type":"message_stop"}`),
 	})
 	defer server.Close()
 
@@ -365,13 +353,13 @@ func TestAC1_ResumeDoesNotDuplicateUserMessage(t *testing.T) {
 		t.Fatalf("AppendEntry error: %v", err)
 	}
 
-	server := makeTestMockStreamServer([]string{
-		testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
-		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
-		testSseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}`),
-		testSseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
-		testSseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":2}}`),
-		testSseLine("message_stop", `{"type":"message_stop"}`),
+	server := mockStreamServer(t, []string{
+		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
+		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
+		sseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}`),
+		sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
+		sseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":2}}`),
+		sseLine("message_stop", `{"type":"message_stop"}`),
 	})
 	defer server.Close()
 
@@ -416,13 +404,13 @@ func TestAC1_ResumeDoesNotDuplicateUserMessage(t *testing.T) {
 // TestAC2_MaxTurnsZeroIsUnlimited verifies that default maxTurns=0
 // allows the engine to complete normally without artificial limits.
 func TestAC2_MaxTurnsZeroIsUnlimited(t *testing.T) {
-	server := makeTestMockStreamServer([]string{
-		testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
-		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
-		testSseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}`),
-		testSseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
-		testSseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":2}}`),
-		testSseLine("message_stop", `{"type":"message_stop"}`),
+	server := mockStreamServer(t, []string{
+		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
+		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
+		sseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}`),
+		sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
+		sseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":2}}`),
+		sseLine("message_stop", `{"type":"message_stop"}`),
 	})
 	defer server.Close()
 
@@ -461,12 +449,12 @@ func TestAC3_CostFlushOnMaxTurnsError(t *testing.T) {
 	sessionID := "sess_flush_on_err"
 
 	// Server that returns tool_use to keep the loop going, hitting maxTurns
-	server := makeTestMockStreamServer([]string{
-		testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test-model","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
-		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tool_1","name":"Bash","input":{}}}`),
-		testSseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
-		testSseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"tool_use","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":1}}`),
-		testSseLine("message_stop", `{"type":"message_stop"}`),
+	server := mockStreamServer(t, []string{
+		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test-model","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
+		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tool_1","name":"Bash","input":{}}}`),
+		sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
+		sseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"tool_use","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":1}}`),
+		sseLine("message_stop", `{"type":"message_stop"}`),
 	})
 	defer server.Close()
 
@@ -543,13 +531,13 @@ func TestAC4_RunStreamReturnsTextContent(t *testing.T) {
 // correct number of API iterations after SubmitMessage completes, and
 // that the counter resets on subsequent calls.
 func TestAC5_TurnCounterIsAccurate(t *testing.T) {
-	server := makeTestMockStreamServer([]string{
-		testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
-		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
-		testSseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}`),
-		testSseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
-		testSseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":2}}`),
-		testSseLine("message_stop", `{"type":"message_stop"}`),
+	server := mockStreamServer(t, []string{
+		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
+		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
+		sseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}`),
+		sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
+		sseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":2}}`),
+		sseLine("message_stop", `{"type":"message_stop"}`),
 	})
 	defer server.Close()
 
@@ -613,12 +601,12 @@ func TestAC3_StreamJsonCallsSetOutput(t *testing.T) {
 	}
 
 	// Create a mock server that returns a simple response
-	server := makeTestMockStreamServer([]string{
-		testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
-		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":"Hello"}}`),
-		testSseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
-		testSseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":2}}`),
-		testSseLine("message_stop", `{"type":"message_stop"}`),
+	server := mockStreamServer(t, []string{
+		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
+		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":"Hello"}}`),
+		sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
+		sseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":2}}`),
+		sseLine("message_stop", `{"type":"message_stop"}`),
 	})
 	defer server.Close()
 
@@ -853,13 +841,13 @@ func TestAC1_MemdirCreatedAtPromptBuild(t *testing.T) {
 
 	// Mock server that returns a single end_turn response so SubmitMessage
 	// completes without making a real API call.
-	server := makeTestMockStreamServer([]string{
-		testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
-		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
-		testSseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"ok"}}`),
-		testSseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
-		testSseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":2}}`),
-		testSseLine("message_stop", `{"type":"message_stop"}`),
+	server := mockStreamServer(t, []string{
+		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
+		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
+		sseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"ok"}}`),
+		sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
+		sseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":2}}`),
+		sseLine("message_stop", `{"type":"message_stop"}`),
 	})
 	defer server.Close()
 
@@ -1025,13 +1013,13 @@ func TestAC3_NotEmittedError(t *testing.T) {
 
 	sessionID := "test-session-not-emitted"
 
-	server := makeTestMockStreamServer([]string{
+	server := mockStreamServer(t, []string{
 		// Assistant responds with just text, no StructuredOutput call
-		testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
-		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":"Hello"}}`),
-		testSseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
-		testSseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":2}}`),
-		testSseLine("message_stop", `{"type":"message_stop"}`),
+		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
+		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":"Hello"}}`),
+		sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
+		sseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":2}}`),
+		sseLine("message_stop", `{"type":"message_stop"}`),
 	})
 	defer server.Close()
 
@@ -1076,21 +1064,21 @@ func TestAC3_ResultExtraction(t *testing.T) {
 	sessionID := "test-session-result-extraction"
 	structuredJSON := `{"result":"success","data":[1,2,3]}`
 
-	server := makeTestMockStreamServer([]string{
+	server := mockStreamServer(t, []string{
 		// Assistant calls StructuredOutput tool
-		testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
-		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
-		testSseLine("content_block_start", `{"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"tool_1","name":"StructuredOutput"}}`),
-		testSseLine("content_block_delta", `{"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"value\":{\"result\":\"success\",\"data\":[1,2,3]},\"format\":\"json\"}"}}`),
-		testSseLine("content_block_stop", `{"type":"content_block_stop","index":1}`),
-		testSseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":2}}`),
-		testSseLine("message_stop", `{"type":"message_stop"}`),
+		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
+		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
+		sseLine("content_block_start", `{"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"tool_1","name":"StructuredOutput"}}`),
+		sseLine("content_block_delta", `{"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"value\":{\"result\":\"success\",\"data\":[1,2,3]},\"format\":\"json\"}"}}`),
+		sseLine("content_block_stop", `{"type":"content_block_stop","index":1}`),
+		sseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":2}}`),
+		sseLine("message_stop", `{"type":"message_stop"}`),
 		// Tool result for StructuredOutput - returns the validated JSON
-		testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_2","type":"message","role":"user","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
-		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_result","id":"tool_1","content":"{\"result\":\"success\",\"data\":[1,2,3]}","is_error":false}}`),
-		testSseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
-		testSseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":2}}`),
-		testSseLine("message_stop", `{"type":"message_stop"}`),
+		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_2","type":"message","role":"user","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
+		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_result","id":"tool_1","content":"{\"result\":\"success\",\"data\":[1,2,3]}","is_error":false}}`),
+		sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
+		sseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":2}}`),
+		sseLine("message_stop", `{"type":"message_stop"}`),
 	})
 	defer server.Close()
 
@@ -1149,12 +1137,12 @@ func TestToolCallEvents(t *testing.T) {
 	sessionID := "sess_tool_call_test"
 
 	// Server that returns a single tool_use then end_turn
-	server := makeTestMockStreamServer([]string{
-		testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
-		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tool_1","name":"Bash","input":{}}}`),
-		testSseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
-		testSseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":1}}`),
-		testSseLine("message_stop", `{"type":"message_stop"}`),
+	server := mockStreamServer(t, []string{
+		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
+		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tool_1","name":"Bash","input":{}}}`),
+		sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
+		sseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":1}}`),
+		sseLine("message_stop", `{"type":"message_stop"}`),
 	})
 	defer server.Close()
 
@@ -1265,21 +1253,21 @@ func TestInterruptSyntheticToolResults_AC5(t *testing.T) {
 	// Tools are categorised "readonly" (Read/Grep) so they run in parallel,
 	// which lets one finish before cancellation reaches the blocker.
 	turn1Events := []string{
-		testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
-		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tool_fast","name":"Read","input":{}}}`),
-		testSseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
-		testSseLine("content_block_start", `{"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"tool_slow","name":"Grep","input":{}}}`),
-		testSseLine("content_block_stop", `{"type":"content_block_stop","index":1}`),
-		testSseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"tool_use","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":1}}`),
-		testSseLine("message_stop", `{"type":"message_stop"}`),
+		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
+		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tool_fast","name":"Read","input":{}}}`),
+		sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
+		sseLine("content_block_start", `{"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"tool_slow","name":"Grep","input":{}}}`),
+		sseLine("content_block_stop", `{"type":"content_block_stop","index":1}`),
+		sseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"tool_use","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":1}}`),
+		sseLine("message_stop", `{"type":"message_stop"}`),
 	}
 	turn2Events := []string{
-		testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_2","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
-		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
-		testSseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"done"}}`),
-		testSseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
-		testSseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":1}}`),
-		testSseLine("message_stop", `{"type":"message_stop"}`),
+		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_2","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
+		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
+		sseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"done"}}`),
+		sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
+		sseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":1}}`),
+		sseLine("message_stop", `{"type":"message_stop"}`),
 	}
 
 	var apiCallCount atomic.Int32
@@ -1419,22 +1407,22 @@ func TestEngine_InterruptedField_TriggersSynthetic(t *testing.T) {
 
 	// Multi-turn mock: first call returns tool_use (loop continues), second returns end_turn
 	turn1Events := []string{
-		testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
-		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tool_1","name":"Read","input":{}}}`),
-		testSseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
-		testSseLine("content_block_start", `{"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"tool_2","name":"Bash","input":{}}}`),
-		testSseLine("content_block_stop", `{"type":"content_block_stop","index":1}`),
-		testSseLine("content_block_start", `{"type":"content_block_start","index":2,"content_block":{"type":"tool_use","id":"tool_3","name":"Bash","input":{}}}`),
-		testSseLine("content_block_stop", `{"type":"content_block_stop","index":2}`),
-		testSseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"tool_use","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":1}}`),
-		testSseLine("message_stop", `{"type":"message_stop"}`),
+		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
+		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tool_1","name":"Read","input":{}}}`),
+		sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
+		sseLine("content_block_start", `{"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"tool_2","name":"Bash","input":{}}}`),
+		sseLine("content_block_stop", `{"type":"content_block_stop","index":1}`),
+		sseLine("content_block_start", `{"type":"content_block_start","index":2,"content_block":{"type":"tool_use","id":"tool_3","name":"Bash","input":{}}}`),
+		sseLine("content_block_stop", `{"type":"content_block_stop","index":2}`),
+		sseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"tool_use","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":1}}`),
+		sseLine("message_stop", `{"type":"message_stop"}`),
 	}
 	turn2Events := []string{
-		testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_2","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
-		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":"done"}}`),
-		testSseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
-		testSseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":1}}`),
-		testSseLine("message_stop", `{"type":"message_stop"}`),
+		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_2","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
+		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":"done"}}`),
+		sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
+		sseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":1}}`),
+		sseLine("message_stop", `{"type":"message_stop"}`),
 	}
 
 	var apiCallCount atomic.Int32
@@ -1536,12 +1524,12 @@ func TestEngine_BenignContent_NotInterpretedAsInterrupt(t *testing.T) {
 	sessionID := "sess_benign_content_test"
 
 	// Server returns a single tool_use then end_turn
-	server := makeTestMockStreamServer([]string{
-		testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
-		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tool_1","name":"Bash","input":{}}}`),
-		testSseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
-		testSseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":1}}`),
-		testSseLine("message_stop", `{"type":"message_stop"}`),
+	server := mockStreamServer(t, []string{
+		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
+		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tool_1","name":"Bash","input":{}}}`),
+		sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
+		sseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":1}}`),
+		sseLine("message_stop", `{"type":"message_stop"}`),
 	})
 	defer server.Close()
 
@@ -1658,12 +1646,12 @@ func TestToolCallEvents_Negative(t *testing.T) {
 	sessionID := "sess_tool_call_negative"
 
 	// Server that returns a single tool_use then end_turn
-	server := makeTestMockStreamServer([]string{
-		testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
-		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tool_1","name":"Bash","input":{}}}`),
-		testSseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
-		testSseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":1}}`),
-		testSseLine("message_stop", `{"type":"message_stop"}`),
+	server := mockStreamServer(t, []string{
+		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
+		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tool_1","name":"Bash","input":{}}}`),
+		sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
+		sseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":1}}`),
+		sseLine("message_stop", `{"type":"message_stop"}`),
 	})
 	defer server.Close()
 
@@ -1727,34 +1715,34 @@ func stopReasonTestServer(t *testing.T, calls *atomic.Int32, stopReason string, 
 	t.Helper()
 	turn1Events := func() []string {
 		events := []string{
-			testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test-model","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
+			sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test-model","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
 		}
 		idx := 0
 		if textContent != "" {
-			events = append(events, testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`))
-			events = append(events, testSseLine("content_block_delta", fmt.Sprintf(`{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"%s"}}`, textContent)))
-			events = append(events, testSseLine("content_block_stop", `{"type":"content_block_stop","index":0}`))
+			events = append(events, sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`))
+			events = append(events, sseLine("content_block_delta", fmt.Sprintf(`{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"%s"}}`, textContent)))
+			events = append(events, sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`))
 			idx = 1
 		}
 		if toolUseBlock != "" {
-			events = append(events, testSseLine("content_block_start", fmt.Sprintf(`{"type":"content_block_start","index":%d,"content_block":{"type":"tool_use","id":"tool_1","name":"%s","input":{}}}`, idx, toolUseBlock)))
-			events = append(events, testSseLine("content_block_stop", fmt.Sprintf(`{"type":"content_block_stop","index":%d}`, idx)))
+			events = append(events, sseLine("content_block_start", fmt.Sprintf(`{"type":"content_block_start","index":%d,"content_block":{"type":"tool_use","id":"tool_1","name":"%s","input":{}}}`, idx, toolUseBlock)))
+			events = append(events, sseLine("content_block_stop", fmt.Sprintf(`{"type":"content_block_stop","index":%d}`, idx)))
 		}
 		stopReasonJSON := "null"
 		if stopReason != "" {
 			stopReasonJSON = fmt.Sprintf(`"%s"`, stopReason)
 		}
-		events = append(events, testSseLine("message_delta", fmt.Sprintf(`{"type":"message_delta","delta":{"stop_reason":%s,"stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":2}}`, stopReasonJSON)))
-		events = append(events, testSseLine("message_stop", `{"type":"message_stop"}`))
+		events = append(events, sseLine("message_delta", fmt.Sprintf(`{"type":"message_delta","delta":{"stop_reason":%s,"stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":2}}`, stopReasonJSON)))
+		events = append(events, sseLine("message_stop", `{"type":"message_stop"}`))
 		return events
 	}
 	turn2Events := []string{
-		testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_2","type":"message","role":"assistant","content":[],"model":"test-model","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
-		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
-		testSseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"done"}}`),
-		testSseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
-		testSseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":2}}`),
-		testSseLine("message_stop", `{"type":"message_stop"}`),
+		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_2","type":"message","role":"assistant","content":[],"model":"test-model","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
+		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
+		sseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"done"}}`),
+		sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
+		sseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":2}}`),
+		sseLine("message_stop", `{"type":"message_stop"}`),
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1848,13 +1836,13 @@ func TestRunLoop_NullStopReason_TerminatesAsEndTurn(t *testing.T) {
 		calls.Add(1)
 
 		events := []string{
-			testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test-model","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
-			testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
-			testSseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"world"}}`),
-			testSseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
+			sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test-model","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
+			sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
+			sseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"world"}}`),
+			sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
 			// stop_reason field omitted entirely
-			testSseLine("message_delta", `{"type":"message_delta","delta":{"stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":2}}`),
-			testSseLine("message_stop", `{"type":"message_stop"}`),
+			sseLine("message_delta", `{"type":"message_delta","delta":{"stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":2}}`),
+			sseLine("message_stop", `{"type":"message_stop"}`),
 		}
 		for _, e := range events {
 			io.WriteString(w, e)
@@ -2139,13 +2127,13 @@ func TestEngine_OutputCapHit_EmitsStructuredError(t *testing.T) {
 
 	// Server returns stop_reason: max_tokens with output_tokens = 8192 (hits model max)
 	// deepseek-v4-flash has max_output_tokens = 8192
-	server := makeTestMockStreamServer([]string{
-		testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"deepseek-v4-flash","stop_reason":null,"usage":{"input_tokens":70000,"output_tokens":0}}}`),
-		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
-		testSseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Partial response"}}`),
-		testSseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
-		testSseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"max_tokens","stop_sequence":null},"usage":{"input_tokens":70000,"output_tokens":8192}}`),
-		testSseLine("message_stop", `{"type":"message_stop"}`),
+	server := mockStreamServer(t, []string{
+		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"deepseek-v4-flash","stop_reason":null,"usage":{"input_tokens":70000,"output_tokens":0}}}`),
+		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
+		sseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Partial response"}}`),
+		sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
+		sseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"max_tokens","stop_sequence":null},"usage":{"input_tokens":70000,"output_tokens":8192}}`),
+		sseLine("message_stop", `{"type":"message_stop"}`),
 	})
 	defer server.Close()
 
@@ -2307,13 +2295,13 @@ func TestEngine_AutoCompactFiresAboveThreshold(t *testing.T) {
 	sessionID := "sess_autocompact_threshold_test"
 
 	// Server that responds to summary calls (compaction) - track if it's called
-	summaryServer := makeTestMockStreamServer([]string{
-		testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":100,"output_tokens":50}}}`),
-		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
-		testSseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Summarized"}}`),
-		testSseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
-		testSseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":100,"output_tokens":50}}`),
-		testSseLine("message_stop", `{"type":"message_stop"}`),
+	summaryServer := mockStreamServer(t, []string{
+		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":100,"output_tokens":50}}}`),
+		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
+		sseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Summarized"}}`),
+		sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
+		sseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":100,"output_tokens":50}}`),
+		sseLine("message_stop", `{"type":"message_stop"}`),
 	})
 	defer summaryServer.Close()
 

@@ -58,22 +58,22 @@ func findAssistantContentBlock(t *testing.T, stdoutOutput string) []map[string]a
 // thinking block (with optional signature) followed by a single text block.
 func thinkingTextToolEvents(thinking, signature, text string) []string {
 	events := []string{
-		testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
+		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
 		// Thinking block (index 0)
-		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}`),
-		testSseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"`+thinking+`"}}`),
+		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}`),
+		sseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"`+thinking+`"}}`),
 	}
 	if signature != "" {
-		events = append(events, testSseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"`+signature+`"}}`))
+		events = append(events, sseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"`+signature+`"}}`))
 	}
 	events = append(events,
-		testSseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
+		sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
 		// Text block (index 1)
-		testSseLine("content_block_start", `{"type":"content_block_start","index":1,"content_block":{"type":"text","text":""}}`),
-		testSseLine("content_block_delta", `{"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"`+text+`"}}`),
-		testSseLine("content_block_stop", `{"type":"content_block_stop","index":1}`),
-		testSseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":2}}`),
-		testSseLine("message_stop", `{"type":"message_stop"}`),
+		sseLine("content_block_start", `{"type":"content_block_start","index":1,"content_block":{"type":"text","text":""}}`),
+		sseLine("content_block_delta", `{"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"`+text+`"}}`),
+		sseLine("content_block_stop", `{"type":"content_block_stop","index":1}`),
+		sseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":2}}`),
+		sseLine("message_stop", `{"type":"message_stop"}`),
 	)
 	return events
 }
@@ -82,25 +82,25 @@ func thinkingTextToolEvents(thinking, signature, text string) []string {
 // thinking block, a text block, and a single tool_use block, in that order.
 func thinkingTextToolUseEvents(thinking, signature, text, toolID, toolName string) []string {
 	events := []string{
-		testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
+		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
 		// Thinking block (index 0)
-		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}`),
-		testSseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"`+thinking+`"}}`),
+		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}`),
+		sseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"`+thinking+`"}}`),
 	}
 	if signature != "" {
-		events = append(events, testSseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"`+signature+`"}}`))
+		events = append(events, sseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"`+signature+`"}}`))
 	}
 	events = append(events,
-		testSseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
+		sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
 		// Text block (index 1)
-		testSseLine("content_block_start", `{"type":"content_block_start","index":1,"content_block":{"type":"text","text":""}}`),
-		testSseLine("content_block_delta", `{"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"`+text+`"}}`),
-		testSseLine("content_block_stop", `{"type":"content_block_stop","index":1}`),
+		sseLine("content_block_start", `{"type":"content_block_start","index":1,"content_block":{"type":"text","text":""}}`),
+		sseLine("content_block_delta", `{"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"`+text+`"}}`),
+		sseLine("content_block_stop", `{"type":"content_block_stop","index":1}`),
 		// Tool use block (index 2)
-		testSseLine("content_block_start", `{"type":"content_block_start","index":2,"content_block":{"type":"tool_use","id":"`+toolID+`","name":"`+toolName+`","input":{}}}`),
-		testSseLine("content_block_stop", `{"type":"content_block_stop","index":2}`),
-		testSseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":2}}`),
-		testSseLine("message_stop", `{"type":"message_stop"}`),
+		sseLine("content_block_start", `{"type":"content_block_start","index":2,"content_block":{"type":"tool_use","id":"`+toolID+`","name":"`+toolName+`","input":{}}}`),
+		sseLine("content_block_stop", `{"type":"content_block_stop","index":2}`),
+		sseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":2}}`),
+		sseLine("message_stop", `{"type":"message_stop"}`),
 	)
 	return events
 }
@@ -112,7 +112,7 @@ func TestAC1_ThinkingBlockEmittedSeparately(t *testing.T) {
 	thinking := "Let me think about this..."
 	text := "Here is my answer."
 
-	server := makeTestMockStreamServer(thinkingTextToolEvents(thinking, "sig-abc", text))
+	server := mockStreamServer(t, thinkingTextToolEvents(thinking, "sig-abc", text))
 	defer server.Close()
 
 	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
@@ -175,7 +175,7 @@ func TestAC1_ThinkingBlockEmittedSeparately(t *testing.T) {
 // `"signature": "<value>"`.
 func TestAC2_ThinkingSignatureIncluded(t *testing.T) {
 	signature := "sig-included-123"
-	server := makeTestMockStreamServer(thinkingTextToolEvents("thought", signature, "answer"))
+	server := mockStreamServer(t, thinkingTextToolEvents("thought", signature, "answer"))
 	defer server.Close()
 
 	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
@@ -216,7 +216,7 @@ func TestAC2_ThinkingSignatureIncluded(t *testing.T) {
 // when the API returns no signature on a thinking block, the emitted envelope
 // must NOT include a "signature" key on the thinking block (omitempty).
 func TestAC2_ThinkingSignatureOmittedWhenEmpty(t *testing.T) {
-	server := makeTestMockStreamServer(thinkingTextToolEvents("thought", "", "answer"))
+	server := mockStreamServer(t, thinkingTextToolEvents("thought", "", "answer"))
 	defer server.Close()
 
 	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
@@ -254,7 +254,7 @@ func TestAC2_ThinkingSignatureOmittedWhenEmpty(t *testing.T) {
 // contains thinking, text, and tool_use, the assistant envelope's content
 // array lists them in that order.
 func TestAC3_ContentOrdering_ThinkingTextToolUse(t *testing.T) {
-	server := makeTestMockStreamServer(thinkingTextToolUseEvents("reasoning", "sig", "summary", "tool_1", "Bash"))
+	server := mockStreamServer(t, thinkingTextToolUseEvents("reasoning", "sig", "summary", "tool_1", "Bash"))
 	defer server.Close()
 
 	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
@@ -300,13 +300,13 @@ func TestAC3_ContentOrdering_ThinkingTextToolUse(t *testing.T) {
 // TestAC4_TextOnlyUnaffected verifies AC4: a text-only response emits
 // exactly one content block of type "text" with no regression.
 func TestAC4_TextOnlyUnaffected(t *testing.T) {
-	server := makeTestMockStreamServer([]string{
-		testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
-		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
-		testSseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"just text"}}`),
-		testSseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
-		testSseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":2}}`),
-		testSseLine("message_stop", `{"type":"message_stop"}`),
+	server := mockStreamServer(t, []string{
+		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
+		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
+		sseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"just text"}}`),
+		sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
+		sseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":2}}`),
+		sseLine("message_stop", `{"type":"message_stop"}`),
 	})
 	defer server.Close()
 
@@ -350,12 +350,12 @@ func TestAC4_TextOnlyUnaffected(t *testing.T) {
 // TestAC5_ToolUseOnlyNoEmptyText verifies AC5: a tool_use-only response
 // emits only tool_use blocks, with no spurious empty text block.
 func TestAC5_ToolUseOnlyNoEmptyText(t *testing.T) {
-	server := makeTestMockStreamServer([]string{
-		testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
-		testSseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tool_1","name":"Bash","input":{}}}`),
-		testSseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
-		testSseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":1}}`),
-		testSseLine("message_stop", `{"type":"message_stop"}`),
+	server := mockStreamServer(t, []string{
+		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
+		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tool_1","name":"Bash","input":{}}}`),
+		sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
+		sseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":1}}`),
+		sseLine("message_stop", `{"type":"message_stop"}`),
 	})
 	defer server.Close()
 
@@ -431,7 +431,7 @@ func TestAC6_FallbackPathThinkingBlock(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 			flusher.Flush()
 			// Send message_start only, then truncate the connection.
-			io.WriteString(w, testSseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`))
+			io.WriteString(w, sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`))
 			flusher.Flush()
 			if hj, ok := w.(http.Hijacker); ok {
 				conn, _, _ := hj.Hijack()

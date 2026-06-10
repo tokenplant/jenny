@@ -18,6 +18,30 @@ var captureStdout = testutil.CaptureStdout
 // sseLine delegates to testutil.SSELine for SSE event formatting.
 var sseLine = testutil.SSELine
 
+// makeMockStreamServerWithEvents creates a mock SSE server with custom events.
+func makeMockStreamServerWithEvents(t *testing.T, events []string) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.ReadAll(r.Body)
+		r.Body.Close()
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.WriteHeader(http.StatusOK)
+
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			return
+		}
+		flusher.Flush()
+
+		for _, e := range events {
+			io.WriteString(w, e)
+			flusher.Flush()
+		}
+	}))
+}
+
 func makeMockStreamServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
