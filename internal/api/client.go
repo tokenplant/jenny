@@ -123,8 +123,8 @@ func (c *Client) SendMessageStream(
 		var pendingBlocks []StreamContentBlock // Buffer content blocks until we know stream is complete
 
 		for block := range contentChan {
-			if block.Type == "stream_event" {
-				// Always pass through stream_event blocks for IncludePartial consumers
+			if block.Type == "stream_event" || block.Type == "thinking_delta" {
+				// Always pass through metadata events for consumers
 				blocksChan <- block
 			} else if !shouldFallback {
 				// Stream directly when no fallback will be used

@@ -466,3 +466,230 @@ func TestOpenAIProvider_ChatStreamWithToolCalls(t *testing.T) {
 		t.Error("expected tool_use block in result")
 	}
 }
+
+// ---------------------------------------------------------------------------
+// TestOpenAIProvider_ReasoningContent tests AC10: non-streaming thinking block
+// ---------------------------------------------------------------------------
+
+func TestOpenAIProvider_ReasoningContent(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		resp := `{
+			"id": "chatcmpl-123",
+			"object": "chat.completion",
+			"created": 1677652288,
+			"model": "o3-mini",
+			"choices": [{
+				"index": 0,
+				"message": {
+					"role": "assistant",
+					"reasoning_content": "Let me think about this carefully.",
+					"content": "The answer is 42."
+				},
+				"finish_reason": "stop"
+			}],
+			"usage": {"prompt_tokens": 10, "completion_tokens": 20}
+		}`
+		w.Write([]byte(resp))
+	}))
+	defer server.Close()
+
+	t.Setenv("OPENAI_BASE_URL", server.URL)
+	t.Setenv("OPENAI_API_KEY", "test-key")
+	t.Setenv("OPENAI_DEFAULT_MODEL", "o3-mini")
+
+	client, _ := NewClientWithModel("")
+	resp, err := client.SendMessage(context.Background(), []Message{{Role: "user", Content: "What is the answer?"}}, nil, nil, "")
+	if err != nil {
+		t.Fatalf("SendMessage error = %v", err)
+	}
+
+	if len(resp.Content) != 2 {
+		t.Fatalf("expected 2 content blocks, got %d", len(resp.Content))
+	}
+	if resp.Content[0].Type != "thinking" {
+		t.Errorf("expected first block type 'thinking', got %q", resp.Content[0].Type)
+	}
+	if resp.Content[0].Thinking != "Let me think about this carefully." {
+		t.Errorf("expected thinking text, got %q", resp.Content[0].Thinking)
+	}
+	if resp.Content[1].Type != "text" {
+		t.Errorf("expected second block type 'text', got %q", resp.Content[1].Type)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// TestOpenAIProvider_CachedTokensNonStreaming tests AC11: non-streaming cache
+// ---------------------------------------------------------------------------
+
+func TestOpenAIProvider_CachedTokensNonStreaming(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		resp := `{
+			"id": "chatcmpl-123",
+			"object": "chat.completion",
+			"created": 1677652288,
+			"model": "gpt-5.4-nano",
+			"choices": [{
+				"index": 0,
+				"message": {"role": "assistant", "content": "Hello"},
+				"finish_reason": "stop"
+			}],
+			"usage": {
+				"prompt_tokens": 200,
+				"completion_tokens": 10,
+				"prompt_tokens_details": {"cached_tokens": 150}
+			}
+		}`
+		w.Write([]byte(resp))
+	}))
+	defer server.Close()
+
+	t.Setenv("OPENAI_BASE_URL", server.URL)
+	t.Setenv("OPENAI_API_KEY", "test-key")
+	t.Setenv("OPENAI_DEFAULT_MODEL", "gpt-5.4-nano")
+
+	client, _ := NewClientWithModel("")
+	resp, err := client.SendMessage(context.Background(), []Message{{Role: "user", Content: "Hi"}}, nil, nil, "")
+	if err != nil {
+		t.Fatalf("SendMessage error = %v", err)
+	}
+
+	if resp.Usage.CacheReadInputTokens != 150 {
+		t.Errorf("expected CacheReadInputTokens 150, got %d", resp.Usage.CacheReadInputTokens)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// TestOpenAIProvider_StreamingReasoningContent tests AC12: streaming thinking
+// ---------------------------------------------------------------------------
+
+func TestOpenAIProvider_StreamingReasoningContent(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.WriteHeader(http.StatusOK)
+
+		chunks := []string{
+			`data: {"id":"chatcmpl-123","object":"chat.completion.chunk","model":"o3-mini","choices":[{"index":0,"delta":{"reasoning_content":"Let me "},"finish_reason":null}]}`,
+			`data: {"id":"chatcmpl-123","object":"chat.completion.chunk","model":"o3-mini","choices":[{"index":0,"delta":{"reasoning_content":"think."},"finish_reason":null}]}`,
+			`data: {"id":"chatcmpl-123","object":"chat.completion.chunk","model":"o3-mini","choices":[{"index":0,"delta":{"content":"The answer."},"finish_reason":null}]}`,
+			`data: {"id":"chatcmpl-123","object":"chat.completion.chunk","model":"o3-mini","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}`,
+			`data: [DONE]`,
+		}
+
+		for _, chunk := range chunks {
+			w.Write([]byte(chunk + "\n\n"))
+			w.(http.Flusher).Flush()
+		}
+	}))
+	defer server.Close()
+
+	t.Setenv("OPENAI_BASE_URL", server.URL)
+	t.Setenv("OPENAI_API_KEY", "test-key")
+	t.Setenv("OPENAI_DEFAULT_MODEL", "o3-mini")
+
+	client, _ := NewClientWithModel("")
+
+	blocksChan, result := client.SendMessageStream(
+		context.Background(),
+		[]Message{{Role: "user", Content: "What is the answer?"}},
+		nil, nil, "",
+		30*time.Second,
+		30*time.Second,
+		nil,
+	)
+
+	var thinkingDeltas []StreamContentBlock
+	for block := range blocksChan {
+		if block.Type == "thinking_delta" {
+			thinkingDeltas = append(thinkingDeltas, block)
+		}
+	}
+
+	if len(thinkingDeltas) == 0 {
+		t.Error("expected thinking_delta events")
+	}
+
+	// Final blocks should include thinking then text
+	var thinkingBlock, textBlock *ContentBlock
+	for i := range result.Blocks {
+		b := &result.Blocks[i]
+		if b.Type == "thinking" {
+			thinkingBlock = b
+		} else if b.Type == "text" {
+			textBlock = b
+		}
+	}
+
+	if thinkingBlock == nil {
+		t.Fatal("expected thinking block in result")
+	}
+	if thinkingBlock.Thinking != "Let me think." {
+		t.Errorf("expected accumulated thinking 'Let me think.', got %q", thinkingBlock.Thinking)
+	}
+	if textBlock == nil {
+		t.Fatal("expected text block in result")
+	}
+
+	// Verify thinking comes before text in result.Blocks
+	thinkingIdx, textIdx := -1, -1
+	for i, b := range result.Blocks {
+		if b.Type == "thinking" {
+			thinkingIdx = i
+		} else if b.Type == "text" {
+			textIdx = i
+		}
+	}
+	if thinkingIdx >= textIdx {
+		t.Error("expected thinking block before text block")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// TestOpenAIProvider_StreamingCachedTokens tests AC13: streaming cache tokens
+// ---------------------------------------------------------------------------
+
+func TestOpenAIProvider_StreamingCachedTokens(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.WriteHeader(http.StatusOK)
+
+		chunks := []string{
+			`data: {"id":"chatcmpl-123","object":"chat.completion.chunk","model":"gpt-5.4-nano","choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]}`,
+			`data: {"id":"chatcmpl-123","object":"chat.completion.chunk","model":"gpt-5.4-nano","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":100,"completion_tokens":5,"prompt_tokens_details":{"cached_tokens":50}}}`,
+			`data: [DONE]`,
+		}
+
+		for _, chunk := range chunks {
+			w.Write([]byte(chunk + "\n\n"))
+			w.(http.Flusher).Flush()
+		}
+	}))
+	defer server.Close()
+
+	t.Setenv("OPENAI_BASE_URL", server.URL)
+	t.Setenv("OPENAI_API_KEY", "test-key")
+	t.Setenv("OPENAI_DEFAULT_MODEL", "gpt-5.4-nano")
+
+	client, _ := NewClientWithModel("")
+
+	blocksChan, result := client.SendMessageStream(
+		context.Background(),
+		[]Message{{Role: "user", Content: "Hi"}},
+		nil, nil, "",
+		30*time.Second,
+		30*time.Second,
+		nil,
+	)
+
+	for range blocksChan {
+	}
+
+	if result.Usage.CacheReadInputTokens != 50 {
+		t.Errorf("expected CacheReadInputTokens 50, got %d", result.Usage.CacheReadInputTokens)
+	}
+}

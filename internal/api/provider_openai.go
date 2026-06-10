@@ -301,6 +301,13 @@ func (p *openAIProvider) parseResponse(resp OpenAIChatResponse) (*Response, erro
 	}
 
 	// Map content
+	// AC4: Prepend thinking block if reasoning_content is present
+	if choice.Message.ReasoningContent != "" {
+		response.Content = append(response.Content, ContentBlock{
+			Type:     "thinking",
+			Thinking: choice.Message.ReasoningContent,
+		})
+	}
 	if choice.Message.Content != "" && choice.Message.Content != "null" {
 		response.Content = append(response.Content, ContentBlock{
 			Type: "text",
@@ -330,6 +337,10 @@ func (p *openAIProvider) parseResponse(resp OpenAIChatResponse) (*Response, erro
 	}
 	if resp.Usage.CompletionTokens > 0 {
 		response.Usage.OutputTokens = resp.Usage.CompletionTokens
+	}
+	// AC5: Parse cached_tokens into CacheReadInputTokens
+	if resp.Usage.PromptTokensDetails.CachedTokens > 0 {
+		response.Usage.CacheReadInputTokens = resp.Usage.PromptTokensDetails.CachedTokens
 	}
 
 	return response, nil
@@ -525,6 +536,19 @@ func (p *openAIProvider) processStreamChunk(chunk OpenAIStreamChunk, acc *openAI
 		}
 	}
 
+	// AC6: Process reasoning_content - emit thinking_delta events
+	if delta.ReasoningContent != "" {
+		acc.appendThinking(delta.ReasoningContent)
+		// Emit thinking_delta block with accumulated thinking
+		blocksChan <- StreamContentBlock{
+			Type: "thinking_delta",
+			Block: ContentBlock{
+				Type:     "thinking",
+				Thinking: acc.getThinking(),
+			},
+		}
+	}
+
 	// Process tool calls - emit incrementally as tool input accumulates
 	for _, tc := range delta.ToolCalls {
 		acc.appendToolCall(tc.Index, tc.ID, tc.Function.Name, tc.Function.Arguments)
@@ -544,6 +568,10 @@ func (p *openAIProvider) processStreamChunk(chunk OpenAIStreamChunk, acc *openAI
 		if chunk.Usage.CompletionTokens > 0 {
 			result.Usage.OutputTokens = chunk.Usage.CompletionTokens
 		}
+		// AC8: Map cached_tokens to CacheReadInputTokens
+		if chunk.Usage.PromptTokensDetails.CachedTokens > 0 {
+			result.Usage.CacheReadInputTokens = chunk.Usage.PromptTokensDetails.CachedTokens
+		}
 	}
 
 	return hasStopReason
@@ -552,6 +580,7 @@ func (p *openAIProvider) processStreamChunk(chunk OpenAIStreamChunk, acc *openAI
 // openAIStreamAccumulator accumulates streaming chunks.
 type openAIStreamAccumulator struct {
 	content    string
+	thinking   string
 	stopReason StopReason
 	toolCalls  map[int]*toolCallAccumulator
 }
@@ -577,6 +606,14 @@ func (acc *openAIStreamAccumulator) appendContent(text string) {
 
 func (acc *openAIStreamAccumulator) getContent() string {
 	return acc.content
+}
+
+func (acc *openAIStreamAccumulator) appendThinking(text string) {
+	acc.thinking += text
+}
+
+func (acc *openAIStreamAccumulator) getThinking() string {
+	return acc.thinking
 }
 
 func (acc *openAIStreamAccumulator) setStopReason(reason StopReason) {
@@ -625,6 +662,14 @@ func (acc *openAIStreamAccumulator) getToolUseBlock(index int) *ContentBlock {
 func (acc *openAIStreamAccumulator) finalize() []ContentBlock {
 	var blocks []ContentBlock
 
+	// AC7: Emit thinking block before text block
+	if acc.thinking != "" {
+		blocks = append(blocks, ContentBlock{
+			Type:     "thinking",
+			Thinking: acc.thinking,
+		})
+	}
+
 	if acc.content != "" {
 		blocks = append(blocks, ContentBlock{
 			Type: "text",
@@ -649,6 +694,13 @@ func (acc *openAIStreamAccumulator) finalize() []ContentBlock {
 
 // OpenAI API types
 
+// OpenAI API types
+
+// PromptTokensDetails represents the prompt tokens details in OpenAI API responses.
+type PromptTokensDetails struct {
+	CachedTokens int `json:"cached_tokens"`
+}
+
 // OpenAIChatResponse is the response from the OpenAI Chat API.
 type OpenAIChatResponse struct {
 	ID      string `json:"id"`
@@ -658,9 +710,10 @@ type OpenAIChatResponse struct {
 	Choices []struct {
 		Index   int `json:"index"`
 		Message struct {
-			Role      string `json:"role"`
-			Content   string `json:"content"`
-			ToolCalls []struct {
+			Role             string `json:"role"`
+			Content          string `json:"content"`
+			ReasoningContent string `json:"reasoning_content"`
+			ToolCalls        []struct {
 				ID       string `json:"id"`
 				Type     string `json:"type"`
 				Function struct {
@@ -672,9 +725,10 @@ type OpenAIChatResponse struct {
 		FinishReason string `json:"finish_reason"`
 	} `json:"choices"`
 	Usage struct {
-		PromptTokens     int `json:"prompt_tokens"`
-		CompletionTokens int `json:"completion_tokens"`
-		TotalTokens      int `json:"total_tokens"`
+		PromptTokens        int                 `json:"prompt_tokens"`
+		CompletionTokens    int                 `json:"completion_tokens"`
+		TotalTokens         int                 `json:"total_tokens"`
+		PromptTokensDetails PromptTokensDetails `json:"prompt_tokens_details"`
 	} `json:"usage"`
 }
 
@@ -687,9 +741,10 @@ type OpenAIStreamChunk struct {
 	Choices []struct {
 		Index int `json:"index"`
 		Delta struct {
-			Role      string `json:"role"`
-			Content   string `json:"content"`
-			ToolCalls []struct {
+			Role             string `json:"role"`
+			Content          string `json:"content"`
+			ReasoningContent string `json:"reasoning_content"`
+			ToolCalls        []struct {
 				Index    int    `json:"index"`
 				ID       string `json:"id"`
 				Type     string `json:"type"`
@@ -702,9 +757,10 @@ type OpenAIStreamChunk struct {
 		FinishReason string `json:"finish_reason"`
 	} `json:"choices"`
 	Usage *struct {
-		PromptTokens     int `json:"prompt_tokens"`
-		CompletionTokens int `json:"completion_tokens"`
-		TotalTokens      int `json:"total_tokens"`
+		PromptTokens        int                 `json:"prompt_tokens"`
+		CompletionTokens    int                 `json:"completion_tokens"`
+		TotalTokens         int                 `json:"total_tokens"`
+		PromptTokensDetails PromptTokensDetails `json:"prompt_tokens_details"`
 	} `json:"usage"`
 }
 
