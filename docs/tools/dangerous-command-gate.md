@@ -70,7 +70,7 @@ Same device path blocklist for Read tool without reading content.
 ## Acceptance Criteria
 
 - **AC1:** Command substitution blocked before execution.
-- **AC2:** Read-only pipeline rejects mutating segment.
-- **AC3:** Git `-c` injection blocked in read-only mode.
+- **AC2:** Pipeline security gate rejects mutating segment (output redirection, non-allowlisted commands).
+- **AC3:** Git `-c` injection blocked by security gate.
 - **AC4:** Bypass only with explicit flag.
 - **AC5:** Device paths blocked in Read and Bash.

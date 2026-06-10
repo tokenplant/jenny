@@ -160,15 +160,14 @@ func (g *CommandGate) CheckPipelineSegments(command string) error {
 
 		// Check for redirection operators in segment (makes it mutating)
 		if strings.ContainsAny(segment, ">|") {
-			// Check if it's output redirection (not a pipe)
 			if strings.Contains(segment, ">") || strings.Contains(segment, ">>") {
-				return fmt.Errorf("output redirection is not allowed in read-only mode")
+				return fmt.Errorf("output redirection is not allowed for security reasons")
 			}
 		}
 
 		// Check if segment's first word is in read-only allowlist
 		if !isSegmentReadOnly(segment) {
-			return fmt.Errorf("pipeline segment '%s' is not allowed in read-only mode", strings.TrimSpace(segment))
+			return fmt.Errorf("pipeline segment '%s' is not allowed for security reasons", strings.TrimSpace(segment))
 		}
 	}
 

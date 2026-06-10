@@ -392,8 +392,11 @@ func TestReadTool_Dedup(t *testing.T) {
 	if result.IsError {
 		t.Fatalf("dedup read should not error: %s", result.Content)
 	}
-	if result.Content != "file unchanged" {
-		t.Fatalf("second read should return 'file unchanged' stub, got: %s", result.Content)
+	if !result.CacheHit {
+		t.Fatalf("second read should return cache hit, got: %s", result.Content)
+	}
+	if !strings.Contains(result.Content, "unchanged") {
+		t.Fatalf("second read should indicate file unchanged, got: %s", result.Content)
 	}
 
 	// AC2: Modify file (change mtime), read again should return new content
@@ -431,8 +434,8 @@ func TestReadTool_Dedup(t *testing.T) {
 	if result.IsError {
 		t.Fatalf("read with different offset should not error: %s", result.Content)
 	}
-	if result.Content == "file unchanged" {
-		t.Fatalf("different offset should bypass dedup, got stub: %s", result.Content)
+	if result.CacheHit {
+		t.Fatalf("different offset should bypass dedup cache")
 	}
 	if !strings.Contains(result.Content, "line 2") {
 		t.Fatalf("different offset should return content, got: %s", result.Content)
@@ -563,5 +566,44 @@ func TestReadTool_ScratchpadAccess(t *testing.T) {
 	}
 	if !result.IsError {
 		t.Error("expected /etc/passwd to be blocked without skipPermissions")
+	}
+}
+
+// TestReadTool_CacheHitStructuredResponse verifies AC4: cache hit returns structured
+// indicator with CacheHit flag, not ambiguous "file unchanged" string.
+func TestReadTool_CacheHitStructuredResponse(t *testing.T) {
+	tmpDir := t.TempDir()
+	readCache := NewReadFileCache()
+	tool := NewReadTool(true, readCache)
+
+	testFile := filepath.Join(tmpDir, "cache_test.txt")
+	err := os.WriteFile(testFile, []byte("cached content\n"), 0644)
+	if err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	// First read: populates cache
+	_, err = tool.Execute(context.Background(), map[string]any{"file_path": testFile}, tmpDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Second read: should return cache hit
+	result, err := tool.Execute(context.Background(), map[string]any{"file_path": testFile}, tmpDir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// AC4: CacheHit flag must be set
+	if !result.CacheHit {
+		t.Error("AC4 FAIL: CacheHit should be true on duplicate read")
+	}
+
+	// AC4: Content should be clearly structured, not just "file unchanged"
+	if result.Content == "file unchanged" {
+		t.Error("AC4 FAIL: should return structured cache indicator, not bare 'file unchanged'")
+	}
+	if !strings.Contains(result.Content, "unchanged") {
+		t.Error("AC4 FAIL: cache hit content should indicate file is unchanged")
 	}
 }

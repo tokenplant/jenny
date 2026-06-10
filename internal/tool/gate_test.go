@@ -1,6 +1,7 @@
 package tool
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -409,6 +410,36 @@ func TestIsSegmentReadOnly(t *testing.T) {
 				t.Errorf("isSegmentReadOnly(%q) = %v, want %v", tt.segment, got, tt.want)
 			}
 		})
+	}
+}
+
+// TestAC5_SecurityGateErrorMessages verifies error messages use "for security reasons"
+// instead of "in read-only mode".
+func TestAC5_SecurityGateErrorMessages(t *testing.T) {
+	gate := NewCommandGate(false)
+
+	// Redirection should say "for security reasons"
+	err := gate.CheckPipelineSegments("cat file > /tmp/out")
+	if err == nil {
+		t.Fatal("expected error for output redirection")
+	}
+	if strings.Contains(err.Error(), "read-only mode") {
+		t.Errorf("error should not mention 'read-only mode', got: %s", err.Error())
+	}
+	if !strings.Contains(err.Error(), "for security reasons") {
+		t.Errorf("error should mention 'for security reasons', got: %s", err.Error())
+	}
+
+	// Non-allowlisted command should say "for security reasons"
+	err = gate.CheckPipelineSegments("rm -rf /")
+	if err == nil {
+		t.Fatal("expected error for non-allowlisted command")
+	}
+	if strings.Contains(err.Error(), "read-only mode") {
+		t.Errorf("error should not mention 'read-only mode', got: %s", err.Error())
+	}
+	if !strings.Contains(err.Error(), "for security reasons") {
+		t.Errorf("error should mention 'for security reasons', got: %s", err.Error())
 	}
 }
 

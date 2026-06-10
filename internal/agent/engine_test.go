@@ -2378,9 +2378,11 @@ func TestEngine_AutoCompactFiresAboveThreshold(t *testing.T) {
 	engine := NewQueryEngine(cfg, nil, "deepseek-v4-flash")
 
 	// Verify the engine's compact config has correct threshold
-	// Default: effectiveWindow = 200K - min(20K, 20K) = 180K, threshold = 180K - 13K = 167K
+	// deepseek-v4-flash: effectiveWindow = 1M - 8192 = 991808
+	// autoCompactBuffer = max(8192+5000, 13000) = 13192
+	// threshold = 991808 - 13192 = 978616
 	threshold := engine.compactConfig.autoCompactThreshold()
-	expectedThreshold := 167000 // 200K - 20K - 13K = 167K
+	expectedThreshold := 978616
 	if threshold != expectedThreshold {
 		t.Errorf("expected threshold %d, got %d", expectedThreshold, threshold)
 	} else {
@@ -2391,7 +2393,7 @@ func TestEngine_AutoCompactFiresAboveThreshold(t *testing.T) {
 	defer cancel()
 
 	// SubmitMessage with normal prompt - should not trigger auto-compact
-	// (threshold is 167K, prompt is small)
+	// (threshold is ~978K, prompt is small)
 	_, _ = engine.SubmitMessage(ctx, "small prompt")
 
 	t.Log("Test completed - threshold calculation verified")

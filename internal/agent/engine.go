@@ -154,7 +154,7 @@ func NewQueryEngine(cfg StreamConfig, tools []tool.Tool, model string) *QueryEng
 		model:                client.GetModel(), // Use resolved model (from ANTHROPIC_MODEL env var)
 		turnCount:            0,
 		maxTurns:             0, // 0 means unlimited
-		compactConfig:        newCompactConfig(),
+		compactConfig:        newCompactConfigForModel(client.GetModel()),
 		compactFailCount:     compactFailCount,
 		structuredOutputTool: structuredTool,
 	}

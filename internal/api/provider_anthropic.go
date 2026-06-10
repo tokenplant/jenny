@@ -690,9 +690,7 @@ func toolToSDK(t ToolParam, isLast bool) anthropic.ToolUnionParam {
 // modelMaxOutputTokens returns the max output tokens for a given model.
 func modelMaxOutputTokens(model string) int {
 	switch model {
-	case "deepseek-v4-flash":
-		return 8192
-	case "deepseek-v4":
+	case "deepseek-v4-flash", "deepseek-v4-pro":
 		return 8192
 	default:
 		return 20000

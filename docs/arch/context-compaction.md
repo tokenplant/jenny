@@ -18,16 +18,32 @@ depends_on:
 
 Automatic and manual compaction summarizes older turns to fit within the model context window. Inserts a compact boundary and rebuilds a shorter message chain.
 
+## Model Parameters
+
+Thresholds are derived from per-model parameters via `api.ModelParams(model)`:
+
+| Model | Context Window | Max Output Tokens |
+|-------|---------------|-------------------|
+| `deepseek-v4-flash` | 1,000,000 | 8,192 |
+| `deepseek-v4-pro` | 1,000,000 | 8,192 |
+| Default (other models) | 200,000 | 20,000 |
+
+`newCompactConfigForModel(model)` looks up actual values; `AUTO_COMPACT_WINDOW` env overrides context window if set.
+
 ## Threshold Math
 
 ```
-effectiveContextWindow = modelContextWindow - min(modelMaxOutputTokens, 20_000)
-autoCompactThreshold   = effectiveContextWindow - 13_000   (AUTOCOMPACT_BUFFER_TOKENS)
-warningThreshold       = autoCompactThreshold - 20_000
-blockingLimit          = effectiveContextWindow - 3_000     (when auto-compact off)
+effectiveContextWindow = modelContextWindow - modelMaxOutputTokens
+autoCompactThreshold   = effectiveContextWindow - AUTOCOMPACT_BUFFER_TOKENS
+warningThreshold       = autoCompactThreshold - WARNING_BUFFER_TOKENS
+blockingLimit          = effectiveContextWindow - BLOCKING_BUFFER_TOKENS  (when auto-compact off)
 ```
 
-Optional env `AUTO_COMPACT_WINDOW` caps window used in calculation.
+Buffer constants scale with model output cap:
+
+```
+AUTOCOMPACT_BUFFER_TOKENS = max(modelMaxOutputTokens + 5_000, 13_000)
+```
 
 ## Trigger
 
@@ -81,13 +97,24 @@ Before next API call:
 | Task budget | Subtract pre-compact context from remaining budget |
 | Blocking check after compact | Skip stale usage check once |
 
+## Token Estimation
+
+`estimateTokens` uses charset-aware heuristic:
+
+- ASCII/Latin bytes: ~4 chars per token.
+- Multi-byte (CJK, emoji, etc.): ~1.5 chars per token.
+
+Target accuracy: within 10% for English, within 30% for CJK-heavy content.
+
 ## Acceptance Criteria
 
-- **AC1:** Auto-compact at effectiveWindow − 13K.
+- **AC1:** Auto-compact at effectiveWindow − buffer.
 - **AC2:** Circuit breaker after 3 failures.
 - **AC3:** Hard block at effectiveWindow − 3K when auto off.
 - **AC4:** Post-compact payload passes tool/thinking pairing rules.
 - **AC5:** compact/session_memory sources never hard-blocked pre-API.
+- **AC6:** Thresholds derived from actual model context window and max output tokens via `api.ModelParams`.
+- **AC7:** `buildCompactedChain` does not split tool_use/tool_result pairs at boundary.
 
 ## Error Reporting: `stop_reason: max_tokens` {#error-reporting-stop_reason-max_tokens}
 
@@ -141,7 +168,7 @@ The categorizer in `internal/api/client.go` applies this logic:
 | Model | Max Output Tokens |
 |-------|-------------------|
 | `deepseek-v4-flash` | 8,192 |
-| `deepseek-v4` | 8,192 |
+| `deepseek-v4-pro` | 8,192 |
 | Default (other models) | 20,000 |
 
 ### Backward Compatibility

@@ -9,16 +9,13 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/ipy/jenny/internal/api"
 	"github.com/ipy/jenny/internal/log"
 )
 
 const (
-	// AUTOCOMPACT_BUFFER_TOKENS is the buffer subtracted from effective context window
-	// to determine the auto-compact threshold.
-	AUTOCOMPACT_BUFFER_TOKENS = 13_000
-
 	// BLOCKING_BUFFER_TOKENS is the buffer subtracted from effective context window
 	// to determine the blocking limit when auto-compact is disabled.
 	BLOCKING_BUFFER_TOKENS = 3_000
@@ -34,11 +31,8 @@ const (
 	// SUMMARY_MAX_TOKENS is the maximum output tokens allocated for summary.
 	SUMMARY_MAX_TOKENS = 20_000
 
-	// Default model context window (200K for deepseek-v4-flash).
-	defaultModelContextWindow = 200_000
-
-	// Default model max output tokens.
-	defaultModelMaxOutputTokens = 20_000
+	// minAutoCompactBuffer is the floor for the auto-compact buffer.
+	minAutoCompactBuffer = 13_000
 )
 
 // CompactConfig holds configuration for compaction.
@@ -62,13 +56,22 @@ type CompactConfig struct {
 // effectiveContextWindow returns the effective context window after accounting
 // for model max output tokens reserve.
 func (c CompactConfig) effectiveContextWindow() int {
-	effective := c.ModelContextWindow - min(c.ModelMaxOutputTokens, defaultModelMaxOutputTokens)
-	return effective
+	return c.ModelContextWindow - c.ModelMaxOutputTokens
+}
+
+// autoCompactBuffer returns the buffer for auto-compact threshold, scaled to
+// the model's max output tokens: max(modelMaxOutputTokens + 5000, minAutoCompactBuffer).
+func (c CompactConfig) autoCompactBuffer() int {
+	buf := c.ModelMaxOutputTokens + 5_000
+	if buf < minAutoCompactBuffer {
+		buf = minAutoCompactBuffer
+	}
+	return buf
 }
 
 // autoCompactThreshold returns the token count at which auto-compact triggers.
 func (c CompactConfig) autoCompactThreshold() int {
-	return c.effectiveContextWindow() - AUTOCOMPACT_BUFFER_TOKENS
+	return c.effectiveContextWindow() - c.autoCompactBuffer()
 }
 
 // warningThreshold returns the token count at which to emit a warning event.
@@ -128,39 +131,61 @@ func (e *PromptTooLongError) Error() string {
 	return fmt.Sprintf("prompt too long: estimated %d tokens exceeds blocking limit %d", e.EstimatedTokens, e.Limit)
 }
 
-// estimateTokens estimates the token count for a message chain using content length
-// as a rough heuristic. True model tokenization is out of scope.
+// estimateTokens estimates the token count for a message chain using a
+// charset-aware heuristic. ASCII/Latin text uses ~4 chars/token; multi-byte
+// characters (CJK, emoji) use ~1.5 chars/token.
 func estimateTokens(messages []api.Message) int {
 	total := 0
 	for _, msg := range messages {
-		total += len(msg.Content)
-		// Rough estimate: tool_use and tool_results blocks add significant content
+		total += estimateStringTokens(msg.Content)
 		for _, tu := range msg.ToolUse {
-			total += len(tu.Name) + 50 // Name + overhead
-			// Estimate input JSON size
+			total += len(tu.Name) + 50
 			inputBytes, _ := json.Marshal(tu.Input)
-			total += len(inputBytes)
+			total += estimateStringTokens(string(inputBytes))
 		}
 		for _, tr := range msg.ToolResults {
-			total += len(tr.Content) + 50 // Content + overhead
+			total += estimateStringTokens(tr.Content) + 50
 		}
 	}
 	return total
 }
 
-// newCompactConfig creates a CompactConfig from environment variables and defaults.
-func newCompactConfig() CompactConfig {
+// estimateStringTokens estimates the token count for a string using charset-aware
+// heuristics. ASCII chars → ~4 chars/token, multi-byte runes → ~1.5 chars/token.
+func estimateStringTokens(s string) int {
+	if len(s) == 0 {
+		return 0
+	}
+	asciiChars := 0
+	multiByteRunes := 0
+	for i := 0; i < len(s); {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		if r < 128 {
+			asciiChars++
+		} else {
+			multiByteRunes++
+		}
+		i += size
+	}
+	asciiTokens := asciiChars * 10 / 40  // asciiChars / 4.0
+	mbTokens := multiByteRunes * 10 / 15 // multiByteRunes / 1.5
+	return asciiTokens + mbTokens
+}
+
+// newCompactConfigForModel creates a CompactConfig using model-specific parameters
+// from api.ModelParams, with environment variable overrides.
+func newCompactConfigForModel(model string) CompactConfig {
+	params := api.ModelParams(model)
 	cfg := CompactConfig{
-		ModelContextWindow:   readEnvInt("AUTO_COMPACT_WINDOW", defaultModelContextWindow),
-		ModelMaxOutputTokens: defaultModelMaxOutputTokens,
+		ModelContextWindow:   params.ContextWindow,
+		ModelMaxOutputTokens: params.MaxOutputTokens,
 		DisableCompact:       os.Getenv("DISABLE_COMPACT") != "",
 		DisableAutoCompact:   os.Getenv("DISABLE_AUTO_COMPACT") != "",
 		SessionMemoryEnabled: os.Getenv("ENABLE_SESSION_MEMORY") != "",
 	}
 
-	// Cap at default if not overridden
-	if cfg.ModelContextWindow == 0 {
-		cfg.ModelContextWindow = defaultModelContextWindow
+	if envWindow := readEnvInt("AUTO_COMPACT_WINDOW", 0); envWindow > 0 {
+		cfg.ModelContextWindow = envWindow
 	}
 
 	return cfg
@@ -385,26 +410,30 @@ func dropOldestAPIRoundGroup(messages []api.Message) []api.Message {
 
 // buildCompactedChain builds the new message chain after compaction.
 // Order: boundaryMarker → summaryMessages → messagesToKeep → attachments → hookResults
+//
+// AC7: The cut point never splits a tool_use/tool_result pair. If the boundary
+// falls between an assistant with tool_use and its user with tool_results,
+// the boundary is moved earlier to include the full pair.
 func buildCompactedChain(originalMessages []api.Message, summary string) []api.Message {
-	// For now, keep the last N messages (typically recent turns)
-	// and prepend the summary as a system message with boundary marker
-	messagesToKeep := 10 // Keep last 10 messages for context
-	if len(originalMessages) > messagesToKeep {
-		originalMessages = originalMessages[len(originalMessages)-messagesToKeep:]
+	messagesToKeep := 10
+	if len(originalMessages) <= messagesToKeep {
+		// Nothing to trim — keep everything
+	} else {
+		cutIdx := len(originalMessages) - messagesToKeep
+		// If the message at cutIdx is a user with tool_results, the preceding
+		// assistant (cutIdx-1) likely has the matching tool_use. Include both.
+		if cutIdx > 0 && originalMessages[cutIdx].Role == "user" && len(originalMessages[cutIdx].ToolResults) > 0 {
+			cutIdx--
+		}
+		originalMessages = originalMessages[cutIdx:]
 	}
 
-	// Build the compacted chain
 	var result []api.Message
-
-	// Add boundary marker
 	result = append(result, api.Message{
 		Role:    "system",
 		Content: fmt.Sprintf("[Context boundary: earlier conversation summarized]\n\nPrevious summary:\n%s", summary),
 	})
-
-	// Add the kept messages
 	result = append(result, originalMessages...)
-
 	return result
 }
 

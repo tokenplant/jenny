@@ -21,6 +21,22 @@ type Client struct {
 // defaultModel is the default model used when ANTHROPIC_MODEL is not set.
 const defaultModel = "claude-opus-4-5-20251101"
 
+// ModelParamsInfo holds model-specific parameters for context management.
+type ModelParamsInfo struct {
+	ContextWindow   int
+	MaxOutputTokens int
+}
+
+// ModelParams returns the context window and max output tokens for a model.
+func ModelParams(model string) ModelParamsInfo {
+	switch model {
+	case "deepseek-v4-flash", "deepseek-v4-pro":
+		return ModelParamsInfo{ContextWindow: 1_000_000, MaxOutputTokens: 8_192}
+	default:
+		return ModelParamsInfo{ContextWindow: 200_000, MaxOutputTokens: 20_000}
+	}
+}
+
 // ResolveTimeout parses API_TIMEOUT_MS env var and returns a time.Duration.
 // Returns 1 hour default if the env var is empty, invalid, or <= 0.
 func ResolveTimeout(envValue string) time.Duration {

@@ -31,14 +31,15 @@ func (e *QueryEngine) buildModelUsage() any {
 	}
 	result := make(map[string]any)
 	for model, usage := range e.costState.ModelUsage {
+		params := api.ModelParams(model)
 		result[model] = map[string]any{
 			"inputTokens":              usage.InputTokens,
 			"outputTokens":             usage.OutputTokens,
 			"cacheReadInputTokens":     usage.CacheReadInputTokens,
 			"cacheCreationInputTokens": usage.CacheCreationInputTokens,
-			"webSearchRequests":        0,      // Not tracked separately
-			"contextWindow":            200000, // Default context window
-			"maxOutputTokens":          32000,  // Default max output
+			"webSearchRequests":        0,
+			"contextWindow":            params.ContextWindow,
+			"maxOutputTokens":          params.MaxOutputTokens,
 		}
 	}
 	return result

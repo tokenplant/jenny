@@ -54,9 +54,15 @@ Resize/compress to token budget; return image content block with dimension metad
 
 Parse cells as structured content. When oversized, suggest Bash/`jq` approach in error.
 
-## Dedup (`file_unchanged`)
+## Dedup (cache hit)
 
-Same path + offset + limit + mtime unchanged since last read → return stub indicating file unchanged.
+Same path + offset + limit + mtime unchanged since last read → return structured cache indicator:
+
+```
+[file unchanged since last read — cached content is current]
+```
+
+The response includes `CacheHit: true` on the ToolResult to allow programmatic detection.
 
 **Not applied:** after Write/Edit cache entries, partial views, or when offset/limit differ.
 
@@ -104,5 +110,5 @@ Empty file or offset past EOF: warning in result, not hard error.
 - **AC1:** Files > 256KB rejected before read.
 - **AC2:** Output > 25K tokens rejected after read.
 - **AC3:** offset=0 reads from line 1.
-- **AC4:** Unchanged file returns file_unchanged stub.
+- **AC4:** Unchanged file returns structured cache indicator with `CacheHit: true`.
 - **AC5:** Block device paths rejected without read.

@@ -202,13 +202,14 @@ func (t *ReadTool) Execute(ctx context.Context, input map[string]any, cwd string
 
 	isFullRead := !offsetExplicit && !limitExplicit
 
-	// AC1-AC3: Dedup check - return stub if same path + offset + limit + mtime unchanged
+	// AC1-AC3: Dedup check - return structured cache indicator if same path + mtime unchanged
 	if t.readCache != nil && isFullRead {
 		if cachedEntry, ok := t.readCache.GetRead(absFilePath); ok {
 			if cachedEntry.Mtime.Equal(info.ModTime()) && cachedEntry.Offset == offset && cachedEntry.Limit == limit {
 				return &ToolResult{
-					Content: "file unchanged",
-					IsError: false,
+					Content:  "[file unchanged since last read — cached content is current]",
+					IsError:  false,
+					CacheHit: true,
 				}, nil
 			}
 		}

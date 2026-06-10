@@ -26,7 +26,7 @@ func TestAC1_CheckCompactThreshold(t *testing.T) {
 			name:                 "below threshold - no compact",
 			modelContextWindow:   200_000,
 			modelMaxOutputTokens: 20_000,
-			estimatedTokens:      150_000, // 200K - 20K - 13K = 167K threshold, 150K < 167K
+			estimatedTokens:      150_000, // threshold = 200K-20K - max(20K+5K,13K) = 155K; 150K < 155K
 			disableAutoCompact:   false,
 			want:                 false,
 		},
@@ -34,7 +34,7 @@ func TestAC1_CheckCompactThreshold(t *testing.T) {
 			name:                 "at threshold - compact",
 			modelContextWindow:   200_000,
 			modelMaxOutputTokens: 20_000,
-			estimatedTokens:      167_000, // equals threshold
+			estimatedTokens:      155_000, // equals threshold
 			disableAutoCompact:   false,
 			want:                 true,
 		},
@@ -80,21 +80,22 @@ func TestAC1_WarningThreshold(t *testing.T) {
 	}
 
 	// Effective window = 200K - 20K = 180K
-	// Auto compact threshold = 180K - 13K = 167K
-	// Warning threshold = 167K - 20K = 147K
+	// Auto compact buffer = max(20K+5K, 13K) = 25K
+	// Auto compact threshold = 180K - 25K = 155K
+	// Warning threshold = 155K - 20K = 135K
 
 	// Below warning threshold - no warning
-	if cfg.checkWarningThreshold(140_000) {
+	if cfg.checkWarningThreshold(130_000) {
 		t.Error("AC1 FAIL: warning should not trigger below threshold")
 	}
 
 	// At warning threshold - warning
-	if !cfg.checkWarningThreshold(147_000) {
+	if !cfg.checkWarningThreshold(135_000) {
 		t.Error("AC1 FAIL: warning should trigger at threshold")
 	}
 
 	// Above warning threshold - warning
-	if !cfg.checkWarningThreshold(160_000) {
+	if !cfg.checkWarningThreshold(150_000) {
 		t.Error("AC1 FAIL: warning should trigger above threshold")
 	}
 
@@ -335,8 +336,8 @@ func TestEstimateTokens(t *testing.T) {
 			messages: []api.Message{
 				{Role: "user", Content: "hello world"},
 			},
-			wantMin: 10,
-			wantMax: 20,
+			wantMin: 1,  // 11 chars / 4 ≈ 2 tokens
+			wantMax: 5,
 		},
 		{
 			name: "user and assistant with tool_use",
@@ -371,22 +372,23 @@ func TestThresholdMath(t *testing.T) {
 		ModelMaxOutputTokens: 20_000,
 	}
 
-	// effectiveContextWindow = 200K - min(20K, 20K) = 180K
+	// effectiveContextWindow = 200K - 20K = 180K
 	effectiveWindow := cfg.effectiveContextWindow()
 	if effectiveWindow != 180_000 {
 		t.Errorf("effectiveContextWindow = %d, want 180000", effectiveWindow)
 	}
 
-	// autoCompactThreshold = 180K - 13K = 167K
+	// autoCompactBuffer = max(20K + 5K, 13K) = 25K
+	// autoCompactThreshold = 180K - 25K = 155K
 	autoCompactThreshold := cfg.autoCompactThreshold()
-	if autoCompactThreshold != 167_000 {
-		t.Errorf("autoCompactThreshold = %d, want 167000", autoCompactThreshold)
+	if autoCompactThreshold != 155_000 {
+		t.Errorf("autoCompactThreshold = %d, want 155000", autoCompactThreshold)
 	}
 
-	// warningThreshold = 167K - 20K = 147K
+	// warningThreshold = 155K - 20K = 135K
 	warningThreshold := cfg.warningThreshold()
-	if warningThreshold != 147_000 {
-		t.Errorf("warningThreshold = %d, want 147000", warningThreshold)
+	if warningThreshold != 135_000 {
+		t.Errorf("warningThreshold = %d, want 135000", warningThreshold)
 	}
 
 	// blockingLimit = 180K - 3K = 177K
@@ -438,6 +440,128 @@ func TestBuildCompactedChain(t *testing.T) {
 	}
 
 	t.Log("buildCompactedChain produces correct structure")
+}
+
+// ============================================================
+// AC6 — Thresholds from actual model params
+// ============================================================
+
+func TestAC6_ModelAwareCompactConfig(t *testing.T) {
+	// DeepSeek models have 1M context window and 8K max output
+	cfg := newCompactConfigForModel("deepseek-v4-flash")
+	if cfg.ModelContextWindow != 1_000_000 {
+		t.Errorf("deepseek-v4-flash context window = %d, want 1000000", cfg.ModelContextWindow)
+	}
+	if cfg.ModelMaxOutputTokens != 8_192 {
+		t.Errorf("deepseek-v4-flash max output = %d, want 8192", cfg.ModelMaxOutputTokens)
+	}
+
+	// Default model uses 200K/20K
+	cfgDefault := newCompactConfigForModel("claude-opus-4-5-20251101")
+	if cfgDefault.ModelContextWindow != 200_000 {
+		t.Errorf("default context window = %d, want 200000", cfgDefault.ModelContextWindow)
+	}
+	if cfgDefault.ModelMaxOutputTokens != 20_000 {
+		t.Errorf("default max output = %d, want 20000", cfgDefault.ModelMaxOutputTokens)
+	}
+}
+
+func TestAC6_DeepSeekThresholdMath(t *testing.T) {
+	cfg := newCompactConfigForModel("deepseek-v4-flash")
+
+	// effectiveContextWindow = 1M - 8192 = 991,808
+	effectiveWindow := cfg.effectiveContextWindow()
+	expectedEffective := 1_000_000 - 8_192
+	if effectiveWindow != expectedEffective {
+		t.Errorf("effectiveContextWindow = %d, want %d", effectiveWindow, expectedEffective)
+	}
+
+	// Auto-compact should NOT trigger at 648K (the bug scenario from ticket)
+	if cfg.checkCompactThreshold(648_000, "user") {
+		t.Error("648K tokens should NOT trigger auto-compact with 1M context window")
+	}
+
+	// Should trigger near the actual threshold
+	threshold := cfg.autoCompactThreshold()
+	if !cfg.checkCompactThreshold(threshold, "user") {
+		t.Errorf("should trigger at threshold %d", threshold)
+	}
+	if cfg.checkCompactThreshold(threshold-1, "user") {
+		t.Error("should NOT trigger below threshold")
+	}
+}
+
+// ============================================================
+// AC7 — buildCompactedChain does not split tool pairs
+// ============================================================
+
+func TestAC7_CompactedChainPreservesToolPairs(t *testing.T) {
+	messages := make([]api.Message, 20)
+	for i := 0; i < 18; i++ {
+		messages[i] = api.Message{Role: "user", Content: "filler"}
+	}
+	// Last two messages: assistant with tool_use + user with tool_result
+	messages[18] = api.Message{
+		Role:    "assistant",
+		Content: "Using tool",
+		ToolUse: []api.ToolUseBlock{{ID: "call_001", Name: "Read", Input: map[string]any{}}},
+	}
+	messages[19] = api.Message{
+		Role:        "user",
+		ToolResults: []api.ToolResultBlock{{ToolUseID: "call_001", Content: "result"}},
+	}
+
+	result := buildCompactedChain(messages, "summary")
+
+	// Find the assistant with tool_use and verify the next message has its tool_result
+	for i, msg := range result {
+		if msg.Role == "assistant" && len(msg.ToolUse) > 0 {
+			if i+1 >= len(result) {
+				t.Fatal("AC7 FAIL: tool_use at end of chain with no following tool_result")
+			}
+			next := result[i+1]
+			if next.Role != "user" || len(next.ToolResults) == 0 {
+				t.Fatal("AC7 FAIL: tool_use not immediately followed by tool_result")
+			}
+			found := false
+			for _, tr := range next.ToolResults {
+				if tr.ToolUseID == msg.ToolUse[0].ID {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Fatal("AC7 FAIL: tool_result does not match tool_use ID")
+			}
+		}
+	}
+}
+
+// ============================================================
+// AC3 (ticket) — Token estimation charset-aware
+// ============================================================
+
+func TestEstimateTokens_CharsetAware(t *testing.T) {
+	// English text: ~4 chars per token
+	englishMsg := []api.Message{{Role: "user", Content: strings.Repeat("hello world ", 100)}}
+	englishEst := estimateTokens(englishMsg)
+	actualEnglishChars := len(englishMsg[0].Content)
+	expectedEnglishTokens := actualEnglishChars / 4
+	ratio := float64(englishEst) / float64(expectedEnglishTokens)
+	if ratio < 0.7 || ratio > 1.3 {
+		t.Errorf("English estimation ratio %.2f outside [0.7, 1.3] (est=%d, expected≈%d)",
+			ratio, englishEst, expectedEnglishTokens)
+	}
+
+	// CJK text: ~1.5 chars per token (each CJK char is 3 bytes in UTF-8)
+	cjkMsg := []api.Message{{Role: "user", Content: strings.Repeat("你好世界测试", 100)}}
+	cjkEst := estimateTokens(cjkMsg)
+	// Old heuristic would say len("你好世界测试"*100) / 4 = 1800/4 * 100... but bytes
+	// With charset-aware: CJK chars should estimate ~1.5 chars/token
+	// 600 CJK runes → ~400 tokens expected
+	if cjkEst < 200 || cjkEst > 800 {
+		t.Errorf("CJK estimation %d seems unreasonable for 600 CJK chars (expected ~400)", cjkEst)
+	}
 }
 
 // TestDropOldestAPIRoundGroup verifies oldest API round group is dropped.
