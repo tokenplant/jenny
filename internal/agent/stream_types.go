@@ -290,17 +290,6 @@ func boolString(b bool) string {
 	return "false"
 }
 
-func joinJSONFields(fields []any) string {
-	var result strings.Builder
-	for i, f := range fields {
-		if i > 0 {
-			result.WriteString(",")
-		}
-		result.WriteString(fmt.Sprintf("%v", f))
-	}
-	return result.String()
-}
-
 // PermissionDenial represents a tool use denial for permission_denials array.
 type PermissionDenial struct {
 	ToolName  string `json:"tool_name,omitempty"`
