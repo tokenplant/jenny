@@ -20,24 +20,35 @@ import (
 	"github.com/ipy/jenny/internal/log"
 	"github.com/ipy/jenny/internal/memdir"
 	"github.com/ipy/jenny/internal/session"
+	"github.com/ipy/jenny/internal/testutil"
 	"github.com/ipy/jenny/internal/tool"
 )
 
-// mockStreamServer delegates to makeMockStreamServerWithEvents in testhelpers
-// when events are provided, or uses default events when called without events.
-func mockStreamServer(t *testing.T, events ...[]string) *httptest.Server {
-	if len(events) > 0 {
-		return makeMockStreamServerWithEvents(t, events[0])
+
+
+// sseLine delegates to testutil.SSELine for SSE event formatting.
+var sseLine = testutil.SSELine
+
+// makeMockStreamServer delegates to makeMockStreamServerWithEvents.
+// Supports both no-arg (default events) and []string argument patterns.
+var makeMockStreamServer = makeMockStreamServerHelper
+
+// makeMockStreamServerHelper wraps testhelpers_test.go's makeMockStreamServerWithEvents.
+// When events is nil or not provided, returns default SSE events.
+func makeMockStreamServerHelper(t *testing.T, events []string) *httptest.Server {
+	if len(events) == 0 {
+		return makeMockStreamServerWithEvents(t, []string{
+			sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test-model","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
+			sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
+			sseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello from stream"}}`),
+			sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
+			sseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":2}}`),
+			sseLine("message_stop", `{"type":"message_stop"}`),
+		})
 	}
-	return makeMockStreamServerWithEvents(t, []string{
-		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test-model","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
-		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
-		sseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello from stream"}}`),
-		sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
-		sseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":2}}`),
-		sseLine("message_stop", `{"type":"message_stop"}`),
-	})
+	return makeMockStreamServerWithEvents(t, events)
 }
+
 
 // TestAC1_PersistBeforeAPI verifies that the user message is persisted to
 // transcript BEFORE any API call is made.
@@ -51,7 +62,7 @@ func TestAC1_PersistBeforeAPI(t *testing.T) {
 	sessionID := "sess_ac1_test"
 	prompt := "test prompt for persist ordering"
 
-	server := mockStreamServer(t, []string{
+	server := makeMockStreamServer(t, []string{
 		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
 		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
 		sseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}`),
@@ -110,7 +121,7 @@ func TestAC2_MaxTurnsEnforcement(t *testing.T) {
 	sessionID := "sess_ac2_test"
 
 	// Server that returns tool_use to keep the loop going
-	server := mockStreamServer(t, []string{
+	server := makeMockStreamServer(t, []string{
 		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
 		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tool_1","name":"Bash","input":{}}}`),
 		sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
@@ -157,7 +168,7 @@ func TestAC5_TurnCounterResets(t *testing.T) {
 
 	sessionID := "sess_ac5_test"
 
-	server := mockStreamServer(t, []string{
+	server := makeMockStreamServer(t, []string{
 		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
 		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
 		sseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}`),
@@ -213,7 +224,7 @@ func TestAC3_CostStateFlushed(t *testing.T) {
 
 	sessionID := "sess_ac3_test"
 
-	server := mockStreamServer(t, []string{
+	server := makeMockStreamServer(t, []string{
 		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test-model","stop_reason":null,"usage":{"input_tokens":100,"output_tokens":50}}}`),
 		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
 		sseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}`),
@@ -302,7 +313,7 @@ func TestQueryEngine_SetMaxTurns(t *testing.T) {
 // TestAC1_SubmitMessageWithoutSessionManager verifies that SubmitMessage
 // works correctly when no session manager is configured (AC1 edge case).
 func TestAC1_SubmitMessageWithoutSessionManager(t *testing.T) {
-	server := mockStreamServer(t, []string{
+	server := makeMockStreamServer(t, []string{
 		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
 		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
 		sseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}`),
@@ -353,7 +364,7 @@ func TestAC1_ResumeDoesNotDuplicateUserMessage(t *testing.T) {
 		t.Fatalf("AppendEntry error: %v", err)
 	}
 
-	server := mockStreamServer(t, []string{
+	server := makeMockStreamServer(t, []string{
 		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
 		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
 		sseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}`),
@@ -404,7 +415,7 @@ func TestAC1_ResumeDoesNotDuplicateUserMessage(t *testing.T) {
 // TestAC2_MaxTurnsZeroIsUnlimited verifies that default maxTurns=0
 // allows the engine to complete normally without artificial limits.
 func TestAC2_MaxTurnsZeroIsUnlimited(t *testing.T) {
-	server := mockStreamServer(t, []string{
+	server := makeMockStreamServer(t, []string{
 		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
 		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
 		sseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}`),
@@ -449,7 +460,7 @@ func TestAC3_CostFlushOnMaxTurnsError(t *testing.T) {
 	sessionID := "sess_flush_on_err"
 
 	// Server that returns tool_use to keep the loop going, hitting maxTurns
-	server := mockStreamServer(t, []string{
+	server := makeMockStreamServer(t, []string{
 		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test-model","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
 		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tool_1","name":"Bash","input":{}}}`),
 		sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
@@ -495,7 +506,7 @@ func TestAC3_CostFlushOnMaxTurnsError(t *testing.T) {
 // TestAC4_RunStreamReturnsTextContent verifies that RunStream returns the
 // correct text result from the model after the refactor to use QueryEngine.
 func TestAC4_RunStreamReturnsTextContent(t *testing.T) {
-	server := makeMockStreamServer(t)
+	server := makeMockStreamServer(t, nil)
 	defer server.Close()
 
 	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
@@ -531,7 +542,7 @@ func TestAC4_RunStreamReturnsTextContent(t *testing.T) {
 // correct number of API iterations after SubmitMessage completes, and
 // that the counter resets on subsequent calls.
 func TestAC5_TurnCounterIsAccurate(t *testing.T) {
-	server := mockStreamServer(t, []string{
+	server := makeMockStreamServer(t, []string{
 		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
 		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
 		sseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello"}}`),
@@ -601,7 +612,7 @@ func TestAC3_StreamJsonCallsSetOutput(t *testing.T) {
 	}
 
 	// Create a mock server that returns a simple response
-	server := mockStreamServer(t, []string{
+	server := makeMockStreamServer(t, []string{
 		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
 		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":"Hello"}}`),
 		sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
@@ -841,7 +852,7 @@ func TestAC1_MemdirCreatedAtPromptBuild(t *testing.T) {
 
 	// Mock server that returns a single end_turn response so SubmitMessage
 	// completes without making a real API call.
-	server := mockStreamServer(t, []string{
+	server := makeMockStreamServer(t, []string{
 		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
 		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
 		sseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"ok"}}`),
@@ -1013,7 +1024,7 @@ func TestAC3_NotEmittedError(t *testing.T) {
 
 	sessionID := "test-session-not-emitted"
 
-	server := mockStreamServer(t, []string{
+	server := makeMockStreamServer(t, []string{
 		// Assistant responds with just text, no StructuredOutput call
 		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
 		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":"Hello"}}`),
@@ -1064,7 +1075,7 @@ func TestAC3_ResultExtraction(t *testing.T) {
 	sessionID := "test-session-result-extraction"
 	structuredJSON := `{"result":"success","data":[1,2,3]}`
 
-	server := mockStreamServer(t, []string{
+	server := makeMockStreamServer(t, []string{
 		// Assistant calls StructuredOutput tool
 		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
 		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
@@ -1137,7 +1148,7 @@ func TestToolCallEvents(t *testing.T) {
 	sessionID := "sess_tool_call_test"
 
 	// Server that returns a single tool_use then end_turn
-	server := mockStreamServer(t, []string{
+	server := makeMockStreamServer(t, []string{
 		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
 		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tool_1","name":"Bash","input":{}}}`),
 		sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
@@ -1524,7 +1535,7 @@ func TestEngine_BenignContent_NotInterpretedAsInterrupt(t *testing.T) {
 	sessionID := "sess_benign_content_test"
 
 	// Server returns a single tool_use then end_turn
-	server := mockStreamServer(t, []string{
+	server := makeMockStreamServer(t, []string{
 		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
 		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tool_1","name":"Bash","input":{}}}`),
 		sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
@@ -1646,7 +1657,7 @@ func TestToolCallEvents_Negative(t *testing.T) {
 	sessionID := "sess_tool_call_negative"
 
 	// Server that returns a single tool_use then end_turn
-	server := mockStreamServer(t, []string{
+	server := makeMockStreamServer(t, []string{
 		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
 		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tool_1","name":"Bash","input":{}}}`),
 		sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
@@ -2127,7 +2138,7 @@ func TestEngine_OutputCapHit_EmitsStructuredError(t *testing.T) {
 
 	// Server returns stop_reason: max_tokens with output_tokens = 8192 (hits model max)
 	// deepseek-v4-flash has max_output_tokens = 8192
-	server := mockStreamServer(t, []string{
+	server := makeMockStreamServer(t, []string{
 		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"deepseek-v4-flash","stop_reason":null,"usage":{"input_tokens":70000,"output_tokens":0}}}`),
 		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
 		sseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Partial response"}}`),
@@ -2295,7 +2306,7 @@ func TestEngine_AutoCompactFiresAboveThreshold(t *testing.T) {
 	sessionID := "sess_autocompact_threshold_test"
 
 	// Server that responds to summary calls (compaction) - track if it's called
-	summaryServer := mockStreamServer(t, []string{
+	summaryServer := makeMockStreamServer(t, []string{
 		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":100,"output_tokens":50}}}`),
 		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
 		sseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Summarized"}}`),

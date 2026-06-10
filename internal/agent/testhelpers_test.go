@@ -15,9 +15,6 @@ import (
 // captureStdout delegates to testutil.CaptureStdout for stdout capture.
 var captureStdout = testutil.CaptureStdout
 
-// sseLine delegates to testutil.SSELine for SSE event formatting.
-var sseLine = testutil.SSELine
-
 // mockStreamServerHelper creates a mock SSE server for testing.
 // Pass events as variadic strings for flexibility.
 func mockStreamServerHelper(t *testing.T, events ...string) *httptest.Server {
@@ -43,43 +40,6 @@ func mockStreamServerHelper(t *testing.T, events ...string) *httptest.Server {
 	}))
 }
 
-// makeMockStreamServer creates a mock SSE server with default "Hello from stream" events.
-// Accepts optional variadic events to override defaults.
-func makeMockStreamServer(t *testing.T, events ...string) *httptest.Server {
-	t.Helper()
-
-	if len(events) == 0 {
-		// Default events
-		events = []string{
-			sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test-model","stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
-			sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
-			sseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello from stream"}}`),
-			sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),
-			sseLine("message_delta", `{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":1,"output_tokens":2}}`),
-			sseLine("message_stop", `{"type":"message_stop"}`),
-		}
-	}
-
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		io.ReadAll(r.Body)
-		r.Body.Close()
-
-		w.Header().Set("Content-Type", "text/event-stream")
-		w.Header().Set("Cache-Control", "no-cache")
-		w.WriteHeader(http.StatusOK)
-
-		flusher, ok := w.(http.Flusher)
-		if !ok {
-			return
-		}
-		flusher.Flush()
-
-		for _, e := range events {
-			io.WriteString(w, e)
-			flusher.Flush()
-		}
-	}))
-}
 
 func makeMockStreamServerWithPartialEvents(t *testing.T) *httptest.Server {
 	t.Helper()
@@ -144,6 +104,51 @@ func makeMockStreamServerWithCacheTokens(t *testing.T) *httptest.Server {
 			flusher.Flush()
 		}
 	}))
+}
+
+// makeMockStreamServerWithEvents creates a mock SSE server with explicit event slice.
+func makeMockStreamServerWithEvents(t *testing.T, events []string) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.ReadAll(r.Body)
+		r.Body.Close()
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.WriteHeader(http.StatusOK)
+
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			return
+		}
+		flusher.Flush()
+
+		for _, e := range events {
+			io.WriteString(w, e)
+			flusher.Flush()
+		}
+	}))
+}
+
+// TestHelpers verifies that the SSE mock server helpers produce valid servers.
+func TestHelpers(t *testing.T) {
+	events := []string{
+		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message"}}`),
+		sseLine("message_stop", `{"type":"message_stop"}`),
+	}
+	server := makeMockStreamServerWithEvents(t, events)
+	defer server.Close()
+
+	// Verify server is reachable and returns SSE headers
+	resp, err := http.Get(server.URL)
+	if err != nil {
+		t.Fatalf("GET error: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.Header.Get("Content-Type") != "text/event-stream" {
+		t.Errorf("expected Content-Type: text/event-stream, got: %s", resp.Header.Get("Content-Type"))
+	}
 }
 
 // parseAssistantEvents returns all parsed StreamMessage envelopes of type

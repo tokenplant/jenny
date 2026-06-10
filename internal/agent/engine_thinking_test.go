@@ -112,7 +112,7 @@ func TestAC1_ThinkingBlockEmittedSeparately(t *testing.T) {
 	thinking := "Let me think about this..."
 	text := "Here is my answer."
 
-	server := mockStreamServer(t, thinkingTextToolEvents(thinking, "sig-abc", text))
+	server := makeMockStreamServer(t, thinkingTextToolEvents(thinking, "sig-abc", text))
 	defer server.Close()
 
 	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
@@ -175,7 +175,7 @@ func TestAC1_ThinkingBlockEmittedSeparately(t *testing.T) {
 // `"signature": "<value>"`.
 func TestAC2_ThinkingSignatureIncluded(t *testing.T) {
 	signature := "sig-included-123"
-	server := mockStreamServer(t, thinkingTextToolEvents("thought", signature, "answer"))
+	server := makeMockStreamServer(t, thinkingTextToolEvents("thought", signature, "answer"))
 	defer server.Close()
 
 	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
@@ -216,7 +216,7 @@ func TestAC2_ThinkingSignatureIncluded(t *testing.T) {
 // when the API returns no signature on a thinking block, the emitted envelope
 // must NOT include a "signature" key on the thinking block (omitempty).
 func TestAC2_ThinkingSignatureOmittedWhenEmpty(t *testing.T) {
-	server := mockStreamServer(t, thinkingTextToolEvents("thought", "", "answer"))
+	server := makeMockStreamServer(t, thinkingTextToolEvents("thought", "", "answer"))
 	defer server.Close()
 
 	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
@@ -254,7 +254,7 @@ func TestAC2_ThinkingSignatureOmittedWhenEmpty(t *testing.T) {
 // contains thinking, text, and tool_use, the assistant envelope's content
 // array lists them in that order.
 func TestAC3_ContentOrdering_ThinkingTextToolUse(t *testing.T) {
-	server := mockStreamServer(t, thinkingTextToolUseEvents("reasoning", "sig", "summary", "tool_1", "Bash"))
+	server := makeMockStreamServer(t, thinkingTextToolUseEvents("reasoning", "sig", "summary", "tool_1", "Bash"))
 	defer server.Close()
 
 	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
@@ -300,7 +300,7 @@ func TestAC3_ContentOrdering_ThinkingTextToolUse(t *testing.T) {
 // TestAC4_TextOnlyUnaffected verifies AC4: a text-only response emits
 // exactly one content block of type "text" with no regression.
 func TestAC4_TextOnlyUnaffected(t *testing.T) {
-	server := mockStreamServer(t, []string{
+	server := makeMockStreamServer(t, []string{
 		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
 		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}`),
 		sseLine("content_block_delta", `{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"just text"}}`),
@@ -350,7 +350,7 @@ func TestAC4_TextOnlyUnaffected(t *testing.T) {
 // TestAC5_ToolUseOnlyNoEmptyText verifies AC5: a tool_use-only response
 // emits only tool_use blocks, with no spurious empty text block.
 func TestAC5_ToolUseOnlyNoEmptyText(t *testing.T) {
-	server := mockStreamServer(t, []string{
+	server := makeMockStreamServer(t, []string{
 		sseLine("message_start", `{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[],"model":"test","stop_reason":null,"usage":{"input_tokens":1,"output_tokens":1}}}`),
 		sseLine("content_block_start", `{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"tool_1","name":"Bash","input":{}}}`),
 		sseLine("content_block_stop", `{"type":"content_block_stop","index":0}`),

@@ -21,7 +21,7 @@ import (
 // TestAC4_StreamRequestStartEmitted verifies that RunStream emits
 // stream_request_start before each API iteration when streaming is enabled.
 func TestAC4_StreamRequestStartEmitted(t *testing.T) {
-	server := makeMockStreamServer(t)
+	server := makeMockStreamServer(t, nil)
 	defer server.Close()
 
 	// Redirect SDK to our mock server
@@ -97,7 +97,7 @@ func TestAC4_StreamRequestStartEmitted(t *testing.T) {
 // TestAC4_NoStreamRequestStartWhenDisabled verifies that stream_request_start
 // is NOT emitted when streaming is disabled.
 func TestAC4_NoStreamRequestStartWhenDisabled(t *testing.T) {
-	server := makeMockStreamServer(t)
+	server := makeMockStreamServer(t, nil)
 	defer server.Close()
 
 	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
@@ -1043,7 +1043,7 @@ func captureStreamOutput(t *testing.T, cfg StreamConfig) (string, error) {
 // TestStreamJSON_HasParentToolUseID verifies that every emitted JSON line
 // contains the parent_tool_use_id field (AC4).
 func TestStreamJSON_HasParentToolUseID(t *testing.T) {
-	server := makeMockStreamServer(t)
+	server := makeMockStreamServer(t, nil)
 	defer server.Close()
 
 	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
@@ -1082,7 +1082,7 @@ func TestStreamJSON_HasParentToolUseID(t *testing.T) {
 // TestStreamJSON_EmitsAggregatedAssistant verifies that exactly one aggregated
 // assistant event is emitted per turn after content_block_stop (AC1).
 func TestStreamJSON_EmitsAggregatedAssistant(t *testing.T) {
-	server := makeMockStreamServer(t)
+	server := makeMockStreamServer(t, nil)
 	defer server.Close()
 
 	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
@@ -1128,7 +1128,7 @@ func TestStreamJSON_EmitsAggregatedAssistant(t *testing.T) {
 // TestStreamJSON_EmitsAggregatedUser verifies that an aggregated user event
 // with tool_result blocks is emitted after tool execution (AC2).
 func TestStreamJSON_EmitsAggregatedUser(t *testing.T) {
-	server := makeMockStreamServer(t)
+	server := makeMockStreamServer(t, nil)
 	defer server.Close()
 
 	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
@@ -1161,7 +1161,7 @@ func TestStreamJSON_EmitsAggregatedUser(t *testing.T) {
 // TestStreamJSON_EmitsTerminalResult verifies that exactly one terminal result
 // event is emitted at the end (AC3).
 func TestStreamJSON_EmitsTerminalResult(t *testing.T) {
-	server := makeMockStreamServer(t)
+	server := makeMockStreamServer(t, nil)
 	defer server.Close()
 
 	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
@@ -1195,7 +1195,7 @@ func TestStreamJSON_EmitsTerminalResult(t *testing.T) {
 // - result events: type, subtype, is_error, ... (no parent_tool_use_id)
 // - other events: type, parent_tool_use_id, session_id, uuid
 func TestStreamJSON_FieldOrderMatchesReference(t *testing.T) {
-	server := makeMockStreamServer(t)
+	server := makeMockStreamServer(t, nil)
 	defer server.Close()
 
 	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
@@ -1375,7 +1375,7 @@ func TestStreamJSON_FieldOrderMatchesReference(t *testing.T) {
 // TestStreamJSON_CostOnlyOnResult verifies that total_cost_usd appears on
 // exactly one line (the terminal result) and not on mid-stream events (AC6).
 func TestStreamJSON_CostOnlyOnResult(t *testing.T) {
-	server := makeMockStreamServer(t)
+	server := makeMockStreamServer(t, nil)
 	defer server.Close()
 
 	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
