@@ -129,7 +129,7 @@ func TestCommandGate_CheckCommand(t *testing.T) {
 					t.Errorf("expected error but got none")
 					return
 				}
-				if tt.errMsg != "" && !containsStr(err.Error(), tt.errMsg) {
+				if tt.errMsg != "" && !strings.Contains(err.Error(), tt.errMsg) {
 					t.Errorf("expected error containing %q, got %q", tt.errMsg, err.Error())
 				}
 			} else {
@@ -221,7 +221,7 @@ func TestCommandGate_CheckPipelineSegments(t *testing.T) {
 					t.Errorf("expected error but got none")
 					return
 				}
-				if tt.errMsg != "" && !containsStr(err.Error(), tt.errMsg) {
+				if tt.errMsg != "" && !strings.Contains(err.Error(), tt.errMsg) {
 					t.Errorf("expected error containing %q, got %q", tt.errMsg, err.Error())
 				}
 			} else {
@@ -348,7 +348,7 @@ func TestCommandGate_CheckDevicePath(t *testing.T) {
 					t.Errorf("expected error but got none")
 					return
 				}
-				if tt.errMsg != "" && !containsStr(err.Error(), tt.errMsg) {
+				if tt.errMsg != "" && !strings.Contains(err.Error(), tt.errMsg) {
 					t.Errorf("expected error containing %q, got %q", tt.errMsg, err.Error())
 				}
 			} else {
@@ -441,17 +441,4 @@ func TestAC5_SecurityGateErrorMessages(t *testing.T) {
 	if !strings.Contains(err.Error(), "for security reasons") {
 		t.Errorf("error should mention 'for security reasons', got: %s", err.Error())
 	}
-}
-
-func containsStr(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsStrHelper(s, substr))
-}
-
-func containsStrHelper(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }

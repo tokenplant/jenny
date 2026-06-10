@@ -82,19 +82,19 @@ func TestAC1_SessionMemoryInitAt10KTokens(t *testing.T) {
 	}
 
 	// Verify template structure
-	if !contains(string(content), "# Session Memory: test-session-ac1") {
+	if !strings.Contains(string(content), "# Session Memory: test-session-ac1") {
 		t.Fatal("Memory file should contain session ID header")
 	}
-	if !contains(string(content), "## Context / Goals") {
+	if !strings.Contains(string(content), "## Context / Goals") {
 		t.Fatal("Memory file should contain Context / Goals section")
 	}
-	if !contains(string(content), "## Key Decisions") {
+	if !strings.Contains(string(content), "## Key Decisions") {
 		t.Fatal("Memory file should contain Key Decisions section")
 	}
-	if !contains(string(content), "## Current State") {
+	if !strings.Contains(string(content), "## Current State") {
 		t.Fatal("Memory file should contain Current State section")
 	}
-	if !contains(string(content), "## Open Questions") {
+	if !strings.Contains(string(content), "## Open Questions") {
 		t.Fatal("Memory file should contain Open Questions section")
 	}
 }
@@ -459,18 +459,4 @@ func TestAC5_CoalescingWindow(t *testing.T) {
 	if invoked {
 		t.Fatal("Forked agent should not be invoked for coalesced update")
 	}
-}
-
-// contains is a helper to check if a string contains a substring.
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
-}
-
-func containsHelper(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }
