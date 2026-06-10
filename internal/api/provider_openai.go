@@ -1,13 +1,15 @@
-// Package api provides the Anthropic API client.
+// Package api provides the OpenAI API client.
 package api
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"os"
 	"strings"
@@ -269,9 +271,7 @@ func (p *openAIProvider) buildInputSchema(schema ToolInputSchema) map[string]any
 	}
 
 	// Pass through extra fields ($defs, etc.)
-	for k, v := range schema.ExtraFields {
-		result[k] = v
-	}
+	maps.Copy(result, schema.ExtraFields)
 
 	return result
 }
@@ -336,8 +336,8 @@ func (p *openAIProvider) parseResponse(resp OpenAIChatResponse) (*Response, erro
 }
 
 // SendMessageStream sends a streaming message.
-func (p *openAIProvider) SendMessageStream(ctx context.Context, messages []Message, tools []ToolParam, toolResults []ToolResult, systemPrompt string) (<-chan ContentBlock, *StreamResult) {
-	blocksChan := make(chan ContentBlock, 10)
+func (p *openAIProvider) SendMessageStream(ctx context.Context, messages []Message, tools []ToolParam, toolResults []ToolResult, systemPrompt string, idleTimeout time.Duration) (<-chan StreamContentBlock, *StreamResult) {
+	blocksChan := make(chan StreamContentBlock, 10)
 	result := &StreamResult{}
 
 	go func() {
@@ -345,36 +345,30 @@ func (p *openAIProvider) SendMessageStream(ctx context.Context, messages []Messa
 
 		log.Debug("OpenAI provider streaming message", "model", p.model)
 
-		// Normalize messages
+		// ... (setup logic)
 		messages, tools, _ = NormalizeMessages(messages, tools, Capabilities{SupportsPromptCaching: false})
 
-		// Build OpenAI request
+		// ... (request prep)
 		openAIMessages, err := p.buildMessages(messages, toolResults, systemPrompt)
 		if err != nil {
 			result.Error = err.Error()
 			return
 		}
 
-		// Build tools
 		openAITools := p.buildTools(tools)
-
-		// Build request body
 		body := map[string]any{
 			"model":    p.model,
 			"messages": openAIMessages,
 			"stream":   true,
 		}
-
 		if len(openAITools) > 0 {
 			body["tools"] = openAITools
 		}
-
 		maxTokens := p.maxTokens
 		if maxTokens == 0 {
 			maxTokens = 64000
 		}
 		body["max_tokens"] = maxTokens
-
 		jsonBody, err := json.Marshal(body)
 		if err != nil {
 			result.Error = fmt.Sprintf("failed to marshal request: %v", err)
@@ -388,7 +382,6 @@ func (p *openAIProvider) SendMessageStream(ctx context.Context, messages []Messa
 			result.Error = fmt.Sprintf("failed to create request: %v", err)
 			return
 		}
-
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+p.apiKey)
 		req.Header.Set("Accept", "text/event-stream")
@@ -413,15 +406,53 @@ func (p *openAIProvider) SendMessageStream(ctx context.Context, messages []Messa
 
 		hasStopReason := false
 
+		if idleTimeout <= 0 {
+			idleTimeout = DefaultIdleTimeout
+		}
+		idleTimer := time.NewTimer(idleTimeout)
+		defer idleTimer.Stop()
+
+		watchdogCtx, cancelWatchdog := context.WithCancel(ctx)
+		defer cancelWatchdog()
+
+		go func() {
+			select {
+			case <-idleTimer.C:
+				log.Warn("OpenAI: Idle timeout reached")
+				result.Error = "idle timeout"
+				// Note: http.Client context cancellation is handled by reader unblocking
+			case <-watchdogCtx.Done():
+			}
+		}()
+
 		for {
+			// ReadEvent might block
 			event, err := reader.ReadEvent()
+
 			if err != nil {
 				if errors.Is(err, io.EOF) {
 					break
 				}
-				result.Error = fmt.Sprintf("stream read error: %v", err)
+				if result.Error == "" {
+					result.Error = fmt.Sprintf("stream read error: %v", err)
+				}
 				return
 			}
+
+			// Passthrough raw event
+			blocksChan <- StreamContentBlock{
+				Type:     "stream_event",
+				RawEvent: event,
+			}
+
+			// Reset idle timer
+			if !idleTimer.Stop() {
+				select {
+				case <-idleTimer.C:
+				default:
+				}
+			}
+			idleTimer.Reset(idleTimeout)
 
 			if event.Data == "[DONE]" {
 				break
@@ -457,7 +488,7 @@ func (p *openAIProvider) SendMessageStream(ctx context.Context, messages []Messa
 
 // processStreamChunk processes a single OpenAI stream chunk.
 // Returns true if a stop reason was set.
-func (p *openAIProvider) processStreamChunk(chunk OpenAIStreamChunk, acc *openAIStreamAccumulator, blocksChan chan<- ContentBlock, result *StreamResult) bool {
+func (p *openAIProvider) processStreamChunk(chunk OpenAIStreamChunk, acc *openAIStreamAccumulator, blocksChan chan<- StreamContentBlock, result *StreamResult) bool {
 	if chunk.Model != "" {
 		result.Model = chunk.Model
 	}
@@ -482,25 +513,25 @@ func (p *openAIProvider) processStreamChunk(chunk OpenAIStreamChunk, acc *openAI
 	// Process delta
 	delta := choice.Delta
 
-	// Process content
+	// Process content - emit incrementally as content arrives
 	if delta.Content != "" && delta.Content != "null" {
 		acc.appendContent(delta.Content)
-		// Emit text block (only when we have a stop reason to indicate completion)
-		if hasStopReason {
-			blocksChan <- ContentBlock{
+		// Emit text block with accumulated content
+		blocksChan <- StreamContentBlock{
+			Block: ContentBlock{
 				Type: "text",
 				Text: acc.getContent(),
-			}
+			},
 		}
 	}
 
-	// Process tool calls
+	// Process tool calls - emit incrementally as tool input accumulates
 	for _, tc := range delta.ToolCalls {
 		acc.appendToolCall(tc.Index, tc.ID, tc.Function.Name, tc.Function.Arguments)
-		// Emit partial tool_use block only when we have a stop reason
-		if hasStopReason {
-			if toolBlock := acc.getToolUseBlock(tc.Index); toolBlock != nil {
-				blocksChan <- *toolBlock
+		// Emit partial tool_use block as arguments stream in
+		if toolBlock := acc.getToolUseBlock(tc.Index); toolBlock != nil {
+			blocksChan <- StreamContentBlock{
+				Block: *toolBlock,
 			}
 		}
 	}
@@ -678,72 +709,63 @@ type OpenAIStreamChunk struct {
 }
 
 // SSEReader reads Server-Sent Events from a reader.
+// Uses bufio.Reader with a large buffer to handle large responses.
 type SSEReader struct {
-	reader *strings.Reader
+	reader *bufio.Reader
 }
 
 // SSEEvent represents a single SSE event.
 type SSEEvent struct {
-	Data string
+	Event string // event type (e.g., "ping")
+	Data  string // data content
 }
 
-// NewSSEReader creates a new SSE reader.
+// NewSSEReader creates a new SSE reader with a large buffer.
 func NewSSEReader(r io.Reader) *SSEReader {
-	data, _ := io.ReadAll(r)
 	return &SSEReader{
-		reader: strings.NewReader(string(data)),
+		reader: bufio.NewReaderSize(r, 1<<20), // 1MB buffer for large responses
 	}
 }
 
-// ReadEvent reads the next SSE event.
+// ReadEvent reads the next SSE event, properly parsing the SSE protocol.
+// Handles long lines by accumulating data until newline is found.
 func (s *SSEReader) ReadEvent() (*SSEEvent, error) {
-	var data string
+	var eventType string
+	var data strings.Builder
 
-	readLine := func() (string, error) {
-		line := make([]byte, 0, 100)
-		for {
-			c := make([]byte, 1)
-			n, err := s.reader.Read(c)
-			if err != nil {
-				if len(line) > 0 {
-					return string(line), nil
-				}
-				return "", err
-			}
-			if n == 0 {
-				if len(line) > 0 {
-					return string(line), nil
-				}
-				return "", io.EOF
-			}
-			if c[0] == '\n' {
-				if len(line) > 0 && line[len(line)-1] == '\r' {
-					line = line[:len(line)-1]
-				}
-				return string(line), nil
-			}
-			line = append(line, c...)
-		}
-	}
-
-	// Read until we find a "data:" line
 	for {
-		line, err := readLine()
+		// Read bytes until newline using ReadBytes
+		line, err := s.reader.ReadBytes('\n')
 		if err != nil {
-			if data != "" {
-				return &SSEEvent{Data: data}, nil
+			if err == io.EOF && (data.Len() > 0 || eventType != "") {
+				// Return last event if we have content
+				return &SSEEvent{Event: eventType, Data: data.String()}, nil
 			}
 			return nil, err
 		}
 
-		if strings.HasPrefix(line, "data:") {
-			data = strings.TrimPrefix(line, "data:")
-			data = strings.TrimLeft(data, " ")
-			// Handle "data: " prefix
-			if strings.HasPrefix(data, " ") {
-				data = data[1:]
+		// Remove trailing \r\n or \n
+		lineStr := strings.TrimRight(string(line), "\r\n")
+		if lineStr == "" {
+			// Empty line marks end of event
+			if data.Len() > 0 || eventType != "" {
+				return &SSEEvent{Event: eventType, Data: data.String()}, nil
 			}
-			return &SSEEvent{Data: data}, nil
+			continue
 		}
+
+		// Parse SSE field
+		if after, ok := strings.CutPrefix(lineStr, "event:"); ok {
+			eventType = after
+			eventType = strings.TrimSpace(eventType)
+		} else if after, ok := strings.CutPrefix(lineStr, "data:"); ok {
+			dataStr := after
+			dataStr = strings.TrimSpace(dataStr)
+			if data.Len() > 0 {
+				data.WriteString("\n")
+			}
+			data.WriteString(dataStr)
+		}
+		// Ignore other SSE fields (id:, retry:, etc.)
 	}
 }

@@ -88,9 +88,15 @@ Implement in this order:
    - [x] DeepSeek tool_result dedup fix — duplicate `tool_result` blocks deduplicated by `tool_use_id` in `mergeConsecutiveSameRole` and SDK serialization safety net ✓
    - [x] Document provider-aware fix rationale — see [provider-aware-fixes.md](./arch/provider-aware-fixes.md)
    - [x] Universal normalization: make existing shims (DeepSeek dedup, MiniMax __arg__) apply to all providers; remove URL-based provider detection — see [universal-normalization-architecture.md](./arch/universal-normalization-architecture.md)
-   - [ ] Full SSNF pipeline (deferred — see [universal-normalization-architecture.md](./arch/universal-normalization-architecture.md))
+   - [ ] Full SSNF pipeline (deferred — see [universal-normalization-architecture.md](./universal-normalization-architecture.md))
 
-4. - [x] Core agent loop — partial — [`agent-loop.md`](./arch/agent-loop.md)
+   4. - [x] OpenAI API client — [`openai-api-client.md`](./arch/openai-api-client.md)
+   - [x] Basic Chat API support ✓
+   - [x] Tool calls mapping ✓
+   - [x] True SSE streaming (no buffering) ✓
+
+   5. - [x] Core agent loop — partial — [`agent-loop.md`](./arch/agent-loop.md)
+
    - Basic tool_use → execute → tool_result loop
    - Unknown tool → immediate error (does not hang)
    - **Deferred:** thinking/interrupt/spill/compaction handling → P3+

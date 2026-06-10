@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ipy/jenny/internal/constants"
 )
@@ -146,9 +147,13 @@ func (t *ReadTool) Execute(ctx context.Context, input map[string]any, cwd string
 	info, err := os.Stat(absFilePath)
 	if err != nil {
 		if os.IsNotExist(err) {
+			// Record empty read in cache even if file doesn't exist (to allow subsequent Write)
+			if t.readCache != nil {
+				t.readCache.RecordRead(absFilePath, "", time.Now(), true, 1, 0)
+			}
 			return &ToolResult{
-				Content: fmt.Sprintf("File does not exist: %s", filePath),
-				IsError: true,
+				Content: fmt.Sprintf("[Warning: file does not exist: %s]\n\n[0 lines, started at line 1, total lines in file: 0]", filePath),
+				IsError: false,
 			}, nil
 		}
 		return &ToolResult{

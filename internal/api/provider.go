@@ -3,6 +3,7 @@ package api
 
 import (
 	"context"
+	"time"
 )
 
 // ProviderKind represents the type of provider backend.
@@ -22,8 +23,14 @@ type Provider interface {
 
 	// SendMessageStream sends a streaming message and yields content blocks via the channel.
 	// The StreamResult contains final blocks, usage, and any error.
-	SendMessageStream(ctx context.Context, messages []Message, tools []ToolParam, toolResults []ToolResult, systemPrompt string) (<-chan ContentBlock, *StreamResult)
+	SendMessageStream(ctx context.Context, messages []Message, tools []ToolParam, toolResults []ToolResult, systemPrompt string, idleTimeout time.Duration) (<-chan StreamContentBlock, *StreamResult)
 
 	// Kind returns the provider kind for debugging/logging.
 	Kind() ProviderKind
+}
+
+// ProviderWithRetryConfig allows providers to receive retry configuration.
+type ProviderWithRetryConfig interface {
+	Provider
+	SetRetryConfig(cfg RetryConfig)
 }

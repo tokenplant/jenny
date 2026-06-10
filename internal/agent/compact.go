@@ -3,6 +3,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"regexp"
@@ -133,12 +134,15 @@ func estimateTokens(messages []api.Message) int {
 	total := 0
 	for _, msg := range messages {
 		total += len(msg.Content)
-		// Rough estimate: tool_use blocks add overhead
-		for range msg.ToolUse {
-			total += 50
+		// Rough estimate: tool_use and tool_results blocks add significant content
+		for _, tu := range msg.ToolUse {
+			total += len(tu.Name) + 50 // Name + overhead
+			// Estimate input JSON size
+			inputBytes, _ := json.Marshal(tu.Input)
+			total += len(inputBytes)
 		}
-		for range msg.ToolResults {
-			total += 50
+		for _, tr := range msg.ToolResults {
+			total += len(tr.Content) + 50 // Content + overhead
 		}
 	}
 	return total

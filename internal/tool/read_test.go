@@ -86,9 +86,9 @@ func TestReadTool_Execute(t *testing.T) {
 				"file_path": filepath.Join(tmpDir, "nonexistent.txt"),
 			},
 			cwd:     tmpDir,
-			wantErr: false, // Returns error in content
+			wantErr: false,
 			checkFn: func(r *ToolResult) bool {
-				return r != nil && r.IsError && strings.Contains(r.Content, "does not exist")
+				return r != nil && !r.IsError && strings.Contains(r.Content, "[Warning: file does not exist")
 			},
 		},
 		{
