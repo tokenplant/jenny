@@ -132,13 +132,13 @@ CLI → API → loop → persistence → resume → SSE → stream-json → cost
 
 | # | Feature | Spec | Status |
 |---|---------|------|--------|
-| 1 | CLI | [cli.md](./arch/cli.md) | done |
-| 2 | Anthropic API client | [anthropic-api-client.md](./arch/anthropic-api-client.md) | done |
-| 3 | Core agent loop | [agent-loop.md](./arch/agent-loop.md) | done |
-| 4 | Session persistence | [session-persistence.md](./arch/session-persistence.md) | done |
+| 1 | CLI | [cli.md](./arch/cli.md) | partial |
+| 2 | Anthropic API client | [anthropic-api-client.md](./arch/anthropic-api-client.md) | partial |
+| 3 | Core agent loop | [agent-loop.md](./arch/agent-loop.md) | partial |
+| 4 | Session persistence | [session-persistence.md](./arch/session-persistence.md) | partial |
 | 5 | Session resume | [session-resume.md](./arch/session-resume.md) | partial |
-| 6 | SSE streaming | [sse-streaming.md](./arch/sse-streaming.md) | done |
-| 7 | Stream-json | [stream-json.md](./arch/stream-json.md) | done |
+| 6 | SSE streaming | [sse-streaming.md](./arch/sse-streaming.md) | partial |
+| 7 | Stream-json | [stream-json.md](./arch/stream-json.md) | partial |
 | 8 | Cost tracking | [cost-tracking.md](./arch/cost-tracking.md) | done |
 | 9 | MCP config | [mcp-config.md](./arch/mcp-config.md) | partial |
 | 10 | MCP client | [mcp-client.md](./arch/mcp-client.md) | partial |
