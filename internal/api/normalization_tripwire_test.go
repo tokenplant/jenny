@@ -11,10 +11,16 @@ import (
 // TestNormalize_NoProviderNameStringsInProduction verifies that provider name strings
 // (minimax, deepseek) do not appear in production code paths.
 func TestNormalize_NoProviderNameStringsInProduction(t *testing.T) {
-	// Run grep to find minimax or deepseek in production Go files
+	// Determine project root: go test runs with CWD set to the package directory,
+	// so relative paths would resolve incorrectly. Walk up to find go.mod.
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	root := filepath.Join(wd, "..", "..")
 	cmd := exec.Command("grep", "-rin", "minimax\\|deepseek",
-		"internal/api/",
-		"internal/agent/",
+		filepath.Join(root, "internal", "api"),
+		filepath.Join(root, "internal", "agent"),
 		"--include=*.go")
 	output, _ := cmd.CombinedOutput()
 
