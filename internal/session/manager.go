@@ -3,7 +3,6 @@ package session
 
 import (
 	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -76,13 +75,9 @@ func NewManager(transcriptDir string, disabled bool) (*Manager, error) {
 	return &Manager{transcriptDir: transcriptDir}, nil
 }
 
-// NewSessionID generates a new session ID.
+// NewSessionID generates a new session ID as a lowercase UUID v4 string.
 func NewSessionID() (string, error) {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		return "", fmt.Errorf("generating session ID: %w", err)
-	}
-	return "sess_" + hex.EncodeToString(b), nil
+	return newUUID(), nil
 }
 
 // newUUID generates a random UUID v4 string (lowercase).

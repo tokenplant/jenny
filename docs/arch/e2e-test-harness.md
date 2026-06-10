@@ -5,7 +5,7 @@ priority: P0
 status: complete
 spec: complete
 code: complete
-package: jenny_test
+package: jenny_test, parity
 depends_on:
   - cli.md
   - stream-json-spec.md
@@ -24,27 +24,48 @@ functions under `jenny_test/`. No live API access is required.
 ## Directory Layout
 
 ```
-jenny_test/
-├── cli_flags_test.go              # --version, --help smoke tests
-├── stream_json_test.go            # stream-json + cassette replay smoke
-├── stream_json_format_test.go     # NDJSON event-shape conformance tests
-├── api_protocol_test.go           # outbound /v1/messages request conformance
-├── tool_call_test.go              # multi-turn tool-call event conformance
-├── transcript_test.go             # session transcript smoke tests
-├── harness/                       # internal helper package
+parity/
+├── harness/                       # shared test infrastructure
+│   ├── runner.go                  # jenny binary builder + spawner (RunJenny, RunTarget)
 │   ├── mock_api.go                # mock Anthropic API server
-│   └── runner.go                  # jenny binary builder + spawner
-└── fixtures/
-    └── cassettes/                 # SSE cassette files
-        ├── echo-hello.sse
-        ├── tool-use-turn1.sse
-        └── tool-use-turn2.sse
+│   ├── types.go                   # TestCase, ExpectedBehavior, etc.
+│   ├── comparator.go             # declarative comparison engine
+│   ├── suite.go                  # declarative SuiteRunner
+│   └── reporter.go              # TextReporter / JSONReporter
+├── fixtures/cassettes/           # SSE cassette files
+├── cli_test.go                   # CLI flags (declarative)
+├── stream_json_test.go           # stream-json envelope (declarative)
+├── api_protocol_test.go          # API request shape (declarative)
+├── system_prompt_test.go         # system prompt assembly (declarative)
+├── tool_call_test.go             # tool call flows (declarative)
+├── tools_test.go                 # per-tool behavior (declarative)
+├── skill_plugin_test.go          # skills/plugin discovery (declarative)
+├── cost_tracking_test.go         # cost/usage (declarative)
+├── session_test.go               # session persistence (declarative)
+└── normalization_test.go         # message normalization (declarative)
+
+jenny_test/
+├── cli_flags_test.go             # CLI flags (imperative, AC-tagged)
+├── stream_json_test.go           # stream-json smoke (imperative)
+├── stream_json_format_test.go    # NDJSON shape (imperative)
+├── api_protocol_test.go          # API conformance (imperative)
+├── tool_call_test.go             # tool-call events (imperative)
+├── transcript_test.go            # transcript file tests (imperative)
+├── session_resume_test.go        # session resume (imperative)
+├── continue_flag_test.go         # --continue flag (imperative)
+├── override_flags_test.go        # --model, --system-prompt (imperative)
+├── env_vars_test.go              # env var handling (imperative)
+├── system_prompt_test.go         # system prompt (imperative)
+├── memory_test.go                # memdir (imperative)
+├── minimax_test.go               # minimax provider (imperative)
+├── multi_turn_request_test.go    # multi-turn history (imperative)
+└── fixtures/cassettes/           # shared SSE cassettes
 ```
 
-`jenny_test/` itself is a Go test-only package (`package e2e_test`); it has
-no production code. The `harness/` subpackage is imported as a test
-dependency. The mock server, cassette, and binary-spawn helpers all live
-there so individual test files stay focused on assertions.
+Both `jenny_test/` and `parity/` import the same harness from
+`parity/harness/`. The `jenny_test/harness/` package has been removed;
+all mock server, runner, and comparison infrastructure is consolidated
+in `parity/harness/`.
 
 ## System Prompt Verification
 

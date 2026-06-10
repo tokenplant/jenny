@@ -5,10 +5,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 	"time"
 
 	"github.com/ipy/jenny/internal/constants"
+)
+
+var uuidV4Re = regexp.MustCompile(
+	`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`,
 )
 
 func TestNewSessionID(t *testing.T) {
@@ -16,8 +21,8 @@ func TestNewSessionID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSessionID() error = %v", err)
 	}
-	if len(id1) != 5+32 { // "sess_" + 16 bytes hex
-		t.Errorf("NewSessionID() = %v, want length 37", len(id1))
+	if !uuidV4Re.MatchString(id1) {
+		t.Errorf("NewSessionID() = %q, want UUID v4 format", id1)
 	}
 
 	id2, err := NewSessionID()
@@ -185,7 +190,7 @@ func TestContainsPathTraversal(t *testing.T) {
 		want  bool
 	}{
 		{"empty string", "", false},
-		{"valid session id", "sess_abc123def456", false},
+		{"valid session id", "550e8400-e29b-41d4-a716-446655440000", false},
 		{"absolute path", "/etc/passwd", true},
 		{"absolute path windows", "\\windows\\system32", true},
 		{"relative parent", "./foo", true},
@@ -199,7 +204,7 @@ func TestContainsPathTraversal(t *testing.T) {
 		{"dots without slash", "..foo", false},
 		{"normal relative", "foo/bar", false},
 		{"normal relative windows", "foo\\bar", false},
-		{"session id with underscores", "sess_abc123", false},
+		{"plain string", "abc123", false},
 	}
 
 	for _, tt := range tests {
@@ -219,8 +224,8 @@ func TestValidateSessionID(t *testing.T) {
 		wantErr bool
 	}{
 		{"empty string", "", true},
-		{"valid session id", "sess_abc123def456", false},
-		{"valid with numbers", "sess_1234567890123456", false},
+		{"valid session id", "550e8400-e29b-41d4-a716-446655440000", false},
+		{"valid with numbers", "12345678-1234-1234-1234-123456789012", false},
 		{"absolute path", "/etc/passwd", true},
 		{"absolute path windows", "\\windows\\system32", true},
 		{"relative parent", "./foo", true},

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ipy/jenny/jenny_test/harness"
+	"github.com/ipy/jenny/parity/harness"
 )
 
 func runPrintSystemPrompt(t *testing.T) harness.RunResult {

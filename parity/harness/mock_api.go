@@ -57,6 +57,13 @@ func (m *MockServer) Requests() []APIRequest {
 	return out
 }
 
+// ClearRequests resets the recorded requests list.
+func (m *MockServer) ClearRequests() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.requests = nil
+}
+
 // SetSequence registers an ordered list of cassette file names to serve.
 func (m *MockServer) SetSequence(cassetteID string, cassettes []string) {
 	m.seqMu.Lock()

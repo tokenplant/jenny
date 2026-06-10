@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ipy/jenny/jenny_test/harness"
+	"github.com/ipy/jenny/parity/harness"
 )
 
 // transcriptEnv returns env for transcript tests: mock server + controlled transcript dir.

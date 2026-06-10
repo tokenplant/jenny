@@ -17,12 +17,15 @@ const (
 	// manifestFileName is the name of the plugin manifest file.
 	manifestFileName = "plugin.json"
 
-	// pluginDirName is the directory name containing the plugin manifest.
-	pluginDirName = ".codex-plugin"
-
 	// maxDiscoveryDepth is the maximum directory depth for plugin discovery.
 	maxDiscoveryDepth = 5
 )
+
+// pluginDirNames lists marker directories in priority order.
+var pluginDirNames = []string{".jenny-plugin", ".claude-plugin", ".codex-plugin"}
+
+// PluginDirNames returns the marker directory names in priority order.
+func PluginDirNames() []string { return pluginDirNames }
 
 // LoadedPlugin represents a plugin loaded from disk with its manifest.
 type LoadedPlugin struct {
@@ -92,52 +95,76 @@ func validateURL(url string) error {
 	return nil
 }
 
-// FindPluginRoots walks rootDir looking for .codex-plugin/plugin.json directories.
-// Returns paths to plugin root directories (the parent of .codex-plugin/).
-// Skips hidden directories (starting with .) but not .codex-plugin.
-// Maximum depth of 5 levels.
+func isPluginMarker(name string) bool {
+	for _, m := range pluginDirNames {
+		if name == m {
+			return true
+		}
+	}
+	return false
+}
+
+// hasPluginMarker checks whether dir contains any marker/plugin.json,
+// testing markers in priority order.
+func hasPluginMarker(dir string) bool {
+	for _, marker := range pluginDirNames {
+		if _, err := os.Stat(filepath.Join(dir, marker, manifestFileName)); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+// FindPluginRoots walks rootDir looking for plugin marker directories.
+// Markers are checked in priority order: .jenny-plugin, .claude-plugin, .codex-plugin.
+// Returns paths to plugin root directories (the parent of the marker dir).
+// Skips hidden directories except plugin markers. Maximum depth of 5 levels.
 func FindPluginRoots(rootDir string) []string {
 	var roots []string
 
-	// Ensure root directory exists
 	info, err := os.Stat(rootDir)
 	if err != nil || !info.IsDir() {
 		return roots
 	}
 
+	seen := make(map[string]bool)
+
 	filepath.WalkDir(rootDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			return nil // Skip inaccessible paths
+			return nil
+		}
+		if !d.IsDir() {
+			return nil
 		}
 
-		if d.IsDir() {
-			// Calculate depth from root by counting path separators
-			rel, err := filepath.Rel(rootDir, path)
-			if err != nil {
-				return nil
-			}
-			depth := 0
-			if rel != "." {
-				depth = len(strings.Split(rel, string(filepath.Separator)))
-			}
-			if depth > maxDiscoveryDepth {
-				return filepath.SkipDir
-			}
+		rel, relErr := filepath.Rel(rootDir, path)
+		if relErr != nil {
+			return nil
+		}
+		depth := 0
+		if rel != "." {
+			depth = len(strings.Split(rel, string(filepath.Separator)))
+		}
+		if depth > maxDiscoveryDepth {
+			return filepath.SkipDir
+		}
 
-			name := d.Name()
+		name := d.Name()
 
-			// Check if this directory is a .codex-plugin directory (the plugin marker)
-			if name == pluginDirName {
-				// Get the parent directory (plugin root)
-				root := filepath.Dir(path)
-				roots = append(roots, root)
-				return filepath.SkipDir // Don't recurse into plugin
-			}
+		// Skip marker directories themselves — we probe for them from the parent.
+		if isPluginMarker(name) {
+			return filepath.SkipDir
+		}
 
-			// Skip other hidden directories (but not root and not .codex-plugin)
-			if path != rootDir && strings.HasPrefix(name, ".") {
-				return filepath.SkipDir
-			}
+		// Skip other hidden directories (but not rootDir).
+		if path != rootDir && strings.HasPrefix(name, ".") {
+			return filepath.SkipDir
+		}
+
+		// Probe this directory for any plugin marker.
+		if !seen[path] && hasPluginMarker(path) {
+			seen[path] = true
+			roots = append(roots, path)
 		}
 
 		return nil

@@ -3,7 +3,7 @@ package e2e_test
 import (
 	"testing"
 
-	"github.com/ipy/jenny/jenny_test/harness"
+	"github.com/ipy/jenny/parity/harness"
 )
 
 // runToolUseWithRequests runs the two-turn tool-use scenario and returns

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ipy/jenny/jenny_test/harness"
+	"github.com/ipy/jenny/parity/harness"
 )
 
 // versionFormatRe matches the full version format: semver + parenthesized product name.

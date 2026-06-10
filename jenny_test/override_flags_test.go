@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ipy/jenny/jenny_test/harness"
+	"github.com/ipy/jenny/parity/harness"
 )
 
 // overrideFlagsEnv returns the env slice needed to talk to the mock server.

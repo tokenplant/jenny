@@ -8,7 +8,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/ipy/jenny/jenny_test/harness"
+	"github.com/ipy/jenny/parity/harness"
 )
 
 // minimaxMockServer is a mock that returns MiniMax-style 400 errors when

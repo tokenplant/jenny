@@ -8,6 +8,29 @@ import (
 	"github.com/ipy/jenny/internal/skills"
 )
 
+// loadPluginFromRoot tries plugin marker directories in priority order
+// (.jenny-plugin, .claude-plugin, .codex-plugin) and returns the first valid
+// LoadedPlugin, or nil if none found.
+func loadPluginFromRoot(pluginRoot string) *plugin.LoadedPlugin {
+	for _, marker := range plugin.PluginDirNames() {
+		manifestPath := filepath.Join(pluginRoot, marker, "plugin.json")
+		manifest, err := plugin.LoadManifest(manifestPath)
+		if err != nil {
+			continue
+		}
+		loaded := &plugin.LoadedPlugin{
+			RootPath:     pluginRoot,
+			Manifest:     manifest,
+			ManifestPath: manifestPath,
+		}
+		if err := loaded.Validate(); err != nil {
+			continue
+		}
+		return loaded
+	}
+	return nil
+}
+
 // discoverAndMergePluginSkills discovers plugins from the given roots, loads
 // their skills, and merges them into the provided skills slice.
 // Plugin skills with duplicate names (case-insensitive via NormalizeSkillName)
@@ -15,23 +38,12 @@ import (
 // errors are silently skipped.
 func discoverAndMergePluginSkills(skillsList []skills.Skill, pluginRoots []string) []skills.Skill {
 	for _, pluginRoot := range pluginRoots {
-		manifestPath := filepath.Join(pluginRoot, ".codex-plugin", "plugin.json")
-		manifest, err := plugin.LoadManifest(manifestPath)
-		if err != nil {
+		loaded := loadPluginFromRoot(pluginRoot)
+		if loaded == nil {
 			continue
 		}
 
-		loadedPlugin := &plugin.LoadedPlugin{
-			RootPath:     pluginRoot,
-			Manifest:     manifest,
-			ManifestPath: manifestPath,
-		}
-
-		if err := loadedPlugin.Validate(); err != nil {
-			continue
-		}
-
-		pluginSkills, err := plugin.LoadPluginSkills(loadedPlugin)
+		pluginSkills, err := plugin.LoadPluginSkills(loaded)
 		if err != nil {
 			continue
 		}
@@ -60,19 +72,8 @@ func loadPluginMCPServers(cwd, homeDir string) map[string]mcp.MCPServerDef {
 	}
 
 	for _, root := range roots {
-		manifestPath := filepath.Join(root, ".codex-plugin", "plugin.json")
-		manifest, err := plugin.LoadManifest(manifestPath)
-		if err != nil {
-			continue
-		}
-
-		loaded := &plugin.LoadedPlugin{
-			RootPath:     root,
-			Manifest:     manifest,
-			ManifestPath: manifestPath,
-		}
-
-		if err := loaded.Validate(); err != nil {
+		loaded := loadPluginFromRoot(root)
+		if loaded == nil {
 			continue
 		}
 

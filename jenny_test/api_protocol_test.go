@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ipy/jenny/jenny_test/harness"
+	"github.com/ipy/jenny/parity/harness"
 )
 
 // TestAPIProtocolMaxTokens is the AC9 conformance test: the outbound

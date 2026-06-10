@@ -17,25 +17,18 @@ func TestFindPluginRoots_NoneFound(t *testing.T) {
 }
 
 func TestFindPluginRoots_FindsPlugins(t *testing.T) {
-	// Create a temp directory structure:
-	// root/
-	//   a/.codex-plugin/plugin.json
-	//   b/.codex-plugin/plugin.json
-	//   .hidden/.codex-plugin/plugin.json (should be skipped)
 	tmpDir := t.TempDir()
 
-	// Create plugin directories
 	aDir := filepath.Join(tmpDir, "a")
 	bDir := filepath.Join(tmpDir, "b")
 	hiddenDir := filepath.Join(tmpDir, ".hidden")
 
 	for _, dir := range []string{aDir, bDir, hiddenDir} {
-		if err := os.MkdirAll(filepath.Join(dir, ".codex-plugin"), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Join(dir, ".jenny-plugin"), 0755); err != nil {
 			t.Fatalf("failed to create plugin dir: %v", err)
 		}
 	}
 
-	// Create manifest files
 	manifests := map[string]string{
 		aDir:      `{"name": "plugin-a", "version": "1.0.0"}`,
 		bDir:      `{"name": "plugin-b", "version": "1.0.0"}`,
@@ -43,7 +36,7 @@ func TestFindPluginRoots_FindsPlugins(t *testing.T) {
 	}
 
 	for dir, content := range manifests {
-		manifestPath := filepath.Join(dir, ".codex-plugin", "plugin.json")
+		manifestPath := filepath.Join(dir, ".jenny-plugin", "plugin.json")
 		if err := os.WriteFile(manifestPath, []byte(content), 0644); err != nil {
 			t.Fatalf("failed to write manifest: %v", err)
 		}
@@ -51,12 +44,10 @@ func TestFindPluginRoots_FindsPlugins(t *testing.T) {
 
 	roots := FindPluginRoots(tmpDir)
 
-	// Should find a and b, but not .hidden
 	if len(roots) != 2 {
 		t.Errorf("expected 2 plugin roots, got %d: %v", len(roots), roots)
 	}
 
-	// Check that both a and b are found
 	found := make(map[string]bool)
 	for _, r := range roots {
 		found[r] = true
@@ -73,11 +64,64 @@ func TestFindPluginRoots_FindsPlugins(t *testing.T) {
 	}
 }
 
+func TestFindPluginRoots_FallbackClaudePlugin(t *testing.T) {
+	tmpDir := t.TempDir()
+	dir := filepath.Join(tmpDir, "proj")
+	if err := os.MkdirAll(filepath.Join(dir, ".claude-plugin"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".claude-plugin", "plugin.json"), []byte(`{"name":"fb"}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	roots := FindPluginRoots(tmpDir)
+	if len(roots) != 1 || roots[0] != dir {
+		t.Errorf("expected .claude-plugin fallback to find %s, got %v", dir, roots)
+	}
+}
+
+func TestFindPluginRoots_FallbackCodexPlugin(t *testing.T) {
+	tmpDir := t.TempDir()
+	dir := filepath.Join(tmpDir, "proj")
+	if err := os.MkdirAll(filepath.Join(dir, ".codex-plugin"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".codex-plugin", "plugin.json"), []byte(`{"name":"fb"}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	roots := FindPluginRoots(tmpDir)
+	if len(roots) != 1 || roots[0] != dir {
+		t.Errorf("expected .codex-plugin fallback to find %s, got %v", dir, roots)
+	}
+}
+
+func TestFindPluginRoots_JennyPluginTakesPriority(t *testing.T) {
+	tmpDir := t.TempDir()
+	dir := filepath.Join(tmpDir, "proj")
+	for _, marker := range []string{".jenny-plugin", ".claude-plugin", ".codex-plugin"} {
+		if err := os.MkdirAll(filepath.Join(dir, marker), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, marker, "plugin.json"), []byte(`{"name":"multi"}`), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	roots := FindPluginRoots(tmpDir)
+	if len(roots) != 1 {
+		t.Fatalf("expected exactly 1 root when multiple markers exist, got %d: %v", len(roots), roots)
+	}
+	if roots[0] != dir {
+		t.Errorf("expected root %s, got %s", dir, roots[0])
+	}
+}
+
 func TestLoadedPlugin_Validate_Valid(t *testing.T) {
 	p := &LoadedPlugin{
 		RootPath:     "/tmp/plugin",
 		Manifest:     &PluginManifest{Name: "test-plugin"},
-		ManifestPath: "/tmp/plugin/.codex-plugin/plugin.json",
+		ManifestPath: "/tmp/plugin/.jenny-plugin/plugin.json",
 	}
 
 	if err := p.Validate(); err != nil {
@@ -89,7 +133,7 @@ func TestLoadedPlugin_Validate_NilManifest(t *testing.T) {
 	p := &LoadedPlugin{
 		RootPath:     "/tmp/plugin",
 		Manifest:     nil,
-		ManifestPath: "/tmp/plugin/.codex-plugin/plugin.json",
+		ManifestPath: "/tmp/plugin/.jenny-plugin/plugin.json",
 	}
 
 	if err := p.Validate(); err == nil {
@@ -101,7 +145,7 @@ func TestLoadedPlugin_Validate_EmptyName(t *testing.T) {
 	p := &LoadedPlugin{
 		RootPath:     "/tmp/plugin",
 		Manifest:     &PluginManifest{Name: ""},
-		ManifestPath: "/tmp/plugin/.codex-plugin/plugin.json",
+		ManifestPath: "/tmp/plugin/.jenny-plugin/plugin.json",
 	}
 
 	if err := p.Validate(); err == nil {
@@ -113,7 +157,7 @@ func TestLoadedPlugin_Validate_InvalidSkillsPath(t *testing.T) {
 	p := &LoadedPlugin{
 		RootPath:     "/tmp/plugin",
 		Manifest:     &PluginManifest{Name: "test", Skills: "absolute/path"},
-		ManifestPath: "/tmp/plugin/.codex-plugin/plugin.json",
+		ManifestPath: "/tmp/plugin/.jenny-plugin/plugin.json",
 	}
 
 	if err := p.Validate(); err == nil {
@@ -125,7 +169,7 @@ func TestLoadedPlugin_Validate_ValidPaths(t *testing.T) {
 	p := &LoadedPlugin{
 		RootPath:     "/tmp/plugin",
 		Manifest:     &PluginManifest{Name: "test", Skills: "./skills/", MCPServers: "./.mcp.json", Hooks: "./hooks.json", Apps: "./.app.json"},
-		ManifestPath: "/tmp/plugin/.codex-plugin/plugin.json",
+		ManifestPath: "/tmp/plugin/.jenny-plugin/plugin.json",
 	}
 
 	if err := p.Validate(); err != nil {
@@ -144,7 +188,7 @@ func TestLoadedPlugin_Validate_ValidInterfaceURLs(t *testing.T) {
 				TermsOfServiceURL: "https://example.com/tos",
 			},
 		},
-		ManifestPath: "/tmp/plugin/.codex-plugin/plugin.json",
+		ManifestPath: "/tmp/plugin/.jenny-plugin/plugin.json",
 	}
 
 	if err := p.Validate(); err != nil {
@@ -158,10 +202,10 @@ func TestLoadedPlugin_Validate_InvalidInterfaceURL(t *testing.T) {
 		Manifest: &PluginManifest{
 			Name: "test",
 			Interface: &PluginManifestInterface{
-				WebsiteURL: "http://example.com", // Should be https://
+				WebsiteURL: "http://example.com",
 			},
 		},
-		ManifestPath: "/tmp/plugin/.codex-plugin/plugin.json",
+		ManifestPath: "/tmp/plugin/.jenny-plugin/plugin.json",
 	}
 
 	if err := p.Validate(); err == nil {
@@ -207,8 +251,7 @@ func TestLoadPluginSkills_ValidSkillsDir(t *testing.T) {
 	// Create a temp directory with a plugin structure
 	tmpDir := t.TempDir()
 
-	// Create .codex-plugin directory and manifest
-	pluginDir := filepath.Join(tmpDir, ".codex-plugin")
+	pluginDir := filepath.Join(tmpDir, ".jenny-plugin")
 	if err := os.MkdirAll(pluginDir, 0755); err != nil {
 		t.Fatalf("failed to create plugin dir: %v", err)
 	}
@@ -219,13 +262,11 @@ func TestLoadPluginSkills_ValidSkillsDir(t *testing.T) {
 		t.Fatalf("failed to write manifest: %v", err)
 	}
 
-	// Create skills directory with a skill subdirectory containing SKILL.md
 	skillsDir := filepath.Join(tmpDir, "skills")
 	if err := os.MkdirAll(skillsDir, 0755); err != nil {
 		t.Fatalf("failed to create skills dir: %v", err)
 	}
 
-	// Create a skill subdirectory (skills are in subdirectories)
 	testSkillDir := filepath.Join(skillsDir, "test-skill")
 	if err := os.MkdirAll(testSkillDir, 0755); err != nil {
 		t.Fatalf("failed to create test skill dir: %v", err)
@@ -244,7 +285,6 @@ This skill is loaded from a plugin.
 		t.Fatalf("failed to write SKILL.md: %v", err)
 	}
 
-	// Load the plugin manifest
 	loadedManifest, err := LoadManifest(manifestPath)
 	if err != nil {
 		t.Fatalf("failed to load manifest: %v", err)
@@ -292,10 +332,9 @@ func TestLoadPluginSkills_NoSkillsPath(t *testing.T) {
 }
 
 func TestLoadPluginSkills_NonExistentSkillsDir(t *testing.T) {
-	// Create a temp directory with a plugin that points to non-existent skills dir
 	tmpDir := t.TempDir()
 
-	pluginDir := filepath.Join(tmpDir, ".codex-plugin")
+	pluginDir := filepath.Join(tmpDir, ".jenny-plugin")
 	if err := os.MkdirAll(pluginDir, 0755); err != nil {
 		t.Fatalf("failed to create plugin dir: %v", err)
 	}
@@ -325,10 +364,9 @@ func TestLoadPluginSkills_NonExistentSkillsDir(t *testing.T) {
 }
 
 func TestLoadPluginSkills_SkillsPathIsFile(t *testing.T) {
-	// Create a temp directory with a plugin that has skills as a file instead of dir
 	tmpDir := t.TempDir()
 
-	pluginDir := filepath.Join(tmpDir, ".codex-plugin")
+	pluginDir := filepath.Join(tmpDir, ".jenny-plugin")
 	if err := os.MkdirAll(pluginDir, 0755); err != nil {
 		t.Fatalf("failed to create plugin dir: %v", err)
 	}
@@ -398,11 +436,9 @@ func TestLoadedPlugin_MCPServersDir_NilManifest(t *testing.T) {
 }
 
 func TestLoadPluginMCPServers_ValidConfig(t *testing.T) {
-	// Create a temp directory with a plugin structure
 	tmpDir := t.TempDir()
 
-	// Create .codex-plugin directory and manifest
-	pluginDir := filepath.Join(tmpDir, ".codex-plugin")
+	pluginDir := filepath.Join(tmpDir, ".jenny-plugin")
 	if err := os.MkdirAll(pluginDir, 0755); err != nil {
 		t.Fatalf("failed to create plugin dir: %v", err)
 	}
@@ -479,10 +515,9 @@ func TestLoadPluginMCPServers_NoMCPServersPath(t *testing.T) {
 }
 
 func TestLoadPluginMCPServers_MissingFile(t *testing.T) {
-	// Create a temp directory with a plugin that points to non-existent MCP config
 	tmpDir := t.TempDir()
 
-	pluginDir := filepath.Join(tmpDir, ".codex-plugin")
+	pluginDir := filepath.Join(tmpDir, ".jenny-plugin")
 	if err := os.MkdirAll(pluginDir, 0755); err != nil {
 		t.Fatalf("failed to create plugin dir: %v", err)
 	}
@@ -512,10 +547,9 @@ func TestLoadPluginMCPServers_MissingFile(t *testing.T) {
 }
 
 func TestLoadPluginMCPServers_InvalidJSON(t *testing.T) {
-	// Create a temp directory with a plugin that has malformed MCP config
 	tmpDir := t.TempDir()
 
-	pluginDir := filepath.Join(tmpDir, ".codex-plugin")
+	pluginDir := filepath.Join(tmpDir, ".jenny-plugin")
 	if err := os.MkdirAll(pluginDir, 0755); err != nil {
 		t.Fatalf("failed to create plugin dir: %v", err)
 	}

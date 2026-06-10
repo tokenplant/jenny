@@ -33,7 +33,7 @@ type PluginManifestInterface struct {
 	Screenshots       []string `json:"screenshots,omitempty"`
 }
 
-// PluginManifest represents a .codex-plugin/plugin.json file.
+// PluginManifest represents a plugin.json file inside a plugin marker directory.
 type PluginManifest struct {
 	Name        string                   `json:"name,omitempty"`
 	Version     string                   `json:"version,omitempty"`

@@ -44,6 +44,9 @@ type TestCase struct {
 	Expected ExpectedBehavior
 	// Skip indicates the test should be skipped.
 	Skip *SkipCondition
+	// WorkDirFiles are files to create in the temp work dir before running.
+	// Keys are relative paths, values are file contents.
+	WorkDirFiles map[string]string
 }
 
 // TargetInvocation specifies how to invoke the target.
@@ -141,7 +144,7 @@ type IndexedEventExpectation struct {
 type StdoutExpectation struct {
 	// Equals is the exact expected stdout.
 	Equals string
-	// Contains are substrings that must appear.
+	// Contains are substrings; at least one must appear (OR semantics).
 	Contains []string
 	// NotContains are substrings that must NOT appear.
 	NotContains []string
@@ -165,12 +168,36 @@ type StderrExpectation = StdoutExpectation
 
 // APIRequestExpectation specifies API request assertions.
 type APIRequestExpectation struct {
+	// Index is the 0-based request index to check (-1 means any request).
+	Index int
 	// Model is the expected model (or regex).
 	Model string
+	// MaxTokens is the expected max_tokens value (0 = don't check).
+	MaxTokens int
+	// HasSystemPrompt asserts the request has a non-empty system prompt.
+	HasSystemPrompt bool
 	// System is the system prompt expectation.
 	System *SystemExpectation
 	// Messages are message expectations.
 	Messages []MessageExpectation
+	// Tools are assertions on tool definitions in the request.
+	Tools *ToolsExpectation
+	// HasField asserts the request body has specific top-level keys.
+	HasField []string
+	// FieldEquals asserts specific field values in request body.
+	FieldEquals map[string]any
+}
+
+// ToolsExpectation specifies assertions on tool definitions.
+type ToolsExpectation struct {
+	// MinCount is the minimum number of tools expected.
+	MinCount int
+	// HasTool asserts a tool with this name is present.
+	HasTool []string
+	// NotHasTool asserts a tool with this name is absent.
+	NotHasTool []string
+	// EachHasFields asserts every tool has these top-level keys.
+	EachHasFields []string
 }
 
 // SystemExpectation specifies system prompt assertions.

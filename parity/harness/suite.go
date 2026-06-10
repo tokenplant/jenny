@@ -74,8 +74,34 @@ func (sr *SuiteRunner) RunOne(tc *TestCase) TestResult {
 	}
 	defer os.RemoveAll(workDir)
 
-	// Build args and env based on invocation kind
-	args, env := sr.buildArgs(tc), sr.buildEnv(tc)
+	// Create WorkDirFiles if specified
+	for relPath, content := range tc.WorkDirFiles {
+		fullPath := filepath.Join(workDir, relPath)
+		if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
+			return TestResult{
+				ID:       tc.ID,
+				Category: tc.Category,
+				Status:   "error",
+				Message:  "failed to create dir for " + relPath + ": " + err.Error(),
+			}
+		}
+		if err := os.WriteFile(fullPath, []byte(content), 0o644); err != nil {
+			return TestResult{
+				ID:       tc.ID,
+				Category: tc.Category,
+				Status:   "error",
+				Message:  "failed to write " + relPath + ": " + err.Error(),
+			}
+		}
+	}
+
+	// Clear recorded requests before each test so assertions are per-case
+	if sr.mockServer != nil {
+		sr.mockServer.ClearRequests()
+	}
+
+	// Build args and env based on invocation kind, expanding ${WORK_DIR}
+	args, env := sr.buildArgs(tc), sr.buildEnv(tc, workDir)
 
 	// Run the target
 	res := RunTargetInDir(nil, sr.Config, workDir, env, args...)
@@ -127,6 +153,7 @@ func (sr *SuiteRunner) buildArgs(tc *TestCase) []string {
 		args = tc.Target.Args
 	case "prompt":
 		args = []string{"--output-format", tc.Target.Format, "-p", tc.Target.Prompt}
+		args = append(args, tc.Target.Args...)
 	case "subprocess":
 		args = tc.Target.Args
 	default:
@@ -137,21 +164,28 @@ func (sr *SuiteRunner) buildArgs(tc *TestCase) []string {
 }
 
 // buildEnv constructs environment variables for the target invocation.
-func (sr *SuiteRunner) buildEnv(tc *TestCase) []string {
+// workDir is substituted for ${WORK_DIR} in per-case env values.
+func (sr *SuiteRunner) buildEnv(tc *TestCase, workDir string) []string {
 	var env []string
 
 	// For prompt-kind tests, start mock server and set base URL
 	if tc.Target.Kind == "prompt" && tc.Target.Cassette != "" && sr.Config.CassetteDir != "" {
-		// Start mock server if not already running
 		if sr.mockServer == nil {
 			sr.mockServer = NewMockServer(sr.Config.CassetteDir)
 		}
-		// URL includes /cassette/<id> prefix so jenny's /v1/messages calls
-		// are routed to /cassette/<id>/v1/messages by the mock server
+
+		// Register multi-turn sequence if specified
+		if len(tc.Target.CassetteSequence) > 0 {
+			sr.mockServer.SetSequence(tc.Target.Cassette, tc.Target.CassetteSequence)
+		}
+
 		env = append(env, "ANTHROPIC_BASE_URL="+sr.mockServer.URL()+"/cassette/"+tc.Target.Cassette)
-		// Add a dummy auth token so the SDK creates a client.
-		// The mock server does not validate auth.
 		env = append(env, "ANTHROPIC_AUTH_TOKEN=dummy-token")
+	}
+
+	// Append per-case environment variables with ${WORK_DIR} expansion
+	for _, e := range tc.Target.Env {
+		env = append(env, strings.ReplaceAll(e, "${WORK_DIR}", workDir))
 	}
 
 	return env

@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"testing"
 	"time"
 )
 
@@ -171,6 +172,83 @@ func findRepoRoot() (string, error) {
 			return "", fmt.Errorf("go.mod not found from %s", cwd)
 		}
 		dir = parent
+	}
+}
+
+// RunJenny builds the jenny binary (once) and runs it with the given args.
+// This is a convenience wrapper for imperative tests that don't use the
+// declarative TestCase/SuiteRunner infrastructure.
+func RunJenny(t testing.TB, env []string, args ...string) RunResult {
+	return RunJennyInDir(t, "", env, args...)
+}
+
+// RunJennyInDir runs the jenny binary in the specified directory.
+func RunJennyInDir(t testing.TB, dir string, env []string, args ...string) RunResult {
+	t.Helper()
+
+	bin, err := buildBinary()
+	if err != nil {
+		t.Fatalf("build jenny: %v", err)
+	}
+
+	if dir == "" {
+		repoRoot, err := findRepoRoot()
+		if err != nil {
+			t.Fatalf("find repo root: %v", err)
+		}
+		dir = repoRoot
+	}
+
+	cmd := exec.Command(bin, args...)
+	cmd.Env = append(os.Environ(), env...)
+	cmd.Dir = dir
+
+	var stdoutBuf, stderrBuf bytes.Buffer
+	cmd.Stdout = &stdoutBuf
+	cmd.Stderr = &stderrBuf
+
+	start := time.Now()
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start jenny: %v", err)
+	}
+
+	runErr := cmd.Wait()
+	exitCode := 0
+	if runErr != nil {
+		if exitErr, ok := runErr.(*exec.ExitError); ok {
+			exitCode = exitErr.ExitCode()
+		} else {
+			exitCode = 1
+		}
+	}
+	duration := time.Since(start)
+
+	var lines []string
+	scanner := bufio.NewScanner(strings.NewReader(stdoutBuf.String()))
+	scanner.Buffer(make([]byte, 64*1024), 16*1024*1024)
+	for scanner.Scan() {
+		lines = append(lines, scanner.Text())
+	}
+
+	var parsed []map[string]any
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		var m map[string]any
+		if err := json.Unmarshal([]byte(line), &m); err == nil {
+			parsed = append(parsed, m)
+		}
+	}
+
+	return RunResult{
+		Lines:      lines,
+		Parsed:     parsed,
+		Stdout:     stdoutBuf.String(),
+		Stderr:     stderrBuf.String(),
+		ExitCode:   exitCode,
+		Dir:        cmd.Dir,
+		DurationMs: duration.Milliseconds(),
 	}
 }
 

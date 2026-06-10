@@ -20,9 +20,9 @@ depends_on:
 
 ## Overview
 
-Jenny implements a plugin system that bundles skills, MCP servers, lifecycle hooks, and app integrations into shareable, versioned packages. The system is modeled after the Codex plugin format (`.codex-plugin/plugin.json`) and provides:
+Jenny implements a plugin system that bundles skills, MCP servers, lifecycle hooks, and app integrations into shareable, versioned packages. The primary plugin directory is `.jenny-plugin/`, with `.claude-plugin/` and `.codex-plugin/` supported as fallbacks for cross-tool compatibility.
 
-- **Manifest-based discovery**: Plugins are discovered by scanning for `.codex-plugin/plugin.json` files
+- **Manifest-based discovery**: Plugins are discovered by scanning for `<marker>/plugin.json` files (markers: `.jenny-plugin`, `.claude-plugin`, `.codex-plugin` — checked in priority order)
 - **Structured metadata**: Each plugin declares its contents via a JSON manifest
 - **Skills integration**: Plugins can bundle skill definitions
 - **MCP server integration**: Plugins can include MCP server configurations
@@ -30,7 +30,7 @@ Jenny implements a plugin system that bundles skills, MCP servers, lifecycle hoo
 
 ## Plugin Manifest Format
 
-Plugins use a `.codex-plugin/plugin.json` manifest file located at the plugin root:
+Plugins use a `<marker>/plugin.json` manifest file located at the plugin root. The marker directory is `.jenny-plugin/` by default, with `.claude-plugin/` and `.codex-plugin/` as fallbacks:
 
 ```json
 {
@@ -102,7 +102,7 @@ Plugins use a `.codex-plugin/plugin.json` manifest file located at the plugin ro
 
 ```
 <plugin-root>/
-├── .codex-plugin/
+├── .jenny-plugin/           # Primary marker (preferred)
 │   └── plugin.json          # Plugin manifest (required)
 ├── skills/                  # Skill definitions (optional)
 ├── .mcp.json                # MCP server config (optional)
@@ -110,17 +110,25 @@ Plugins use a `.codex-plugin/plugin.json` manifest file located at the plugin ro
 └── .app.json                # App integration manifest (optional)
 ```
 
+Fallback markers are also supported for cross-tool compatibility:
+- `.claude-plugin/plugin.json`
+- `.codex-plugin/plugin.json`
+
+When multiple markers exist in the same directory, `.jenny-plugin` takes priority.
+
 ## Discovery Algorithm
 
 `FindPluginRoots(rootDir string) []string`:
 
 1. Walk directory tree from `rootDir`
 2. Maximum depth: 5 levels from root
-3. Skip hidden directories (starting with `.`)
-4. When `.codex-plugin/plugin.json` is found:
+3. Skip hidden directories (starting with `.`) except plugin markers
+4. Check for plugin marker directories in priority order: `.jenny-plugin`, `.claude-plugin`, `.codex-plugin`
+5. When a marker directory is found:
    - Return the parent directory as a plugin root
-   - Skip recursion into the plugin directory
-5. Return list of plugin root directories
+   - Skip recursion into the marker directory
+6. Each plugin root is returned at most once (first marker wins)
+7. Return list of plugin root directories
 
 ## Loading and Validation
 
@@ -256,7 +264,7 @@ PluginDir → FindPluginRoots → LoadManifest → LoadPluginSkills → skills.D
 
 ```
 my-plugin/
-├── .codex-plugin/
+├── .jenny-plugin/
 │   └── plugin.json    # {"name": "my-plugin", "skills": "./skills/"}
 └── skills/
     ├── readme-helper/
@@ -299,7 +307,8 @@ my-plugin/
 | Non-existent file | Returns error |
 | Path not starting with `./` | Validation error |
 | `http://` URL (not `https://`) | Validation error |
-| Hidden plugin directory | Skipped during discovery |
+| Hidden plugin directory | Skipped during discovery (except plugin markers) |
+| Multiple markers in same dir | `.jenny-plugin` wins over `.claude-plugin`/`.codex-plugin` |
 | Max depth exceeded | Skips deeper directories |
 | No plugins found | Returns empty slice |
 
