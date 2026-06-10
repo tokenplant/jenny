@@ -692,8 +692,6 @@ func (acc *openAIStreamAccumulator) finalize() []ContentBlock {
 
 // OpenAI API types
 
-// OpenAI API types
-
 // PromptTokensDetails represents the prompt tokens details in OpenAI API responses.
 type PromptTokensDetails struct {
 	CachedTokens int `json:"cached_tokens"`
