@@ -15,32 +15,6 @@ import (
 // captureStdout delegates to testutil.CaptureStdout for stdout capture.
 var captureStdout = testutil.CaptureStdout
 
-// mockStreamServerHelper creates a mock SSE server for testing.
-// Pass events as variadic strings for flexibility.
-func mockStreamServerHelper(t *testing.T, events ...string) *httptest.Server {
-	t.Helper()
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		io.ReadAll(r.Body)
-		r.Body.Close()
-
-		w.Header().Set("Content-Type", "text/event-stream")
-		w.Header().Set("Cache-Control", "no-cache")
-		w.WriteHeader(http.StatusOK)
-
-		flusher, ok := w.(http.Flusher)
-		if !ok {
-			return
-		}
-		flusher.Flush()
-
-		for _, e := range events {
-			io.WriteString(w, e)
-			flusher.Flush()
-		}
-	}))
-}
-
-
 func makeMockStreamServerWithPartialEvents(t *testing.T) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
