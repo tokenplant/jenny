@@ -301,10 +301,10 @@ func TestToolGlob(t *testing.T) {
 				Cassette:         "glob-pattern",
 			},
 			WorkDirFiles: map[string]string{
-				"a.txt":   "file a",
-				"b.txt":   "file b",
-				"c.go":    "not a txt",
-				"d.txt":   "file d",
+				"a.txt": "file a",
+				"b.txt": "file b",
+				"c.go":  "not a txt",
+				"d.txt": "file d",
 			},
 			Expected: harness.ExpectedBehavior{
 				ExitCode: 0,

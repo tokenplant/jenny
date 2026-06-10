@@ -944,8 +944,8 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 					Speed:                    "standard",
 				}
 				msg := StreamMessage{
-					Type:            "result",
-					Subtype:         "success",
+					Type:    "result",
+					Subtype: "success",
 					Result: func() string {
 						if e.secretRedactor != nil && e.secretRedactor.Enabled() {
 							return e.secretRedactor.Recover(textOutput.String())

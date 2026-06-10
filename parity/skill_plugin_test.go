@@ -87,8 +87,8 @@ func TestBareMode(t *testing.T) {
 			Category:    "skills",
 			Description: "--bare flag skips skill discovery",
 			Target: harness.TargetInvocation{
-				Kind:     "cli",
-				Args:     []string{"--bare", "--print-system-prompt"},
+				Kind: "cli",
+				Args: []string{"--bare", "--print-system-prompt"},
 			},
 			WorkDirFiles: map[string]string{
 				".jenny/skills/should-not-load/SKILL.md": "---\ndescription: nope\n---\nskipped\n",
@@ -117,7 +117,7 @@ func TestPluginDiscovery(t *testing.T) {
 				Cassette: "echo-hello",
 			},
 			WorkDirFiles: map[string]string{
-				".jenny-plugin/plugin.json": `{"name":"test-plugin","version":"0.1.0","skills":"./plugin-skills"}`,
+				".jenny-plugin/plugin.json":           `{"name":"test-plugin","version":"0.1.0","skills":"./plugin-skills"}`,
 				"plugin-skills/plugin-skill/SKILL.md": "---\ndescription: skill from plugin\n---\nPlugin skill content\n",
 			},
 			Expected: harness.ExpectedBehavior{

@@ -43,11 +43,11 @@ var additionalPatterns = []secretPattern{
 
 // SecretRedactor detects and redacts secrets in tool results.
 type SecretRedactor struct {
-	mu            sync.Mutex
-	enabled       bool
-	counter int
-	replacements  map[string]string // placeholder -> original
-	secretToID    map[string]string // secret -> placeholder ID (for deduplication)
+	mu           sync.Mutex
+	enabled      bool
+	counter      int
+	replacements map[string]string // placeholder -> original
+	secretToID   map[string]string // secret -> placeholder ID (for deduplication)
 }
 
 // NewSecretRedactor creates a new SecretRedactor.
@@ -55,7 +55,7 @@ type SecretRedactor struct {
 func NewSecretRedactor() *SecretRedactor {
 	enabled := os.Getenv("JENNY_REDACT_DISABLE") == ""
 	return &SecretRedactor{
-		enabled:     enabled,
+		enabled:      enabled,
 		replacements: make(map[string]string),
 		secretToID:   make(map[string]string),
 	}
