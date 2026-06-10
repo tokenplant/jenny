@@ -9,6 +9,7 @@ import (
 	"github.com/ipy/jenny/internal/agent"
 	"github.com/ipy/jenny/internal/cli"
 	"github.com/ipy/jenny/internal/mcp"
+	"github.com/ipy/jenny/internal/plugin"
 	"github.com/ipy/jenny/internal/session"
 	"github.com/ipy/jenny/internal/skills"
 	"github.com/ipy/jenny/internal/tool"
@@ -198,6 +199,48 @@ func run() error {
 		discoveredSkills, err = skills.Discover(projectSkillsDir, bundledSkillsDir)
 		if err != nil {
 			return fmt.Errorf("discovering skills: %w", err)
+		}
+
+		// Discover plugin skills and merge with discovered skills
+		// Plugin skills have lower priority than project/user skills (dedup by name)
+		pluginRoots := plugin.FindPluginRoots(cwd)
+		if homeDir, err := os.UserHomeDir(); err == nil {
+			homePluginRoots := plugin.FindPluginRoots(filepath.Join(homeDir, ".jenny"))
+			pluginRoots = append(pluginRoots, homePluginRoots...)
+		}
+
+		for _, pluginRoot := range pluginRoots {
+			manifestPath := filepath.Join(pluginRoot, ".codex-plugin", "plugin.json")
+			manifest, err := plugin.LoadManifest(manifestPath)
+			if err != nil {
+				// Skip plugins with invalid manifests (AC5: silent skip)
+				continue
+			}
+
+			loadedPlugin := &plugin.LoadedPlugin{
+				RootPath:     pluginRoot,
+				Manifest:     manifest,
+				ManifestPath: manifestPath,
+			}
+
+			if err := loadedPlugin.Validate(); err != nil {
+				// Skip invalid plugins (AC5: silent skip)
+				continue
+			}
+
+			pluginSkills, err := plugin.LoadPluginSkills(loadedPlugin)
+			if err != nil {
+				// Skip plugins with load errors (AC5: silent skip)
+				continue
+			}
+
+			for _, ps := range pluginSkills {
+				// Skip if a skill with the same normalized name already exists (AC3: dedup)
+				if skills.FindSkillByName(discoveredSkills, ps.Name) != nil {
+					continue
+				}
+				discoveredSkills = append(discoveredSkills, ps)
+			}
 		}
 	}
 

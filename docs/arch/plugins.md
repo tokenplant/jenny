@@ -11,7 +11,6 @@ gaps:
   - Plugin-enabled skill activation
   - Plugin MCP server launch
   - Plugin enable/disable toggling
-  - Plugin skills not yet wired into tool registry
 depends_on:
   - mcp-config
   - mcp-client
@@ -222,9 +221,9 @@ activation_glob: "**/*.go"  (optional)
 Detailed skill instructions and content...
 ```
 
-### Tool Registry Merge (Future)
+### Tool Registry Merge
 
-Plugin skills are merged with project, user, and bundled skills in the tool registry. The dataflow is:
+Plugin skills are merged with project, user, and bundled skills in the tool registry. Project and user skills take priority — plugin skills with duplicate names are skipped. The dataflow is:
 
 ```
 PluginDir → FindPluginRoots → LoadManifest → LoadPluginSkills → skills.Discover() → Skill list merge → PathSkillActivator
