@@ -536,17 +536,9 @@ func (p *openAIProvider) processStreamChunk(chunk OpenAIStreamChunk, acc *openAI
 		}
 	}
 
-	// AC6: Process reasoning_content - emit thinking_delta events
+	// AC6: Accumulate reasoning_content for finalization as thinking block
 	if delta.ReasoningContent != "" {
 		acc.appendThinking(delta.ReasoningContent)
-		// Emit thinking_delta block with accumulated thinking
-		blocksChan <- StreamContentBlock{
-			Type: "thinking_delta",
-			Block: ContentBlock{
-				Type:     "thinking",
-				Thinking: acc.getThinking(),
-			},
-		}
 	}
 
 	// Process tool calls - emit incrementally as tool input accumulates
@@ -610,10 +602,6 @@ func (acc *openAIStreamAccumulator) getContent() string {
 
 func (acc *openAIStreamAccumulator) appendThinking(text string) {
 	acc.thinking += text
-}
-
-func (acc *openAIStreamAccumulator) getThinking() string {
-	return acc.thinking
 }
 
 func (acc *openAIStreamAccumulator) setStopReason(reason StopReason) {
