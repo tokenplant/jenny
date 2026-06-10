@@ -168,3 +168,197 @@ func TestLoadedPlugin_Validate_InvalidInterfaceURL(t *testing.T) {
 		t.Error("expected error for http:// URL, got nil")
 	}
 }
+
+func TestLoadedPlugin_SkillsDir_WithSkills(t *testing.T) {
+	p := &LoadedPlugin{
+		RootPath: "/tmp/plugin",
+		Manifest: &PluginManifest{Name: "test", Skills: "./myskills/"},
+	}
+
+	expected := filepath.Join("/tmp/plugin", "./myskills/")
+	if got := p.SkillsDir(); got != expected {
+		t.Errorf("expected %q, got %q", expected, got)
+	}
+}
+
+func TestLoadedPlugin_SkillsDir_WithoutSkills(t *testing.T) {
+	p := &LoadedPlugin{
+		RootPath: "/tmp/plugin",
+		Manifest: &PluginManifest{Name: "test"},
+	}
+
+	if got := p.SkillsDir(); got != "" {
+		t.Errorf("expected empty string, got %q", got)
+	}
+}
+
+func TestLoadedPlugin_SkillsDir_NilManifest(t *testing.T) {
+	p := &LoadedPlugin{
+		RootPath: "/tmp/plugin",
+		Manifest: nil,
+	}
+
+	if got := p.SkillsDir(); got != "" {
+		t.Errorf("expected empty string for nil manifest, got %q", got)
+	}
+}
+
+func TestLoadPluginSkills_ValidSkillsDir(t *testing.T) {
+	// Create a temp directory with a plugin structure
+	tmpDir := t.TempDir()
+
+	// Create .codex-plugin directory and manifest
+	pluginDir := filepath.Join(tmpDir, ".codex-plugin")
+	if err := os.MkdirAll(pluginDir, 0755); err != nil {
+		t.Fatalf("failed to create plugin dir: %v", err)
+	}
+
+	manifest := `{"name": "test-plugin", "skills": "./skills/"}`
+	manifestPath := filepath.Join(pluginDir, "plugin.json")
+	if err := os.WriteFile(manifestPath, []byte(manifest), 0644); err != nil {
+		t.Fatalf("failed to write manifest: %v", err)
+	}
+
+	// Create skills directory with a skill subdirectory containing SKILL.md
+	skillsDir := filepath.Join(tmpDir, "skills")
+	if err := os.MkdirAll(skillsDir, 0755); err != nil {
+		t.Fatalf("failed to create skills dir: %v", err)
+	}
+
+	// Create a skill subdirectory (skills are in subdirectories)
+	testSkillDir := filepath.Join(skillsDir, "test-skill")
+	if err := os.MkdirAll(testSkillDir, 0755); err != nil {
+		t.Fatalf("failed to create test skill dir: %v", err)
+	}
+
+	skillContent := `---
+description: A test skill for plugin integration
+---
+
+# Test Skill
+
+This skill is loaded from a plugin.
+`
+	skillPath := filepath.Join(testSkillDir, "SKILL.md")
+	if err := os.WriteFile(skillPath, []byte(skillContent), 0644); err != nil {
+		t.Fatalf("failed to write SKILL.md: %v", err)
+	}
+
+	// Load the plugin manifest
+	loadedManifest, err := LoadManifest(manifestPath)
+	if err != nil {
+		t.Fatalf("failed to load manifest: %v", err)
+	}
+
+	p := &LoadedPlugin{
+		RootPath:     tmpDir,
+		Manifest:     loadedManifest,
+		ManifestPath: manifestPath,
+	}
+
+	// Load plugin skills
+	skills, err := LoadPluginSkills(p)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(skills) != 1 {
+		t.Fatalf("expected 1 skill, got %d", len(skills))
+	}
+
+	if skills[0].Name != "test-skill" {
+		t.Errorf("expected skill name 'test-skill', got %q", skills[0].Name)
+	}
+
+	if skills[0].Content == "" {
+		t.Error("expected non-empty skill content")
+	}
+}
+
+func TestLoadPluginSkills_NoSkillsPath(t *testing.T) {
+	p := &LoadedPlugin{
+		RootPath: "/tmp/plugin",
+		Manifest: &PluginManifest{Name: "test-plugin"},
+	}
+
+	skills, err := LoadPluginSkills(p)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if skills != nil {
+		t.Errorf("expected nil skills, got %v", skills)
+	}
+}
+
+func TestLoadPluginSkills_NonExistentSkillsDir(t *testing.T) {
+	// Create a temp directory with a plugin that points to non-existent skills dir
+	tmpDir := t.TempDir()
+
+	pluginDir := filepath.Join(tmpDir, ".codex-plugin")
+	if err := os.MkdirAll(pluginDir, 0755); err != nil {
+		t.Fatalf("failed to create plugin dir: %v", err)
+	}
+
+	manifest := `{"name": "test-plugin", "skills": "./nonexistent/"}`
+	manifestPath := filepath.Join(pluginDir, "plugin.json")
+	if err := os.WriteFile(manifestPath, []byte(manifest), 0644); err != nil {
+		t.Fatalf("failed to write manifest: %v", err)
+	}
+
+	loadedManifest, err := LoadManifest(manifestPath)
+	if err != nil {
+		t.Fatalf("failed to load manifest: %v", err)
+	}
+
+	p := &LoadedPlugin{
+		RootPath:     tmpDir,
+		Manifest:     loadedManifest,
+		ManifestPath: manifestPath,
+	}
+
+	// Load plugin skills - should return error for non-existent dir
+	_, err = LoadPluginSkills(p)
+	if err == nil {
+		t.Error("expected error for non-existent skills directory, got nil")
+	}
+}
+
+func TestLoadPluginSkills_SkillsPathIsFile(t *testing.T) {
+	// Create a temp directory with a plugin that has skills as a file instead of dir
+	tmpDir := t.TempDir()
+
+	pluginDir := filepath.Join(tmpDir, ".codex-plugin")
+	if err := os.MkdirAll(pluginDir, 0755); err != nil {
+		t.Fatalf("failed to create plugin dir: %v", err)
+	}
+
+	manifest := `{"name": "test-plugin", "skills": "./skills/"}`
+	manifestPath := filepath.Join(pluginDir, "plugin.json")
+	if err := os.WriteFile(manifestPath, []byte(manifest), 0644); err != nil {
+		t.Fatalf("failed to write manifest: %v", err)
+	}
+
+	// Create skills as a file (not a directory)
+	skillsPath := filepath.Join(tmpDir, "skills")
+	if err := os.WriteFile(skillsPath, []byte("not a directory"), 0644); err != nil {
+		t.Fatalf("failed to create skills file: %v", err)
+	}
+
+	loadedManifest, err := LoadManifest(manifestPath)
+	if err != nil {
+		t.Fatalf("failed to load manifest: %v", err)
+	}
+
+	p := &LoadedPlugin{
+		RootPath:     tmpDir,
+		Manifest:     loadedManifest,
+		ManifestPath: manifestPath,
+	}
+
+	// Load plugin skills - should return error for non-directory path
+	_, err = LoadPluginSkills(p)
+	if err == nil {
+		t.Error("expected error for skills path that is a file, got nil")
+	}
+}

@@ -2,17 +2,16 @@
 title: Plugin System
 slug: plugins
 priority: P3
-status: not_started
+status: done
 spec: complete
 code: partial
 package: internal/plugin
 gaps:
-  - Marketplace catalogs and installation
   - Lifecycle hooks execution
   - Plugin-enabled skill activation
   - Plugin MCP server launch
   - Plugin enable/disable toggling
-  - Plugin sharing/distribution
+  - Plugin skills not yet wired into tool registry
 depends_on:
   - mcp-config
   - mcp-client
@@ -191,6 +190,64 @@ Plugins can define lifecycle hooks via `hooks`:
 ```
 
 Integration point: `ExecutePluginHooks(pluginRoot, hookName)` (future)
+
+## Plugin Skills Integration
+
+The plugin system integrates with the skills framework to allow plugins to contribute skill definitions. This section documents how plugin skills are loaded and integrated.
+
+### How LoadPluginSkills Works
+
+```go
+func LoadPluginSkills(p *LoadedPlugin) ([]skills.Skill, error)
+```
+
+1. **Skills Path Resolution**: The function first checks if the plugin manifest has a `skills` field. If empty or nil, returns `nil, nil`.
+
+2. **Directory Validation**: Resolves the skills directory path (RootPath + Manifest.Skills) and verifies it exists and is a directory.
+
+3. **Skill Discovery**: Delegates to `skills.Discover()` which scans the directory for subdirectories containing `SKILL.md` files.
+
+### SKILL.md Format in Plugin Skills Directories
+
+Plugin skill directories use the same format as standalone skills:
+
+```markdown
+---
+description: A brief description of the skill
+activation_glob: "**/*.go"  (optional)
+---
+
+# Skill Name
+
+Detailed skill instructions and content...
+```
+
+### Tool Registry Merge (Future)
+
+Plugin skills are merged with project, user, and bundled skills in the tool registry. The dataflow is:
+
+```
+PluginDir → FindPluginRoots → LoadManifest → LoadPluginSkills → skills.Discover() → Skill list merge → PathSkillActivator
+```
+
+1. **Discovery Phase**: `FindPluginRoots` locates all plugins in configured directories
+2. **Loading Phase**: `LoadManifest` parses each plugin's manifest
+3. **Skills Phase**: `LoadPluginSkills` extracts skills from plugin skills directories
+4. **Merge Phase**: Tool registry combines skills from all sources (deferred)
+5. **Activation Phase**: `PathSkillActivator` activates relevant skills based on file paths
+
+### Example Plugin with Skills
+
+```
+my-plugin/
+├── .codex-plugin/
+│   └── plugin.json    # {"name": "my-plugin", "skills": "./skills/"}
+└── skills/
+    ├── readme-helper/
+    │   └── SKILL.md   # Skill for README generation
+    └── code-review/
+        └── SKILL.md   # Skill for code review assistance
+```
 
 ## Future Roadmap
 

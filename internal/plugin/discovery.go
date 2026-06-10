@@ -3,10 +3,13 @@ package plugin
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/ipy/jenny/internal/skills"
 )
 
 const (
@@ -101,34 +104,21 @@ func FindPluginRoots(rootDir string) []string {
 		return roots
 	}
 
-	// Track depth per directory to implement max depth of 5
-	dirDepth := map[string]int{rootDir: 0}
-
 	filepath.WalkDir(rootDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil // Skip inaccessible paths
 		}
 
 		if d.IsDir() {
-			// Get depth for this directory
-			depth := 0
-			if savedDepth, ok := dirDepth[path]; ok {
-				depth = savedDepth
-			} else {
-				// Calculate depth from root by counting path separators
-				rel, err := filepath.Rel(rootDir, path)
-				if err != nil {
-					return nil
-				}
-				if rel == "." {
-					depth = 0
-				} else {
-					depth = len(strings.Split(rel, string(filepath.Separator)))
-				}
-				dirDepth[path] = depth
+			// Calculate depth from root by counting path separators
+			rel, err := filepath.Rel(rootDir, path)
+			if err != nil {
+				return nil
 			}
-
-			// Skip if we've exceeded max depth
+			depth := 0
+			if rel != "." {
+				depth = len(strings.Split(rel, string(filepath.Separator)))
+			}
 			if depth > maxDiscoveryDepth {
 				return filepath.SkipDir
 			}
@@ -153,4 +143,33 @@ func FindPluginRoots(rootDir string) []string {
 	})
 
 	return roots
+}
+
+// SkillsDir returns the absolute path to the plugin's skills directory.
+// Returns "" if no skills path is configured.
+func (p *LoadedPlugin) SkillsDir() string {
+	if p.Manifest == nil || p.Manifest.Skills == "" {
+		return ""
+	}
+	return filepath.Join(p.RootPath, p.Manifest.Skills)
+}
+
+// LoadPluginSkills loads skills from a plugin's skills directory.
+// Returns nil, nil if no skills path is configured.
+func LoadPluginSkills(p *LoadedPlugin) ([]skills.Skill, error) {
+	if p.Manifest == nil || p.Manifest.Skills == "" {
+		return nil, nil
+	}
+	skillsDir := p.SkillsDir()
+	if skillsDir == "" {
+		return nil, nil
+	}
+	info, err := os.Stat(skillsDir)
+	if err != nil {
+		return nil, fmt.Errorf("plugin skills dir %q: %w", skillsDir, err)
+	}
+	if !info.IsDir() {
+		return nil, fmt.Errorf("plugin skills path %q is not a directory", skillsDir)
+	}
+	return skills.Discover(skillsDir)
 }
