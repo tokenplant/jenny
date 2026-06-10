@@ -475,9 +475,9 @@ func TestMaxBase64ImageSizeConstant(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestClient_NonStreaming_SendsPromptCachingBetaHeader(t *testing.T) {
-	var capturedBeta string
+	var capturedBeta []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		capturedBeta = r.Header.Get("anthropic-beta")
+		capturedBeta = r.Header.Values("anthropic-beta")
 		io.ReadAll(r.Body)
 		r.Body.Close()
 		w.Header().Set("Content-Type", "application/json")
@@ -497,8 +497,21 @@ func TestClient_NonStreaming_SendsPromptCachingBetaHeader(t *testing.T) {
 		t.Fatalf("SendMessage error = %v", err)
 	}
 
-	if !strings.Contains(capturedBeta, "prompt-caching-2024-07-31") {
-		t.Errorf("expected anthropic-beta header to contain 'prompt-caching-2024-07-31', got %q", capturedBeta)
+	// Should have at least one header
+	if len(capturedBeta) == 0 {
+		t.Fatal("expected at least one anthropic-beta header")
+	}
+
+	// Default beta should be present in one of the headers
+	found := false
+	for _, h := range capturedBeta {
+		if strings.Contains(h, "prompt-caching-2024-07-31") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected anthropic-beta header to contain 'prompt-caching-2024-07-31', got %v", capturedBeta)
 	}
 }
 
@@ -507,9 +520,9 @@ func TestClient_NonStreaming_SendsPromptCachingBetaHeader(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestClient_ANTHROPIC_BETAS_AdditionalHeaders(t *testing.T) {
-	var capturedBeta string
+	var capturedBeta []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		capturedBeta = r.Header.Get("anthropic-beta")
+		capturedBeta = r.Header.Values("anthropic-beta")
 		io.ReadAll(r.Body)
 		r.Body.Close()
 		w.Header().Set("Content-Type", "application/json")
@@ -530,24 +543,32 @@ func TestClient_ANTHROPIC_BETAS_AdditionalHeaders(t *testing.T) {
 		t.Fatalf("SendMessage error = %v", err)
 	}
 
+	// Should have at least 4 headers: prompt-caching + beta1 + beta2 + beta3
+	if len(capturedBeta) < 4 {
+		t.Fatalf("expected at least 4 anthropic-beta headers, got %d: %v", len(capturedBeta), capturedBeta)
+	}
+
+	// Build a combined string for checking (simpler approach for multiple headers)
+	allBetas := strings.Join(capturedBeta, ",")
+
 	// Default beta should be present
-	if !strings.Contains(capturedBeta, "prompt-caching-2024-07-31") {
-		t.Errorf("expected default beta 'prompt-caching-2024-07-31' in header, got %q", capturedBeta)
+	if !strings.Contains(allBetas, "prompt-caching-2024-07-31") {
+		t.Errorf("expected default beta 'prompt-caching-2024-07-31' in headers, got %v", capturedBeta)
 	}
 	// Additional betas should be present
-	if !strings.Contains(capturedBeta, "beta1") {
-		t.Errorf("expected 'beta1' in anthropic-beta header, got %q", capturedBeta)
+	if !strings.Contains(allBetas, "beta1") {
+		t.Errorf("expected 'beta1' in anthropic-beta headers, got %v", capturedBeta)
 	}
-	if !strings.Contains(capturedBeta, "beta2") {
-		t.Errorf("expected 'beta2' in anthropic-beta header, got %q", capturedBeta)
+	if !strings.Contains(allBetas, "beta2") {
+		t.Errorf("expected 'beta2' in anthropic-beta headers, got %v", capturedBeta)
 	}
-	if !strings.Contains(capturedBeta, "beta3") {
-		t.Errorf("expected 'beta3' in anthropic-beta header, got %q", capturedBeta)
+	if !strings.Contains(allBetas, "beta3") {
+		t.Errorf("expected 'beta3' in anthropic-beta headers, got %v", capturedBeta)
 	}
 }
 
 func TestClient_ANTHROPIC_BETAS_Streaming(t *testing.T) {
-	var capturedBeta string
+	var capturedBeta []string
 	events := []string{
 		"event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_1\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"model\":\"m\",\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{\"input_tokens\":5,\"output_tokens\":1}}}\n\n",
 		"event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n",
@@ -557,7 +578,7 @@ func TestClient_ANTHROPIC_BETAS_Streaming(t *testing.T) {
 		"event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n",
 	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		capturedBeta = r.Header.Get("anthropic-beta")
+		capturedBeta = r.Header.Values("anthropic-beta")
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.WriteHeader(http.StatusOK)
@@ -577,21 +598,53 @@ func TestClient_ANTHROPIC_BETAS_Streaming(t *testing.T) {
 		// drain
 	}
 
+	// Should have at least 3 headers: prompt-caching + prompt_eval_cache + some_other_beta
+	if len(capturedBeta) < 3 {
+		t.Fatalf("expected at least 3 anthropic-beta headers, got %d: %v", len(capturedBeta), capturedBeta)
+	}
+
+	// Build a combined string for checking
+	allBetas := strings.Join(capturedBeta, ",")
+
 	// Default beta + custom betas should be present
-	if !strings.Contains(capturedBeta, "prompt-caching-2024-07-31") {
-		t.Errorf("expected default beta 'prompt-caching-2024-07-31' in header, got %q", capturedBeta)
+	if !strings.Contains(allBetas, "prompt-caching-2024-07-31") {
+		t.Errorf("expected default beta 'prompt-caching-2024-07-31' in headers, got %v", capturedBeta)
 	}
-	if !strings.Contains(capturedBeta, "prompt_eval_cache") {
-		t.Errorf("expected 'prompt_eval_cache' in anthropic-beta header, got %q", capturedBeta)
+	if !strings.Contains(allBetas, "prompt_eval_cache") {
+		t.Errorf("expected 'prompt_eval_cache' in anthropic-beta headers, got %v", capturedBeta)
 	}
-	if !strings.Contains(capturedBeta, "some_other_beta") {
-		t.Errorf("expected 'some_other_beta' in anthropic-beta header, got %q", capturedBeta)
+	if !strings.Contains(allBetas, "some_other_beta") {
+		t.Errorf("expected 'some_other_beta' in anthropic-beta headers, got %v", capturedBeta)
 	}
 }
 
 // ---------------------------------------------------------------------------
 // AC3: API_TIMEOUT_MS env var
 // ---------------------------------------------------------------------------
+
+func TestResolveTimeout(t *testing.T) {
+	tests := []struct {
+		name     string
+		envValue string
+		expected time.Duration
+	}{
+		{"empty string returns1 hour", "", 1 * time.Hour},
+		{"valid5 minutes", "300000", 5 * time.Minute},
+		{"valid 1 hour", "3600000", 1 * time.Hour},
+		{"invalid string returns 1 hour", "invalid", 1 * time.Hour},
+		{"negative value returns 1 hour", "-1000", 1 * time.Hour},
+		{"zero returns 1 hour", "0", 1 * time.Hour},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ResolveTimeout(tt.envValue)
+			if got != tt.expected {
+				t.Errorf("ResolveTimeout(%q) = %v, want %v", tt.envValue, got, tt.expected)
+			}
+		})
+	}
+}
 
 func TestClient_API_TIMEOUT_MS_Creation(t *testing.T) {
 	// Test that client creation works with API_TIMEOUT_MS set

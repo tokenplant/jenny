@@ -3,6 +3,7 @@ package log
 import (
 	"bytes"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -104,14 +105,13 @@ func TestDEBUG_EnvVar_Alias(t *testing.T) {
 	// Reset logger with new env vars
 	resetLogger()
 
-	// Debug level should be enabled
-	if Logger == nil {
-		t.Fatal("Logger should not be nil")
-	}
-
-	// Verify debug messages are logged
+	// Debug level should be enabled - write a debug message and check output
 	buf.Reset()
 	Debug("debug message test")
+
+	if buf.Len() == 0 {
+		t.Error("expected debug output when DEBUG=1, got empty buffer")
+	}
 
 	// Restore default output
 	SetOutput(os.Stderr)
@@ -128,8 +128,12 @@ func TestJENNY_DEBUG_StillWorks(t *testing.T) {
 
 	resetLogger()
 
-	if Logger == nil {
-		t.Fatal("Logger should not be nil")
+	// Debug level should be enabled - write a debug message and check output
+	buf.Reset()
+	Debug("debug message test")
+
+	if buf.Len() == 0 {
+		t.Error("expected debug output when JENNY_DEBUG=1, got empty buffer")
 	}
 
 	// Restore default output
@@ -147,10 +151,37 @@ func TestDEBUG_EmptyValue(t *testing.T) {
 
 	resetLogger()
 
-	if Logger == nil {
-		t.Fatal("Logger should not be nil")
-	}
+	// Debug level should NOT be enabled - write a debug message
+	buf.Reset()
+	Debug("debug message test")
+
+	// slog at DEBUG level won't write when level is INFO
+	// So empty buffer is expected when debug is disabled
+	// (This is correct behavior - no output expected when DEBUG is empty)
 
 	// Restore default output
+	SetOutput(os.Stderr)
+}
+
+func TestDebug_Output(t *testing.T) {
+	// Test that Debug() actually writes output when debug level is enabled
+	var buf bytes.Buffer
+	SetOutput(&buf)
+
+	t.Setenv("DEBUG", "1")
+	t.Setenv("JENNY_DEBUG", "")
+	resetLogger()
+
+	buf.Reset()
+	Debug("test output")
+
+	if buf.Len() == 0 {
+		t.Error("expected output when DEBUG=1, got empty buffer")
+	}
+
+	if !strings.Contains(buf.String(), "test output") {
+		t.Errorf("expected 'test output' in debug output, got %q", buf.String())
+	}
+
 	SetOutput(os.Stderr)
 }

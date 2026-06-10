@@ -26,6 +26,19 @@ type Client struct {
 // defaultModel is the default model used when ANTHROPIC_MODEL is not set.
 const defaultModel = "claude-opus-4-5-20251101"
 
+// ResolveTimeout parses API_TIMEOUT_MS env var and returns a time.Duration.
+// Returns 1 hour default if the env var is empty, invalid, or <= 0.
+func ResolveTimeout(envValue string) time.Duration {
+	if envValue == "" {
+		return 1 * time.Hour
+	}
+	ms, err := strconv.Atoi(envValue)
+	if err != nil || ms <= 0 {
+		return 1 * time.Hour
+	}
+	return time.Duration(ms) * time.Millisecond
+}
+
 // NewClient creates a new API client.
 func NewClient() (*Client, error) {
 	return NewClientWithModel("")
@@ -43,36 +56,24 @@ func NewClientWithModel(model string) (*Client, error) {
 	}
 
 	// Build client options: beta headers + request timeout
-	// Default prompt-caching beta header
-	defaultBeta := string(anthropic.AnthropicBetaPromptCaching2024_07_31)
+	opts := []option.RequestOption{}
 
-	// Additional beta headers from ANTHROPIC_BETAS env var
+	// Default prompt-caching beta header
+	opts = append(opts, option.WithHeader("anthropic-beta", string(anthropic.AnthropicBetaPromptCaching2024_07_31)))
+
+	// Additional beta headers from ANTHROPIC_BETAS env var - send each as separate header
 	betas := os.Getenv("ANTHROPIC_BETAS")
 	if betas != "" {
-		// Combine all beta values into single header (comma-separated)
-		var allBetas []string
 		for beta := range strings.SplitSeq(betas, ",") {
 			beta = strings.TrimSpace(beta)
 			if beta != "" {
-				allBetas = append(allBetas, beta)
+				opts = append(opts, option.WithHeaderAdd("anthropic-beta", beta))
 			}
 		}
-		if len(allBetas) > 0 {
-			defaultBeta = defaultBeta + "," + strings.Join(allBetas, ",")
-		}
-	}
-
-	opts := []option.RequestOption{
-		option.WithHeader("anthropic-beta", defaultBeta),
 	}
 
 	// Request timeout from API_TIMEOUT_MS env var (default: 1 hour)
-	timeout := 1 * time.Hour
-	if timeoutMs := os.Getenv("API_TIMEOUT_MS"); timeoutMs != "" {
-		if ms, err := strconv.Atoi(timeoutMs); err == nil && ms > 0 {
-			timeout = time.Duration(ms) * time.Millisecond
-		}
-	}
+	timeout := ResolveTimeout(os.Getenv("API_TIMEOUT_MS"))
 	opts = append(opts, option.WithRequestTimeout(timeout))
 
 	// SDK's NewClient already reads ANTHROPIC_BASE_URL and ANTHROPIC_AUTH_TOKEN.
