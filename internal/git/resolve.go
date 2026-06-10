@@ -1,4 +1,5 @@
 package git
+
 import (
 	"bufio"
 	"os"
@@ -9,7 +10,6 @@ import (
 // findGitRoot walks up from startPath looking for .git.
 // Returns the repository root path and an error if not found.
 func findGitRoot(startPath string) (string, error) {
-	// Normalize and memoize
 	absStart, err := filepath.EvalSymlinks(startPath)
 	if err != nil {
 		return "", err
@@ -19,7 +19,6 @@ func findGitRoot(startPath string) (string, error) {
 		return "", err
 	}
 
-	// Check cache
 	findGitRootMu.RLock()
 	if root, ok := findGitRootCache[absStart]; ok {
 		findGitRootMu.RUnlock()
@@ -27,7 +26,6 @@ func findGitRoot(startPath string) (string, error) {
 	}
 	findGitRootMu.RUnlock()
 
-	// Walk up directories
 	dir := absStart
 	for {
 		gitPath := filepath.Join(dir, ".git")

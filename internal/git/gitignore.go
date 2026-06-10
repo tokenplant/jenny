@@ -1,4 +1,5 @@
 package git
+
 import (
 	"bufio"
 	"os"
