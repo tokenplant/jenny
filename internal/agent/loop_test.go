@@ -148,20 +148,6 @@ func TestToolResultStructure(t *testing.T) {
 	}
 }
 
-func TestMaxIterationsBound(t *testing.T) {
-	// Verify that max iterations constant is bounded to prevent infinite loops
-	if MaxIterations <= 0 {
-		t.Error("max iterations must be positive")
-	}
-	if MaxIterations > 1000 {
-		t.Error("max iterations seems unreasonably high")
-	}
-	// This should be sufficient for even complex multi-turn tool use cases
-	if MaxIterations < 10 {
-		t.Error("max iterations seems too low for practical use")
-	}
-}
-
 func TestToolInputValidation(t *testing.T) {
 	// Test that tools validate their inputs correctly
 	bashTool := tool.NewBashTool(false)
@@ -279,17 +265,6 @@ func TestDefaultSystemPromptUsedInRun(t *testing.T) {
 	// The system prompt should mention tools
 	if prompt == "" {
 		t.Error("system prompt should not be empty")
-	}
-}
-
-func TestMaxIterationsIsReasonable(t *testing.T) {
-	// MaxIterations should be set to a value that prevents infinite loops
-	// but allows for complex multi-turn conversations
-	if MaxIterations < 10 {
-		t.Errorf("MaxIterations=%d seems too low", MaxIterations)
-	}
-	if MaxIterations > 200 {
-		t.Errorf("MaxIterations=%d seems too high", MaxIterations)
 	}
 }
 
@@ -1549,3 +1524,57 @@ func TestForkChildFlagSetInSubagent(t *testing.T) {
 		t.Error("ForkChildKey=false should not trigger fork detection")
 	}
 }
+
+func TestMaxIterations_DefaultIsUnlimited(t *testing.T) {
+	cfg := StreamConfig{}
+	if cfg.MaxIterations != 0 {
+		t.Errorf("default MaxIterations should be 0 (unlimited), got %d", cfg.MaxIterations)
+	}
+}
+
+func TestMaxIterations_LoopContractUnlimited(t *testing.T) {
+	// When maxIterations <= 0, the loop should not be bounded
+	maxIter := 0
+	count := 0
+	for i := 0; maxIter <= 0 || i < maxIter; i++ {
+		count++
+		if count > 5 {
+			break
+		}
+	}
+	if count != 6 {
+		t.Errorf("unlimited loop should iterate freely, got %d", count)
+	}
+}
+
+func TestMaxIterations_LoopContractBounded(t *testing.T) {
+	tests := []struct {
+		maxIter int
+		want    int
+	}{
+		{1, 1},
+		{5, 5},
+		{10, 10},
+	}
+	for _, tc := range tests {
+		count := 0
+		for i := 0; tc.maxIter <= 0 || i < tc.maxIter; i++ {
+			count++
+		}
+		if count != tc.want {
+			t.Errorf("maxIter=%d: got %d iterations, want %d", tc.maxIter, count, tc.want)
+		}
+	}
+}
+
+func TestMaxIterations_EngineConfigWired(t *testing.T) {
+	// Verify that StreamConfig.MaxIterations is used by QueryEngine
+	cfg := StreamConfig{MaxIterations: 7}
+	engine := NewQueryEngine(cfg, nil, "")
+	// Access the internal runLoop's maxIterations via config — the engine
+	// reads e.streamCfg.MaxIterations in runLoop. Verify the config field is preserved.
+	if engine.streamCfg.MaxIterations != 7 {
+		t.Errorf("engine.streamCfg.MaxIterations = %d, want 7", engine.streamCfg.MaxIterations)
+	}
+}
+

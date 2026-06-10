@@ -124,7 +124,9 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 		log.SetOutput(os.Stderr)
 	}
 
-	for range MaxIterations {
+	maxIterations := e.streamCfg.MaxIterations
+
+	for i := 0; maxIterations <= 0 || i < maxIterations; i++ {
 		// Check if context is already cancelled/timed out before attempting API call
 		if ctx.Err() != nil {
 			return "", ctx.Err()
@@ -968,7 +970,7 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 		}
 	}
 
-	return "", fmt.Errorf("max iterations (%d) exceeded", MaxIterations)
+	return "", fmt.Errorf("max iterations (%d) exceeded", maxIterations)
 }
 
 // seedReadFileCacheFromTranscript seeds the ReadFileCache from transcript entries.

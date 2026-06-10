@@ -87,6 +87,36 @@ func TestParseOutputFormatFlag(t *testing.T) {
 	}
 }
 
+func TestParseMaxIterationsFlag(t *testing.T) {
+	origArgs := os.Args
+	defer func() { os.Args = origArgs }()
+
+	os.Args = []string{"jenny", "--max-iterations", "50", "-p", "hello"}
+
+	flags, err := Parse()
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if flags.MaxIterations != 50 {
+		t.Errorf("expected MaxIterations=50, got %d", flags.MaxIterations)
+	}
+}
+
+func TestParseMaxIterationsDefault(t *testing.T) {
+	origArgs := os.Args
+	defer func() { os.Args = origArgs }()
+
+	os.Args = []string{"jenny", "-p", "hello"}
+
+	flags, err := Parse()
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if flags.MaxIterations != 0 {
+		t.Errorf("expected MaxIterations=0 (unlimited), got %d", flags.MaxIterations)
+	}
+}
+
 func TestParseVerboseFlag(t *testing.T) {
 	// Save original args
 	origArgs := os.Args

@@ -45,6 +45,7 @@ jenny -p "prompt text"
 | `--system-prompt <text>` | Replace the default system prompt entirely |
 | `--append-system-prompt <text>` | Append text after the assembled default system prompt |
 | `--print-system-prompt` | Print the assembled system prompt and exit (no API call) |
+| `--max-iterations <n>` | Maximum raw loop iterations (0 = unlimited) |
 
 ## Flag Rules
 

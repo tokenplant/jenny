@@ -111,14 +111,12 @@ func RebuildMessages(entries []session.TranscriptEntry) []api.Message {
 	return messages
 }
 
-// MaxIterations is the maximum number of loop iterations to prevent infinite loops.
-const MaxIterations = 100
-
 // defaultSystemPrompt is the system prompt sent to the API.
 const defaultSystemPrompt = "You are an AI assistant that can use tools to help answer user questions. When you use tools, carefully review the results and incorporate them into your response."
 
 // Run executes the agent loop with the given prompt and tools.
-func Run(ctx context.Context, prompt string, tools []tool.Tool, cwd string) (string, error) {
+// maxIterations controls the maximum loop iterations; <= 0 means unlimited.
+func Run(ctx context.Context, prompt string, tools []tool.Tool, cwd string, maxIterations int) (string, error) {
 	// Create API client
 	client, err := api.NewClient()
 	if err != nil {
@@ -183,7 +181,7 @@ func Run(ctx context.Context, prompt string, tools []tool.Tool, cwd string) (str
 	}
 
 	// Main agent loop
-	for range MaxIterations {
+	for i := 0; maxIterations <= 0 || i < maxIterations; i++ {
 		// Send message to API (pass nil for toolResults as we include them in messages)
 		resp, err := client.SendMessage(ctx, messages, apiTools, nil, systemPrompt)
 		if err != nil {
@@ -301,12 +299,13 @@ func Run(ctx context.Context, prompt string, tools []tool.Tool, cwd string) (str
 		}
 	}
 
-	return "", fmt.Errorf("max iterations (%d) exceeded", MaxIterations)
+	return "", fmt.Errorf("max iterations (%d) exceeded", maxIterations)
 }
 
 // RunSimple is a simpler version of Run that handles basic text interactions.
-func RunSimple(ctx context.Context, prompt string, tools []tool.Tool) (string, error) {
-	return Run(ctx, prompt, tools, "")
+// maxIterations controls the maximum loop iterations; <= 0 means unlimited.
+func RunSimple(ctx context.Context, prompt string, tools []tool.Tool, maxIterations int) (string, error) {
+	return Run(ctx, prompt, tools, "", maxIterations)
 }
 
 // RunStream executes the agent loop with streaming JSON output.

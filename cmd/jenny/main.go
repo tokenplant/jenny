@@ -51,6 +51,7 @@ func run() error {
 			CustomSystemPrompt: flags.CustomSystemPrompt,
 			AppendSystemPrompt: flags.AppendSystemPrompt,
 			MemoryContent:      agent.LoadInstructionFile(cwd),
+			MaxIterations:      flags.MaxIterations,
 		}
 		fmt.Print(agent.AssembleSystemPrompt(cfg, tools, cwd))
 		return nil
@@ -247,6 +248,7 @@ func run() error {
 		CustomSystemPrompt: flags.CustomSystemPrompt,
 		AppendSystemPrompt: flags.AppendSystemPrompt,
 		MemoryContent:      agent.LoadInstructionFile(cwd),
+		MaxIterations:      flags.MaxIterations,
 	}
 
 	// AC3-streamconfig-inheritance: Set parent config on runner for named agent inheritance

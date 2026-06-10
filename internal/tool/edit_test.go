@@ -891,10 +891,10 @@ func TestEditTool_NumExpectedGlobal(t *testing.T) {
 
 	// Set num_expected=2 but actual count is 3
 	result, err := editTool.Execute(context.Background(), map[string]any{
-		"file_path":     testFile,
-		"old_string":    "foo",
-		"new_string":    "bar",
-		"num_expected":  float64(2),
+		"file_path":    testFile,
+		"old_string":   "foo",
+		"new_string":   "bar",
+		"num_expected": float64(2),
 	}, tmpDir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

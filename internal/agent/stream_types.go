@@ -48,6 +48,7 @@ type StreamConfig struct {
 	StructuredSchema     map[string]any              // JSON schema for structured output (AC1, AC4: non-interactive only)
 	StructuredDenyRules  []string                    // Tool names to deny; checked by engine to enforce AC1
 	IsNamedAgent         bool                        // True when this session is a named swarm agent
+	MaxIterations        int                         // Maximum loop iterations (0 = unlimited)
 }
 
 // ToolParam represents a tool parameter for the API.

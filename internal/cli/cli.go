@@ -30,6 +30,7 @@ type Flags struct {
 	PrintSystemPrompt      bool   // --print-system-prompt: print the assembled system prompt and exit
 	CustomSystemPrompt     string // --system-prompt: replaces default system prompt entirely
 	AppendSystemPrompt     string // --append-system-prompt: appended after assembled system prompt
+	MaxIterations          int    // --max-iterations: maximum loop iterations (0 = unlimited)
 }
 
 // StringSlice implements flag.Value for multiple string values.
@@ -113,6 +114,9 @@ func Parse() (*Flags, error) {
 	var appendSys string
 	flags.StringVar(&appendSys, "append-system-prompt", "", "Append text after the system prompt")
 
+	var maxIter int
+	flags.IntVar(&maxIter, "max-iterations", 0, "Maximum loop iterations (0 = unlimited)")
+
 	// Parse the flags
 	if err := flags.Parse(os.Args[1:]); err != nil {
 		if err == flag.ErrHelp {
@@ -147,6 +151,7 @@ func Parse() (*Flags, error) {
 			PrintSystemPrompt:      psp,
 			CustomSystemPrompt:     customSys,
 			AppendSystemPrompt:     appendSys,
+			MaxIterations:          maxIter,
 		}, nil
 	}
 
@@ -191,6 +196,7 @@ func Parse() (*Flags, error) {
 		PrintSystemPrompt:      psp,
 		CustomSystemPrompt:     customSys,
 		AppendSystemPrompt:     appendSys,
+		MaxIterations:          maxIter,
 	}, nil
 }
 

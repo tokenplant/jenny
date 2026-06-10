@@ -44,7 +44,7 @@ The main agent loop that orchestrates the interaction:
 
 1. **Initialization**: Sets up API client, working directory, and initial messages
 2. **Tool Conversion**: Converts tool definitions to API format
-3. **Main Loop**: Iterates up to 100 times, sending messages and processing responses
+3. **Main Loop**: Iterates sending messages and processing responses (configurable via `--max-iterations`; default unlimited)
 4. **Response Processing**: Handles text and tool_use content blocks
 5. **Tool Execution**: Executes requested tools and collects results
 6. **Message Building**: Constructs proper message payloads with tool_use blocks and tool_results
@@ -160,7 +160,7 @@ tools := []tool.Tool{
     tool.NewReadTool(),
 }
 
-result, err := agent.Run(ctx, "list the files in the current directory", tools, cwd)
+result, err := agent.Run(ctx, "list the files in the current directory", tools, cwd, 0)
 if err != nil {
     // Handle error
 }
@@ -190,6 +190,7 @@ jenny --output-format stream-json -p "what is 2+2?"
 | `-p <prompt>` | Prompt to send to the agent |
 | `--model <model>` | Model to use (overrides ANTHROPIC_MODEL env var) |
 | `--output-format <format>` | Output format: `text` (default), `stream-json` |
+| `--max-iterations <n>` | Maximum loop iterations (0 = unlimited) |
 | `--verbose` | Enable verbose/debug output to stderr |
 | `--include-partial-messages` | Include partial messages in stream-json output |
 | `--dangerously-skip-permissions` | Skip permission prompts (always allowed in jenny) |

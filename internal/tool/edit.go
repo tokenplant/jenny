@@ -388,7 +388,7 @@ func (t *EditTool) executeScoped(filePath, oldString, newString string, replaceA
 	}
 
 	// Phase 2: Buffer scoped-range lines (bounded by [startLine, endLine])
-	var scopedLines []string // Lines within [startLine, endLine], trailing \n stripped
+	var scopedLines []string       // Lines within [startLine, endLine], trailing \n stripped
 	scopedEndsWithNewline := false // Whether the last scoped line had a \n delimiter
 
 	for lineNum := startLine; lineNum <= endLine; lineNum++ {
@@ -526,7 +526,7 @@ func trimNewline(s string) string {
 	return strings.TrimSuffix(s, "\n")
 }
 
-// handleMissingFile implements the "old_string == '' on missing file" create-semantic.
+// handleMissingFile implements the "old_string == ” on missing file" create-semantic.
 func (t *EditTool) handleMissingFile(filePath, oldString, newString string, entry *ReadFileEntry) (*ToolResult, error) {
 	if oldString == "" {
 		// Create parent directories if needed

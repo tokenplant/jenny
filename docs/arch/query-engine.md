@@ -61,6 +61,7 @@ Carried across turns in engine instance:
 |--------|----------|
 | `maxTurns` | Stop loop; emit `error_max_turns` result |
 | `maxBudgetUsd` | Stop before API when cost exceeded |
+| `maxIterations` | Maximum raw loop iterations (0 = unlimited); bounds API calls when set |
 | `jsonSchema` | Structured output; requires synthetic output tool + session hook |
 
 ## Structured Output
@@ -80,6 +81,8 @@ Loaded per turn; merge coordinator userContext when enabled.
 | Abort mid-turn | Synthetic tool_results; partial transcript persisted |
 | Resume same engine | Rehydrate from transcript file |
 | maxTurns = 1 | Single API iteration max |
+| maxIterations = 0 | Unlimited loop iterations (default) |
+| maxIterations = 5 | Stop after 5 raw loop iterations |
 | Structured output invalid schema | Error at tool registration |
 
 ## File structure
