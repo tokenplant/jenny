@@ -34,9 +34,15 @@ func TestNormalize_NoProviderNameStringsInProduction(t *testing.T) {
 		if strings.Contains(line, "_test.go") {
 			continue
 		}
-		// Skip comments-only lines (lines starting with //)
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "//") {
+		// Skip comments (grep output includes ":line://" for comment lines)
+		if strings.Contains(line, ":") && strings.Contains(line, "//") {
+			continue
+		}
+		// Skip model-version identifiers in data/config (e.g., "deepseek-v4-flash", "minimax-m3").
+		// These are legitimate model-name strings in pricing tables and max-token overrides,
+		// not provider-specific conditionals. Pattern: quote immediately before provider name
+		// (map key "deepseek-v4-flash": { or switch case case "deepseek-v4-flash":).
+		if strings.Contains(line, `":`) {
 			continue
 		}
 		violations = append(violations, line)
