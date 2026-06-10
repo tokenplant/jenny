@@ -38,6 +38,11 @@ func captureStdout(t *testing.T, fn func()) string {
 	return buf.String()
 }
 
+// sseLine formats an SSE event line in the format "event: <event>\ndata: <data>\n\n".
+func sseLine(event, data string) string {
+	return fmt.Sprintf("event: %s\ndata: %s\n\n", event, data)
+}
+
 func makeMockStreamServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

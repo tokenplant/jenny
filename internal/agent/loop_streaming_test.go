@@ -18,10 +18,6 @@ import (
 	"github.com/ipy/jenny/internal/tool"
 )
 
-func sseLine(event, data string) string {
-	return fmt.Sprintf("event: %s\ndata: %s\n\n", event, data)
-}
-
 // TestAC4_StreamRequestStartEmitted verifies that RunStream emits
 // stream_request_start before each API iteration when streaming is enabled.
 func TestAC4_StreamRequestStartEmitted(t *testing.T) {
