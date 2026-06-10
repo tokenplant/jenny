@@ -82,6 +82,27 @@ func TestRedact_ReplacesGitHubToken(t *testing.T) {
 	}
 }
 
+func TestRedact_PreservesLongBase64(t *testing.T) {
+	origVal := os.Getenv("JENNY_REDACT_DISABLE")
+	os.Unsetenv("JENNY_REDACT_DISABLE")
+	defer func() {
+		if origVal != "" {
+			os.Setenv("JENNY_REDACT_DISABLE", origVal)
+		}
+	}()
+
+	redactor := NewSecretRedactor()
+	// Legitimate base64 content (like image data) should NOT be redacted
+	// This is a 48+ char base64 string without any secret prefix
+	legitBase64 := "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+	input := "Image data: " + legitBase64
+	result := redactor.Redact(input)
+
+	if result != input {
+		t.Errorf("Legitimate base64 content should not be redacted, got: %s", result)
+	}
+}
+
 func TestRedact_ReplacesAWSKey(t *testing.T) {
 	origVal := os.Getenv("JENNY_REDACT_DISABLE")
 	os.Unsetenv("JENNY_REDACT_DISABLE")
