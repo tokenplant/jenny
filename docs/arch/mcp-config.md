@@ -11,7 +11,6 @@ gaps:
   - "Orphaned plugin cache exclusion from search tools not implemented"
   - "Strict mode excludes plugin sources (enterprise policy enforcement deferred to P4)"
   - "OAuth credentials and OpenID Connect Discovery not supported in server definition"
-defer_to: P4
 depends_on:
   - cli
 ---
