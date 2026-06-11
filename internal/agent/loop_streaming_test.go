@@ -977,36 +977,6 @@ func TestStreamingToolUseOnlyTurn(t *testing.T) {
 	t.Log("AC4 PASS: content array contains only tool_use blocks, no text block")
 }
 
-// hasTextWith reports whether any element of content is a text block whose
-// text matches want.
-func hasTextWith(content []any, want string) bool {
-	for _, item := range content {
-		b, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		if b["type"] == "text" && b["text"] == want {
-			return true
-		}
-	}
-	return false
-}
-
-// hasToolUseWithID reports whether any element of content is a tool_use block
-// with id == want.
-func hasToolUseWithID(content []any, want string) bool {
-	for _, item := range content {
-		b, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		if b["type"] == "tool_use" && b["id"] == want {
-			return true
-		}
-	}
-	return false
-}
-
 // captureStreamOutput runs RunStream and captures stdout. It returns the
 // captured output string and signals done via doneCh.
 func captureStreamOutput(t *testing.T, cfg StreamConfig) (string, error) {

@@ -163,3 +163,33 @@ func parseNDJSONLines(t *testing.T, output string) []map[string]any {
 	}
 	return result
 }
+
+// hasTextWith reports whether any element of content is a text block whose
+// text matches want.
+func hasTextWith(content []any, want string) bool {
+	for _, item := range content {
+		b, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if b["type"] == "text" && b["text"] == want {
+			return true
+		}
+	}
+	return false
+}
+
+// hasToolUseWithID reports whether any element of content is a tool_use block
+// with id == want.
+func hasToolUseWithID(content []any, want string) bool {
+	for _, item := range content {
+		b, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if b["type"] == "tool_use" && b["id"] == want {
+			return true
+		}
+	}
+	return false
+}

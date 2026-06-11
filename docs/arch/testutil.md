@@ -5,7 +5,7 @@ priority: P3
 status: done
 spec: complete
 code: done
-package: internal/testutil
+package: internal/testutil, internal/testutil/mockapi, internal/agent
 depends_on: []
 ---
 # Test Utilities
@@ -23,7 +23,7 @@ The package was introduced to break the import cycle between `internal/agent` an
 neither could import the other. Moving these helpers to a neutral package
 (`internal/testutil`) that neither `agent` nor `tool` depends on resolved the cycle.
 
-## API
+## API: internal/testutil
 
 ### CaptureStdout
 
@@ -45,19 +45,104 @@ Formats a Server-Sent Events (SSE) line in the format:
 `event: <event>\ndata: <data>\n\n`. Used by agent streaming tests to construct
 mock SSE responses.
 
-## Usage
+## API: internal/testutil/mockapi
 
-Packages import `internal/testutil` and call the functions directly:
+The `mockapi` subpackage provides an in-process mock server for the Anthropic API, serving responses from "cassette" files.
+
+### NewMockServer
 
 ```go
-import "github.com/ipy/jenny/internal/testutil"
-
-// In a test:
-output := testutil.CaptureStdout(t, func() {
-    // code that writes to stdout
-})
+func NewMockServer(cassetteDir string) *MockServer
 ```
 
-## Headless Protocol Compatibility
+Starts a new mock server that serves cassettes from the specified directory. The server listens on a random port.
 
-Test utilities do not affect runtime behavior. They are compile-test-time only.
+### MockServer.URL
+
+```go
+func (m *MockServer) URL() string
+```
+
+Returns the base URL of the mock server (e.g., `http://127.0.0.1:56789`).
+
+### MockServer.Close
+
+```go
+func (m *MockServer) Close()
+```
+
+Stops the mock server and releases the port.
+
+### MockServer.Requests
+
+```go
+func (m *MockServer) Requests() []APIRequest
+```
+
+Returns a slice of all requests captured by the server. Each `APIRequest` contains the decoded JSON body and the HTTP headers.
+
+### MockServer.ClearRequests
+
+```go
+func (m *MockServer) ClearRequests()
+```
+
+Resets the internal list of captured requests.
+
+## API: internal/agent (Test Helpers)
+
+The following helpers are defined in `internal/agent/testhelpers_test.go` for inspecting agent output in tests.
+
+### parseAssistantEvents
+
+```go
+func parseAssistantEvents(output string) ([]any, error)
+```
+
+Parses the NDJSON output of an agent session and extracts the content items from `assistant_message` events.
+
+### parseNDJSONLines
+
+```go
+func parseNDJSONLines(output string) ([]map[string]any, error)
+```
+
+Parses a string containing multiple JSON objects (one per line) into a slice of maps.
+
+### hasTextWith
+
+```go
+func hasTextWith(content []any, want string) bool
+```
+
+Reports whether any element of the content slice is a text block whose text matches `want`.
+
+### hasToolUseWithID
+
+```go
+func hasToolUseWithID(content []any, want string) bool
+```
+
+Reports whether any element of the content slice is a tool_use block with the specified ID.
+
+## Usage
+
+### Using MockServer
+
+```go
+s := mockapi.NewMockServer("testdata/cassettes")
+defer s.Close()
+
+// Use s.URL() as the base URL for the API client
+client := api.NewClient(s.URL())
+```
+
+### Content Inspection
+
+```go
+content, _ := parseAssistantEvents(output)
+if !hasTextWith(content, "Hello, world!") {
+    t.Error("expected greeting")
+}
+```
+
