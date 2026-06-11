@@ -23,6 +23,8 @@ All acceptance criteria verified passing on 2026-06-12.
 | AC5 | Non-tool_result blocks untouched | ✅ PASS |
 | AC6 | No provider name strings leak into normalization | ✅ PASS |
 
+**Re-verified on 2026-06-12 at HEAD 7cf8462.**
+
 ## Test Command
 
 ```bash

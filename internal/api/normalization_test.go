@@ -11,7 +11,7 @@ import (
 // TestNormalization_ToolResultFlattening_EdgeCases verifies the tool_result content
 // flattening pass produces correct wire format for all edge cases (AC1-AC5).
 // Run: go test ./internal/api/ -run "TestNormalization" -v -count=1
-// Expected: 5 PASS results (all5 AC subtests pass).
+// Expected: 5 PASS results (all 5 AC subtests pass).
 //
 // Prior fixes:
 // - 95f5153: flatten tool_result content for DeepSeek compatibility
