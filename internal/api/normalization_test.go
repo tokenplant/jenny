@@ -330,14 +330,14 @@ func TestNormalization_CredentialBoundArtifactStripping(t *testing.T) {
 
 		messages := []Message{
 			{
-				Role: "assistant",
+				Role:    "assistant",
 				Content: `<thinking type="redacted">SIG_1</thinking>`,
 				ToolUse: []ToolUseBlock{
 					{ID: "call_1", Name: "tool1", Input: map[string]any{}},
 				},
 			},
 			{
-				Role: "user",
+				Role:    "user",
 				Content: "test",
 				ToolResults: []ToolResultBlock{
 					{ToolUseID: "call_1", Content: "result"},
