@@ -295,8 +295,8 @@ func TestSetVerbose_ProgrammaticEnable(t *testing.T) {
 }
 
 func TestRingBuffer_CapsAt100Entries(t *testing.T) {
-	// Reset the global errorRing for this test
-	errorRing = ringBuffer{capacity: 100}
+	ResetForTest()
+	t.Cleanup(ResetForTest)
 
 	// Call Error 150 times with distinct messages
 	for i := 1; i <= 150; i++ {
@@ -323,36 +323,36 @@ func TestRingBuffer_CapsAt100Entries(t *testing.T) {
 }
 
 func TestRingBuffer_FIFOEviction(t *testing.T) {
-	// Reset the global errorRing for this test
-	errorRing = ringBuffer{capacity: 3}
+	ResetForTest()
+	t.Cleanup(ResetForTest)
 
-	// Add 3 entries
-	Error("first")
-	Error("second")
-	Error("third")
+	// Add 100 entries (fills the buffer at default capacity 100)
+	for i := 1; i <= 100; i++ {
+		Error(fmt.Sprintf("entry-%d", i))
+	}
 
 	errors := GetInMemoryErrors()
-	if len(errors) != 3 {
-		t.Errorf("expected 3 entries, got %d", len(errors))
+	if len(errors) != 100 {
+		t.Fatalf("expected 100 entries, got %d", len(errors))
 	}
 
-	// Add 4th entry, should evict "first"
-	Error("fourth")
+	// Add 101st entry, should evict the oldest ("entry-1")
+	Error("entry-101")
 
 	errors = GetInMemoryErrors()
-	if len(errors) != 3 {
-		t.Errorf("expected 3 entries after eviction, got %d", len(errors))
+	if len(errors) != 100 {
+		t.Errorf("expected 100 entries after eviction, got %d", len(errors))
 	}
 
-	// First entry should now be "second"
-	if errors[0].Message != "second" {
-		t.Errorf("expected first entry to be 'second', got %s", errors[0].Message)
+	// First entry should now be "entry-2"
+	if !strings.Contains(errors[0].Message, "entry-2") {
+		t.Errorf("expected first entry to be entry-2, got %s", errors[0].Message)
 	}
 }
 
 func TestRingBuffer_EmptyBuffer(t *testing.T) {
-	// Reset the global errorRing for this test
-	errorRing = ringBuffer{capacity: 100}
+	ResetForTest()
+	t.Cleanup(ResetForTest)
 
 	errors := GetInMemoryErrors()
 	if len(errors) != 0 {
@@ -365,8 +365,8 @@ func TestRingBuffer_EmptyBuffer(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestLastRequest_SetAndGet(t *testing.T) {
-	// Reset the global store
-	lastRequestStore = nil
+	ResetForTest()
+	t.Cleanup(ResetForTest)
 
 	// Create a LastRequest with known values
 	lr := LastRequest{
@@ -406,8 +406,8 @@ func TestLastRequest_SetAndGet(t *testing.T) {
 }
 
 func TestLastRequest_MessagesNilByDefault(t *testing.T) {
-	// Reset the global store
-	lastRequestStore = nil
+	ResetForTest()
+	t.Cleanup(ResetForTest)
 
 	lr := LastRequest{
 		Model:     "claude-3-sonnet-20240229",
@@ -424,8 +424,8 @@ func TestLastRequest_MessagesNilByDefault(t *testing.T) {
 }
 
 func TestLastRequest_OverwriteEachTurn(t *testing.T) {
-	// Reset the global store
-	lastRequestStore = nil
+	ResetForTest()
+	t.Cleanup(ResetForTest)
 
 	// First request
 	lr1 := LastRequest{Model: "model-v1"}
@@ -442,8 +442,8 @@ func TestLastRequest_OverwriteEachTurn(t *testing.T) {
 }
 
 func TestLastRequest_NilWhenEmpty(t *testing.T) {
-	// Reset the global store
-	lastRequestStore = nil
+	ResetForTest()
+	t.Cleanup(ResetForTest)
 
 	result := GetLastRequest()
 	if result != nil {
@@ -452,8 +452,8 @@ func TestLastRequest_NilWhenEmpty(t *testing.T) {
 }
 
 func TestLastRequest_ImmutableFromGetter(t *testing.T) {
-	// Reset the global store
-	lastRequestStore = nil
+	ResetForTest()
+	t.Cleanup(ResetForTest)
 
 	SetLastRequest(LastRequest{Model: "original"})
 
@@ -464,5 +464,39 @@ func TestLastRequest_ImmutableFromGetter(t *testing.T) {
 	reFetch := GetLastRequest()
 	if reFetch.Model != "original" {
 		t.Errorf("expected original value, mutations should not affect store")
+	}
+}
+
+// TestLastRequest_DeepCopySlices verifies that GetLastRequest returns deep copies
+// of the Tools and Messages slices, so mutations to slice elements don't affect the store.
+func TestLastRequest_DeepCopySlices(t *testing.T) {
+	ResetForTest()
+	t.Cleanup(ResetForTest)
+
+	// Set a LastRequest with non-nil slices
+	SetLastRequest(LastRequest{
+		Model:    "test-model",
+		Tools:    []any{"tool-a", "tool-b"},
+		Messages: []any{"msg1", "msg2"},
+	})
+
+	// Get a copy and mutate the slice elements
+	result := GetLastRequest()
+	result.Tools[0] = "modified-tool"
+	result.Messages[0] = "modified-msg"
+
+	// Re-fetch and verify original values are intact
+	reFetch := GetLastRequest()
+	if reFetch.Tools[0] != "tool-a" {
+		t.Errorf("expected Tools[0] to be 'tool-a', got %v", reFetch.Tools[0])
+	}
+	if reFetch.Tools[1] != "tool-b" {
+		t.Errorf("expected Tools[1] to be 'tool-b', got %v", reFetch.Tools[1])
+	}
+	if reFetch.Messages[0] != "msg1" {
+		t.Errorf("expected Messages[0] to be 'msg1', got %v", reFetch.Messages[0])
+	}
+	if reFetch.Messages[1] != "msg2" {
+		t.Errorf("expected Messages[1] to be 'msg2', got %v", reFetch.Messages[1])
 	}
 }

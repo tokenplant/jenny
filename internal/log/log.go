@@ -111,11 +111,6 @@ type ringBuffer struct {
 	capacity int
 }
 
-// newRingBuffer creates a new ring buffer with the given capacity.
-func newRingBuffer(capacity int) *ringBuffer {
-	return &ringBuffer{capacity: capacity}
-}
-
 // Append adds an entry to the ring buffer, evicting the oldest if at capacity.
 func (rb *ringBuffer) Append(entry ErrorEntry) {
 	rb.mu.Lock()
@@ -172,7 +167,24 @@ func GetLastRequest() *LastRequest {
 	if lastRequestStore == nil {
 		return nil
 	}
-	// Return a copy to prevent external mutation
+	// Return a deep copy to prevent external mutation of slices
 	result := *lastRequestStore
+	if result.Tools != nil {
+		result.Tools = append([]any(nil), result.Tools...)
+	}
+	if result.Messages != nil {
+		result.Messages = append([]any(nil), result.Messages...)
+	}
 	return &result
+}
+
+// ResetForTest resets all global state for testing. Use with t.Cleanup to restore state.
+func ResetForTest() {
+	errorRing.mu.Lock()
+	errorRing.entries = nil
+	errorRing.capacity = 100
+	errorRing.mu.Unlock()
+	lastRequestMu.Lock()
+	lastRequestStore = nil
+	lastRequestMu.Unlock()
 }
