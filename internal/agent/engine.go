@@ -295,5 +295,9 @@ func (e *QueryEngine) persistCompactBoundary(preTokens int, preservedCount int, 
 		},
 		CWD: e.cwd,
 	}
-	return e.sessionManager.AppendEntry(e.streamCfg.SessionID, entry)
+	if err := e.sessionManager.AppendEntry(e.streamCfg.SessionID, entry); err != nil {
+		log.Error("Failed to persist compaction boundary", "error", err)
+		return err
+	}
+	return nil
 }

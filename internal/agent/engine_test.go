@@ -2480,8 +2480,9 @@ func TestEngine_ContextExhausted_MiniMax_EmitsStructuredError(t *testing.T) {
 }
 
 // TestAC2_PersistCompactBoundary_LogsError verifies that persistCompactBoundary
-// returns an error when AppendEntry fails (instead of swallowing it).
-// This tests AC2: the function now returns the error instead of discarding it.
+// returns an error when AppendEntry fails (instead of swallowing it) and logs
+// the error via log.Error. This tests AC1 and AC2: the function now returns the
+// error and logs it internally.
 func TestAC2_PersistCompactBoundary_LogsError(t *testing.T) {
 	// Create a session manager with a valid tmpDir
 	tmpDir := t.TempDir()
@@ -2513,11 +2514,23 @@ func TestAC2_PersistCompactBoundary_LogsError(t *testing.T) {
 	// This will cause AppendEntry to fail when persistCompactBoundary tries to write
 	os.RemoveAll(tmpDir)
 
+	// Capture log output
+	var logBuf bytes.Buffer
+	log.SetOutput(&logBuf)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+
 	// persistCompactBoundary should return an error (not panic or silently swallow it)
 	err = engine.persistCompactBoundary(5000, 3, "auto")
 	if err == nil {
 		t.Error("AC2 FAIL: expected error from persistCompactBoundary when AppendEntry fails, got nil")
 	} else {
 		t.Logf("AC2 PASS: persistCompactBoundary returned error: %v", err)
+	}
+
+	// AC1: Verify log.Error was called with the expected message
+	if !strings.Contains(logBuf.String(), "Failed to persist compaction boundary") {
+		t.Errorf("AC1 FAIL: expected log output to contain 'Failed to persist compaction boundary', got: %s", logBuf.String())
+	} else {
+		t.Logf("AC1 PASS: log output contains expected message")
 	}
 }
