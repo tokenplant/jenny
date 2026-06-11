@@ -106,13 +106,12 @@ func (m *MockServer) SetContentType(cassetteID string, contentType string) *Mock
 Overrides the `Content-Type` response header for a given `cassetteID`. The default
 is `text/event-stream` for SSE cassettes.
 
-**Why needed:** OpenAI non-streaming responses use `application/json`. Anthropic
-non-streaming JSON (used in some error paths and fallback scenarios) also needs
-`application/json`. E4 allows the same cassette file to be served with different
-content types depending on the context.
+**Why needed:** JSON responses from either provider use `application/json` as the
+Content-Type. E4 lets the same cassette file be served with different content types
+depending on the context.
 
 **Use cases:**
-- OpenAI non-streaming JSON responses: `SetContentType(id, "application/json")`
+- JSON responses (non-streaming) from either provider: `SetContentType(id, "application/json")`
 - Plain text error responses: `SetContentType(id, "text/plain")`
 - Clearing override: `SetContentType(id, "")` (resets to `text/event-stream`)
 
@@ -220,7 +219,7 @@ internal/testutil/mockapi/
     │   ├── tool-use-turn1.sse
     │   └── partial-events.sse
     └── openai/
-        ├── chat-basic.json        # OpenAI non-streaming JSON response
+        ├── chat-basic.json        # JSON response (non-streaming)
         ├── chat-stream.sse        # OpenAI streaming SSE response
         └── chat-stream-reasoning.sse
 ```
@@ -316,14 +315,14 @@ by HTTP path.
 
 ## OpenAI Support
 
-OpenAI uses a different API path (`/v1/chat/completions`) and different response
-formats (JSON non-streaming and SSE streaming) from Anthropic. The original mockapi
-hard-coded `POST /cassette/<id>/v1/messages` and `Content-Type: text/event-stream`.
+OpenAI uses a different API path (`/v1/chat/completions`) and serves both JSON and
+SSE response formats from the same endpoint. The original mockapi hard-coded
+`POST /cassette/<id>/v1/messages` and `Content-Type: text/event-stream`.
 
 OpenAI support requires E4 (SetContentType), E5 (SetPathHandler), and E1
 (SetInlineResponse) working together:
 
-**For OpenAI non-streaming JSON tests:**
+**For OpenAI JSON (non-streaming) tests:**
 1. Write a cassette file `openai/chat-basic.json` containing the JSON response.
 2. Call `NewMockServer(WithCassetteDir("internal/testutil/mockapi/testdata"))`
 3. Call `SetPathHandler("POST /v1/chat/completions", func(w http.ResponseWriter, r *http.Request) {

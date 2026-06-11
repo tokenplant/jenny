@@ -23,9 +23,9 @@ neither could import the other. Moving these helpers to a neutral package
 
 The `internal/testutil/mockapi` subpackage provides an in-process mock server for the
 Anthropic (and OpenAI-compatible) API, serving responses from "cassette" files. It
-supports both SSE streaming responses (Anthropic) and JSON non-streaming responses
-(OpenAI), with extension points for custom path handlers, request inspection, and
-error response injection.
+supports both SSE streaming and JSON one-shot responses from either provider, with
+extension points for custom path handlers, request inspection, and error response
+injection.
 
 ## API: internal/testutil
 
@@ -219,7 +219,7 @@ func (m *MockServer) SetContentType(cassetteID string, contentType string) *Mock
 
 Overrides the `Content-Type` header for a given `cassetteID`. Without this, the
 default is `text/event-stream` for SSE cassettes. Use for:
-- `application/json` -- OpenAI non-streaming JSON responses
+- `application/json` -- JSON responses (non-streaming) from either provider
 - `text/plain` -- plain text responses
 
 Empty string clears the override (resets to `text/event-stream`).
