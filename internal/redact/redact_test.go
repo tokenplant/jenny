@@ -338,6 +338,29 @@ func TestRedact_ConcurrentSafety(t *testing.T) {
 	// If we get here without panic or data race, test passes
 }
 
+func TestRedact_ReplacesLongToken(t *testing.T) {
+	origVal := os.Getenv("JENNY_REDACT_DISABLE")
+	os.Unsetenv("JENNY_REDACT_DISABLE")
+	defer func() {
+		if origVal != "" {
+			os.Setenv("JENNY_REDACT_DISABLE", origVal)
+		}
+	}()
+
+	redactor := NewSecretRedactor()
+	// Token from .env.freemodel: 54 chars, "fe_oa_" prefix, high entropy
+	token := "fe_oa_7066b4cf68b1daf66206986fb5d16d45c466d74d39f0d52e"
+	input := "ANTHROPIC_AUTH_TOKEN=" + token
+	result := redactor.Redact(input)
+
+	if !strings.Contains(result, "[REDACTED:") {
+		t.Error("Expected redaction placeholder for long token")
+	}
+	if strings.Contains(result, token) {
+		t.Error("Original token should not be in result")
+	}
+}
+
 func TestRecover_NoOpWhenDisabled(t *testing.T) {
 	// Set the disable env var
 	os.Setenv("JENNY_REDACT_DISABLE", "1")

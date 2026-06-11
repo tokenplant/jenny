@@ -1,6 +1,7 @@
 package redact
 
 import (
+	"crypto/rand"
 	"fmt"
 	"math"
 	"os"
@@ -42,7 +43,6 @@ func shannonEntropy(data string) float64 {
 type SecretRedactor struct {
 	mu           sync.Mutex
 	enabled      bool
-	counter      int
 	replacements map[string]string // placeholder -> original
 	secretToID   map[string]string // secret -> placeholder ID (for deduplication)
 	detector     *Detector         // rule-based detector
@@ -117,11 +117,18 @@ func (r *SecretRedactor) placeholderFor(secret string) string {
 	if existingID, ok := r.secretToID[secret]; ok {
 		return existingID
 	}
-	r.counter++
-	placeholder := fmt.Sprintf("[REDACTED:ID_%05d]", r.counter)
+	id := randomHex(8)
+	placeholder := fmt.Sprintf("[REDACTED:%s]", id)
 	r.secretToID[secret] = placeholder
 	r.replacements[placeholder] = secret
 	return placeholder
+}
+
+// randomHex generates a random hex string of n bytes.
+func randomHex(n int) string {
+	b := make([]byte, n)
+	rand.Read(b)
+	return fmt.Sprintf("%x", b)
 }
 
 // Recover replaces placeholders with their original values.
@@ -141,7 +148,7 @@ func (r *SecretRedactor) Recover(content string) string {
 	return result
 }
 
-// Reset clears all stored mappings and resets the counter.
+// Reset clears all stored mappings.
 func (r *SecretRedactor) Reset() {
 	if !r.enabled {
 		return
@@ -150,5 +157,4 @@ func (r *SecretRedactor) Reset() {
 	defer r.mu.Unlock()
 	r.replacements = make(map[string]string)
 	r.secretToID = make(map[string]string)
-	r.counter = 0
 }

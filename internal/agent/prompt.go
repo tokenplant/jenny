@@ -25,7 +25,7 @@ func defaultIntroSection() (string, bool) {
 	return `You are an AI assistant with access to powerful tools for software engineering. You are an expert programmer with access to various tools that allow you to read, write, and analyze code. Your goal is to help users solve complex engineering tasks efficiently and safely.
 
 When performing tasks, you should follow these principles:
-1. **Instruction Adherence:** Always prioritize and strictly follow the instructions and rules found in the <system-reminder> block at the beginning of this prompt. These are foundational mandates for the current project.
+1. **Instruction Adherence:** Always prioritize and strictly follow the instructions and rules found in the <system-reminder> block. These are foundational mandates for the current project.
 2. Thoroughly investigate the codebase before making changes. Use tools like Glob and Grep to find relevant files, understand patterns, and ensure you have all necessary context.
 3. Always verify your assumptions by reading the actual source code and documentation. Never guess about implementation details.
 4. Be extremely cautious with destructive operations. Avoid running commands like "rm -rf", "git clean -fd", or other potentially harmful bash commands unless you are absolutely certain of their impact and the user has explicitly requested such an action.
@@ -71,9 +71,9 @@ func gitStatusSection(cwd string) (string, bool) {
 
 	var section strings.Builder
 	section.WriteString("Git context:\n")
-	section.WriteString(fmt.Sprintf("  Branch: %s\n", branch))
+	fmt.Fprintf(&section, "  Branch: %s\n", branch)
 	if head != "" {
-		section.WriteString(fmt.Sprintf("  HEAD: %s\n", head))
+		fmt.Fprintf(&section, "  HEAD: %s\n", head)
 	}
 	if statusOutput != "" {
 		section.WriteString("  Status:\n")
@@ -84,7 +84,7 @@ func gitStatusSection(cwd string) (string, bool) {
 		// Indent each line
 		for line := range strings.SplitSeq(statusOutput, "\n") {
 			if line != "" {
-				section.WriteString("    " + line + "\n")
+				fmt.Fprintf(&section, "    %s\n", line)
 			}
 		}
 	}
@@ -119,14 +119,6 @@ func platformSection(cwd string) (string, bool) {
 	return fmt.Sprintf("Platform: %s\nDate: %s\nCwd: %s", platform, date, cwd), true
 }
 
-// customPromptSection returns the custom system prompt if set.
-func customPromptSection(customPrompt string) (string, bool) {
-	if customPrompt == "" {
-		return "", false
-	}
-	return customPrompt, true
-}
-
 // appendSection returns the append prompt if set and not overridden.
 func appendSection(appendPrompt string, override bool) (string, bool) {
 	if override || appendPrompt == "" {
@@ -155,14 +147,17 @@ func AssembleSystemPrompt(cfg StreamConfig, tools []tool.Tool, cwd string) strin
 	// Assemble default sections: intro + tool list + git + platform
 	var sections []string
 
-	// AC1: Memory content injected as <system-reminder> block (at start)
-	if cfg.MemoryContent != "" {
-		sections = append(sections, "<system-reminder>\n"+cfg.MemoryContent+"\n</system-reminder>")
-	}
-
-	// Default intro
+	// Default intro first — this is the stable, cache-friendly part
 	if intro, ok := defaultIntroSection(); ok {
 		sections = append(sections, intro)
+	}
+
+	// AC1: Memory content injected as <system-reminder> block
+	// Placed after intro so prompt caching can hit the stable prefix;
+	// MemoryContent is per-session/per-conversation and would otherwise
+	// bust the cache on every new session.
+	if cfg.MemoryContent != "" {
+		sections = append(sections, "<system-reminder>\n"+cfg.MemoryContent+"\n</system-reminder>")
 	}
 
 	// AC2: Tool list sync
@@ -194,7 +189,7 @@ func AssembleSystemPrompt(cfg StreamConfig, tools []tool.Tool, cwd string) strin
 
 	// AC9: Redaction instruction in system prompt when enabled
 	if cfg.RedactEnabled {
-		sections = append(sections, "This session has secret redaction enabled. Tool results may contain `[REDACTED:ID_XXXXX]` placeholders. Do not alter, remove, or expand these placeholders.")
+		sections = append(sections, "This session has secret redaction enabled. Tool results may contain `[REDACTED:<hex>]` placeholders (e.g. `[REDACTED:a3f1b2c9]`). Copy them verbatim — including the full hex suffix — and never simplify, abbreviate, or otherwise modify them.")
 	}
 
 	return strings.Join(sections, "\n\n")

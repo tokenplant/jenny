@@ -229,10 +229,16 @@ func defaultRules() []Rule {
 		//   regex:   `(?:^|[^0-9A-Za-z])(?P<key>[A-Za-z0-9_-]{32,45})(?:\b|$)`
 		//   entropy: 3.5
 		//   keywords: [key, secret, token, password, auth, credential, ...]
+		//
+		// Max length 160 to cover long-format tokens (e.g. "fe_oa_..." 54+ chars)
+		// and edge cases that pass entropy but exceed gitleaks' default of 45.
+		// JWT is caught by the dedicated "jwt" rule (no max), so generic-api-key
+		// only needs to cover bearer-style API keys. keyword prefilter + entropy
+		// gate keep false positives low despite the generous upper bound.
 		{
 			ID:          "generic-api-key",
 			Description: "Generic high-entropy API key (keyword-gated)",
-			Regex:       regexp.MustCompile(`(?:^|[^0-9A-Za-z_])([A-Za-z0-9_\-]{32,45})(?:[^0-9A-Za-z_\-]|$)`),
+			Regex:       regexp.MustCompile(`(?:^|[^0-9A-Za-z_])([A-Za-z0-9_\-]{32,160})(?:[^0-9A-Za-z_\-]|$)`),
 			SecretGroup: 1,
 			Entropy:     3.5,
 			Keywords: []string{
