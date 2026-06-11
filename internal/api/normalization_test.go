@@ -8,6 +8,16 @@ import (
 	"github.com/ipy/jenny/internal/testutil/mockapi"
 )
 
+// TestNormalization_ToolResultFlattening_EdgeCases verifies the tool_result content
+// flattening pass produces correct wire format for all edge cases (AC1-AC5).
+// Run: go test ./internal/api/ -run "TestNormalization" -v -count=1
+// Expected: 5 PASS results (all5 AC subtests pass).
+//
+// Prior fixes:
+// - 95f5153: flatten tool_result content for DeepSeek compatibility
+// - 4e84e9c: add comprehensive edge-case tests
+// - 514fb98: add t.Cleanup to clear request inspector after AC4
+// - decdb7c: use LIFO indexing (reqs[len(reqs)-1]) instead of FIFO (reqs[0])
 func TestNormalization_ToolResultFlattening_EdgeCases(t *testing.T) {
 	mock := mockapi.NewMockServer()
 	defer mock.Close()
