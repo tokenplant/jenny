@@ -20,14 +20,8 @@ import (
 	"github.com/ipy/jenny/internal/log"
 	"github.com/ipy/jenny/internal/memdir"
 	"github.com/ipy/jenny/internal/session"
-	"github.com/ipy/jenny/internal/testutil"
 	"github.com/ipy/jenny/internal/tool"
 )
-
-
-
-// sseLine delegates to testutil.SSELine for SSE event formatting.
-var sseLine = testutil.SSELine
 
 // makeMockStreamServer delegates to makeMockStreamServerWithEvents.
 // Supports both no-arg (default events) and []string argument patterns.
@@ -48,7 +42,6 @@ func makeMockStreamServerHelper(t *testing.T, events []string) *httptest.Server 
 	}
 	return makeMockStreamServerWithEvents(t, events)
 }
-
 
 // TestAC1_PersistBeforeAPI verifies that the user message is persisted to
 // transcript BEFORE any API call is made.

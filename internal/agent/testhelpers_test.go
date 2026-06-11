@@ -15,6 +15,9 @@ import (
 // captureStdout delegates to testutil.CaptureStdout for stdout capture.
 var captureStdout = testutil.CaptureStdout
 
+// sseLine delegates to testutil.SSELine for SSE event formatting.
+var sseLine = testutil.SSELine
+
 func makeMockStreamServerWithPartialEvents(t *testing.T) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
