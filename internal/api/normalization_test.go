@@ -30,7 +30,6 @@ func TestNormalization_ToolResultFlattening_EdgeCases(t *testing.T) {
 
 	t.Run("AC1: Empty tool_result content serializes as empty string", func(t *testing.T) {
 		provider, _ := setupProvider(t, "test")
-		mock.ClearRequests()
 
 		messages := []Message{
 			{
@@ -56,7 +55,7 @@ func TestNormalization_ToolResultFlattening_EdgeCases(t *testing.T) {
 
 		// Verify content is a string ""
 		found := false
-		msgs, _ := reqs[0].Body["messages"].([]any)
+		msgs, _ := reqs[len(reqs)-1].Body["messages"].([]any)
 		for _, m := range msgs {
 			msg, _ := m.(map[string]any)
 			content, _ := msg["content"].([]any)
@@ -81,7 +80,6 @@ func TestNormalization_ToolResultFlattening_EdgeCases(t *testing.T) {
 
 	t.Run("AC2: Multiple tool_results in one user message", func(t *testing.T) {
 		provider, _ := setupProvider(t, "test")
-		mock.ClearRequests()
 
 		messages := []Message{
 			{
@@ -99,7 +97,7 @@ func TestNormalization_ToolResultFlattening_EdgeCases(t *testing.T) {
 		}
 
 		reqs := mock.Requests()
-		msgs, _ := reqs[0].Body["messages"].([]any)
+		msgs, _ := reqs[len(reqs)-1].Body["messages"].([]any)
 		lastMsg, _ := msgs[len(msgs)-1].(map[string]any)
 		content, _ := lastMsg["content"].([]any)
 
@@ -120,7 +118,6 @@ func TestNormalization_ToolResultFlattening_EdgeCases(t *testing.T) {
 
 	t.Run("AC3: Error tool_result preserves is_error: true", func(t *testing.T) {
 		provider, _ := setupProvider(t, "test")
-		mock.ClearRequests()
 
 		messages := []Message{
 			{
@@ -141,7 +138,7 @@ func TestNormalization_ToolResultFlattening_EdgeCases(t *testing.T) {
 		}
 
 		reqs := mock.Requests()
-		msgs, _ := reqs[0].Body["messages"].([]any)
+		msgs, _ := reqs[len(reqs)-1].Body["messages"].([]any)
 		lastMsg, _ := msgs[len(msgs)-1].(map[string]any)
 		content, _ := lastMsg["content"].([]any)
 		block, _ := content[0].(map[string]any)
@@ -194,7 +191,6 @@ func TestNormalization_ToolResultFlattening_EdgeCases(t *testing.T) {
 
 	t.Run("AC5: Non-tool_result blocks untouched", func(t *testing.T) {
 		provider, _ := setupProvider(t, "test")
-		mock.ClearRequests()
 
 		messages := []Message{
 			{
@@ -219,7 +215,7 @@ func TestNormalization_ToolResultFlattening_EdgeCases(t *testing.T) {
 		}
 
 		reqs := mock.Requests()
-		msgs, _ := reqs[0].Body["messages"].([]any)
+		msgs, _ := reqs[len(reqs)-1].Body["messages"].([]any)
 		lastMsg, _ := msgs[len(msgs)-1].(map[string]any)
 		content, _ := lastMsg["content"].([]any)
 
