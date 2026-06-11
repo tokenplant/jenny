@@ -824,7 +824,7 @@ func TestAC1_ForkChildInStreamConfig(t *testing.T) {
 	// We verify RunStream propagates it by checking the behavior through AgentTool chain.
 
 	// Test via the marker propagation: when a subagent is spawned via LocalSubagentRunner,
-	// the child streamCfg has IsForkChild=true. This is set at internal/agent/task.go:283.
+	// the child streamCfg has IsForkChild=true. This is set at internal/agent/subagent.go:283.
 	// Verify that a second agent call from within that context would be blocked.
 
 	// Confirm IsForkChild is set in subagent stream config
@@ -835,7 +835,7 @@ func TestAC1_ForkChildInStreamConfig(t *testing.T) {
 	}
 
 	// We can't easily check IsForkChild state from outside, but we can verify
-	// that RunSubagent sets it on line 283 of task.go
+	// that RunSubagent sets it on line 283 of subagent.go
 	// Instead, verify the context propagation works via the ForkChildKey
 	ctx := context.WithValue(context.Background(), tool.ForkChildKey, true)
 
@@ -1501,7 +1501,7 @@ func TestAC5_WorktreeFieldsInTranscriptEntry(t *testing.T) {
 func TestForkChildFlagSetInSubagent(t *testing.T) {
 	// Verify that when RunSubagent creates a child stream config, IsForkChild is true.
 	// This is the mechanism that enables AC1 (recursive fork blocking).
-	// The value is set at internal/agent/task.go:283.
+	// The value is set at internal/agent/subagent.go:283.
 	// We verify this by checking RunStream's context propagation behavior.
 
 	// RunStream sets ForkChildKey in context based on IsForkChild (loop.go line 361-362)
