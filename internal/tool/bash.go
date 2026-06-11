@@ -12,7 +12,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/ipy/jenny/internal/constants"
@@ -462,11 +461,9 @@ func (t *BashTool) executeBackground(command string, cwd string, input map[strin
 			} else if cmd.ProcessState != nil {
 				// Process was killed by a signal (e.g., SIGTERM from TaskStop or timeout)
 				// AC3: Extract signal information for meaningful exit code
-				if waitStatus, ok := cmd.ProcessState.Sys().(syscall.WaitStatus); ok && waitStatus.Signaled() {
-					signal := waitStatus.Signal()
-					signalExitCode := 128 + int(signal)
+				if exitCode, sigName, signaled := getSignalInfo(cmd.ProcessState); signaled {
 					result = &ToolResult{
-						Content: fmt.Sprintf("%s\n(exit code: %d, signal: %s)", cmdOutput, signalExitCode, signal),
+						Content: fmt.Sprintf("%s\n(exit code: %d, signal: %s)", cmdOutput, exitCode, sigName),
 						IsError: true,
 					}
 				} else {

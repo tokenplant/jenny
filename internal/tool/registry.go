@@ -250,7 +250,9 @@ func (r *Registry) Build() []Tool {
 			for _, t := range r.baseTools {
 				if bt, ok := t.(*BashTool); ok {
 					bt.WithTaskManager(taskManager)
-					break
+				}
+				if pt, ok := t.(*PowerShellTool); ok {
+					pt.WithTaskManager(taskManager)
 				}
 			}
 			if r.taskStopEnabled {
