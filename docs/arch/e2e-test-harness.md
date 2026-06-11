@@ -44,7 +44,7 @@ e2e/
 ├── session_test.go               # session persistence
 ├── normalization_test.go         # message normalization
 ├── transcript_test.go            # transcript file tests
-└── minimax_test.go               # minimax provider regression tests
+└── e2e_test.go                   # top-level test definitions
 ```
 
 All mock server, runner, and comparison infrastructure is consolidated
