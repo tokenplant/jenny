@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/ipy/jenny/internal/testutil/mockapi"
 )
 
 // SuiteRunner orchestrates running e2e test cases.
@@ -172,7 +174,7 @@ func (sr *SuiteRunner) buildEnv(tc *TestCase, workDir string) []string {
 	// For prompt-kind tests, start mock server and set base URL
 	if tc.Target.Kind == "prompt" && sr.Config.CassetteDir != "" {
 		if sr.mockServer == nil {
-			sr.mockServer = NewMockServer(sr.Config.CassetteDir)
+			sr.mockServer = mockapi.NewMockServer(mockapi.WithCassetteDir(sr.Config.CassetteDir))
 		}
 
 		// Register multi-turn sequence if specified

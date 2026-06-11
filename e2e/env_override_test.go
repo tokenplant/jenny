@@ -5,11 +5,12 @@ import (
 	"testing"
 
 	"github.com/ipy/jenny/e2e/harness"
+	"github.com/ipy/jenny/internal/testutil/mockapi"
 )
 
 // TestEnvModelOverride verifies ANTHROPIC_MODEL env var sets the model in API request.
 func TestEnvModelOverride(t *testing.T) {
-	mock := harness.NewMockServer(cassetteDir)
+	mock := mockapi.NewMockServer(mockapi.WithCassetteDir(cassetteDir))
 	defer mock.Close()
 
 	env := []string{
@@ -33,7 +34,7 @@ func TestEnvModelOverride(t *testing.T) {
 
 // TestModelFlagPrecedence verifies --model flag wins over ANTHROPIC_MODEL env.
 func TestModelFlagPrecedence(t *testing.T) {
-	mock := harness.NewMockServer(cassetteDir)
+	mock := mockapi.NewMockServer(mockapi.WithCassetteDir(cassetteDir))
 	defer mock.Close()
 
 	env := []string{
@@ -58,7 +59,7 @@ func TestModelFlagPrecedence(t *testing.T) {
 
 // TestEmptyModelUsesDefault verifies empty ANTHROPIC_MODEL uses built-in default.
 func TestEmptyModelUsesDefault(t *testing.T) {
-	mock := harness.NewMockServer(cassetteDir)
+	mock := mockapi.NewMockServer(mockapi.WithCassetteDir(cassetteDir))
 	defer mock.Close()
 
 	env := []string{
@@ -82,7 +83,7 @@ func TestEmptyModelUsesDefault(t *testing.T) {
 
 // TestAuthTokenForwarded verifies auth token reaches the API header.
 func TestAuthTokenForwarded(t *testing.T) {
-	mock := harness.NewMockServer(cassetteDir)
+	mock := mockapi.NewMockServer(mockapi.WithCassetteDir(cassetteDir))
 	defer mock.Close()
 
 	env := []string{
@@ -106,7 +107,7 @@ func TestAuthTokenForwarded(t *testing.T) {
 
 // TestSystemPromptOverride verifies --system-prompt replaces default in API request.
 func TestSystemPromptOverride(t *testing.T) {
-	mock := harness.NewMockServer(cassetteDir)
+	mock := mockapi.NewMockServer(mockapi.WithCassetteDir(cassetteDir))
 	defer mock.Close()
 
 	env := []string{
@@ -135,7 +136,7 @@ func TestSystemPromptOverride(t *testing.T) {
 
 // TestAppendSystemPrompt verifies --append-system-prompt appends to default.
 func TestAppendSystemPrompt(t *testing.T) {
-	mock := harness.NewMockServer(cassetteDir)
+	mock := mockapi.NewMockServer(mockapi.WithCassetteDir(cassetteDir))
 	defer mock.Close()
 
 	env := []string{
@@ -164,7 +165,7 @@ func TestAppendSystemPrompt(t *testing.T) {
 
 // TestStreamIsTrue verifies stream=true in API request.
 func TestStreamIsTrue(t *testing.T) {
-	mock := harness.NewMockServer(cassetteDir)
+	mock := mockapi.NewMockServer(mockapi.WithCassetteDir(cassetteDir))
 	defer mock.Close()
 
 	env := []string{
@@ -196,14 +197,14 @@ func TestDeterministicReplay(t *testing.T) {
 		}
 	}
 
-	mock1 := harness.NewMockServer(cassetteDir)
+	mock1 := mockapi.NewMockServer(mockapi.WithCassetteDir(cassetteDir))
 	defer mock1.Close()
 	res1 := harness.RunJenny(t, env(mock1.URL()), "--output-format", "stream-json", "-p", "echo hello")
 	if res1.ExitCode != 0 {
 		t.Fatalf("run1: exit %d; stderr=%q", res1.ExitCode, res1.Stderr)
 	}
 
-	mock2 := harness.NewMockServer(cassetteDir)
+	mock2 := mockapi.NewMockServer(mockapi.WithCassetteDir(cassetteDir))
 	defer mock2.Close()
 	res2 := harness.RunJenny(t, env(mock2.URL()), "--output-format", "stream-json", "-p", "echo hello")
 	if res2.ExitCode != 0 {

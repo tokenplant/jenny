@@ -1,6 +1,8 @@
 package harness
 
 import (
+	"testing"
+
 	"github.com/ipy/jenny/internal/testutil/mockapi"
 )
 
@@ -13,7 +15,8 @@ type MockServer = mockapi.MockServer
 // MockBehavior aliases the mockapi type.
 type MockBehavior = mockapi.MockBehavior
 
-// NewMockServer delegates to mockapi.NewMockServer.
-func NewMockServer(cassetteDir string) *MockServer {
-	return mockapi.NewMockServer(cassetteDir)
+// NewTestServer is a convenience wrapper around mockapi.NewTestServer.
+// It delegates entirely to mockapi.NewTestServer.
+func NewTestServer(t *testing.T, cassetteID string, opts ...mockapi.Option) *MockServer {
+	return mockapi.NewTestServer(t, cassetteID, opts...)
 }

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/ipy/jenny/e2e/harness"
+	"github.com/ipy/jenny/internal/testutil/mockapi"
 )
 
 func TestTranscriptCreation(t *testing.T) {
@@ -168,7 +169,7 @@ func TestTranscriptResume(t *testing.T) {
 
 	// Let's implement an imperative wrapper since extending harness for multi-CLI execution
 	// is beyond simple modifications.
-	mock := harness.NewMockServer(cassetteDir)
+	mock := mockapi.NewMockServer(mockapi.WithCassetteDir(cassetteDir))
 	defer mock.Close()
 
 	env := []string{
@@ -227,7 +228,7 @@ func TestTranscriptResume(t *testing.T) {
 
 // TestTranscriptContinue verifies that the --continue flag resumes the latest session.
 func TestTranscriptContinue(t *testing.T) {
-	mock := harness.NewMockServer(cassetteDir)
+	mock := mockapi.NewMockServer(mockapi.WithCassetteDir(cassetteDir))
 	defer mock.Close()
 
 	env := []string{
