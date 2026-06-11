@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/ipy/jenny/internal/testutil/mockapi"
@@ -256,6 +257,202 @@ func TestNormalization_ToolResultFlattening_EdgeCases(t *testing.T) {
 
 		if !hasText || !hasToolUse || !hasToolResult {
 			t.Errorf("missing blocks: text=%v, tool_use=%v, tool_result=%v", hasText, hasToolUse, hasToolResult)
+		}
+	})
+}
+
+// TestNormalization_CredentialBoundArtifactStripping verifies that redacted_thinking
+// blocks are stripped from message history when a session is resumed with a different
+// API key (SSNF Pass 2.D).
+// Run: go test ./internal/api/ -run "TestNormalization" -v -count=1
+// Expected: 5 PASS results (all 5 AC subtests pass).
+func TestNormalization_CredentialBoundArtifactStripping(t *testing.T) {
+	findSubstring := func(s, substr string) bool {
+		for i := 0; i <= len(s)-len(substr); i++ {
+			if s[i:i+len(substr)] == substr {
+				return true
+			}
+		}
+		return false
+	}
+
+	containsString := func(s, substr string) bool {
+		return len(s) >= len(substr) && findSubstring(s, substr)
+	}
+
+	containsRedactedThinking := func(content string) bool {
+		return len(content) > 0 && (containsString(content, `<thinking type="redacted">`) || containsString(content, `"type":"redacted_thinking"`))
+	}
+
+	t.Run("AC1: Single redacted_thinking block stripped", func(t *testing.T) {
+		// Set ANTHROPIC_API_KEY to "current-key" to simulate the current environment
+		origKey := os.Getenv("ANTHROPIC_API_KEY")
+		defer os.Setenv("ANTHROPIC_API_KEY", origKey)
+		os.Setenv("ANTHROPIC_API_KEY", "current-key")
+
+		// OriginalAPIKey is different, so stripping should occur
+		caps := Capabilities{OriginalAPIKey: "original-key"}
+
+		messages := []Message{
+			{
+				Role:    "assistant",
+				Content: `<thinking type="redacted">SIG_DATA_12345</thinking>`,
+			},
+		}
+
+		normalized, _, logs := NormalizeMessages(messages, nil, caps)
+
+		// Verify the redacted_thinking block was stripped
+		if normalized[0].Content != "" {
+			t.Errorf("redacted_thinking block should have been stripped, but content is: %s", normalized[0].Content)
+		}
+
+		// Verify NormalizationLog entry exists
+		foundLog := false
+		for _, log := range logs {
+			if log.Pass == "StripCredentialBoundArtifacts" {
+				foundLog = true
+				break
+			}
+		}
+		if !foundLog {
+			t.Error("expected NormalizationLog entry for StripCredentialBoundArtifacts")
+		}
+	})
+
+	t.Run("AC2: Multiple messages with redacted_thinking blocks stripped", func(t *testing.T) {
+		// Set ANTHROPIC_API_KEY to "current-key" to simulate the current environment
+		origKey := os.Getenv("ANTHROPIC_API_KEY")
+		defer os.Setenv("ANTHROPIC_API_KEY", origKey)
+		os.Setenv("ANTHROPIC_API_KEY", "current-key")
+
+		caps := Capabilities{OriginalAPIKey: "original-key"}
+
+		messages := []Message{
+			{
+				Role: "assistant",
+				Content: `<thinking type="redacted">SIG_1</thinking>`,
+				ToolUse: []ToolUseBlock{
+					{ID: "call_1", Name: "tool1", Input: map[string]any{}},
+				},
+			},
+			{
+				Role: "user",
+				Content: "test",
+				ToolResults: []ToolResultBlock{
+					{ToolUseID: "call_1", Content: "result"},
+				},
+			},
+			{
+				Role:    "assistant",
+				Content: `<thinking type="redacted">SIG_2</thinking><thinking type="redacted">SIG_3</thinking>`,
+			},
+		}
+
+		normalized, _, _ := NormalizeMessages(messages, nil, caps)
+
+		// First message: tool_use preserved, content stripped
+		if normalized[0].Content != "" {
+			t.Errorf("first message content should be empty after stripping, got: %s", normalized[0].Content)
+		}
+		if len(normalized[0].ToolUse) != 1 {
+			t.Errorf("first message tool_use should be preserved, got %d", len(normalized[0].ToolUse))
+		}
+
+		// Second message (user): content preserved as-is
+		if normalized[1].Content != "test" {
+			t.Errorf("second message content should be preserved, got: %s", normalized[1].Content)
+		}
+
+		// Third message: all redacted blocks stripped, content empty
+		if normalized[2].Content != "" {
+			t.Errorf("third message content should be empty after stripping, got: %s", normalized[2].Content)
+		}
+	})
+
+	t.Run("AC3: Non-redacted thinking preserved", func(t *testing.T) {
+		// Set ANTHROPIC_API_KEY to "current-key" to simulate the current environment
+		origKey := os.Getenv("ANTHROPIC_API_KEY")
+		defer os.Setenv("ANTHROPIC_API_KEY", origKey)
+		os.Setenv("ANTHROPIC_API_KEY", "current-key")
+
+		caps := Capabilities{OriginalAPIKey: "original-key"}
+
+		messages := []Message{
+			{
+				Role:    "assistant",
+				Content: `<thinking>valid chain of thought</thinking><thinking type="redacted">SIG</thinking>`,
+			},
+		}
+
+		normalized, _, _ := NormalizeMessages(messages, nil, caps)
+
+		// Non-redacted thinking should be preserved
+		if !containsString(normalized[0].Content, `<thinking>valid chain of thought</thinking>`) {
+			t.Errorf("non-redacted thinking should be preserved, but content is: %s", normalized[0].Content)
+		}
+
+		// Redacted thinking should be stripped
+		if containsRedactedThinking(normalized[0].Content) {
+			t.Errorf("redacted_thinking should be stripped, but found in: %s", normalized[0].Content)
+		}
+	})
+
+	t.Run("AC4: Stripping inactive when key matches", func(t *testing.T) {
+		// Set ANTHROPIC_API_KEY to "test-key" to simulate the current environment
+		origKey := os.Getenv("ANTHROPIC_API_KEY")
+		defer os.Setenv("ANTHROPIC_API_KEY", origKey)
+		os.Setenv("ANTHROPIC_API_KEY", "test-key")
+
+		// When OriginalAPIKey matches current ANTHROPIC_API_KEY, stripping should be skipped
+		caps := Capabilities{OriginalAPIKey: "test-key"}
+
+		messages := []Message{
+			{
+				Role:    "assistant",
+				Content: `<thinking type="redacted">SIG_DATA</thinking>`,
+			},
+		}
+
+		normalized, _, _ := NormalizeMessages(messages, nil, caps)
+
+		// When keys match, redacted_thinking should be preserved
+		if !containsRedactedThinking(normalized[0].Content) {
+			t.Errorf("redacted_thinking should be preserved when keys match, but content is: %s", normalized[0].Content)
+		}
+	})
+
+	t.Run("AC5: NormalizationLog entry on strip", func(t *testing.T) {
+		// Test that NormalizationLog is properly populated
+		messages := []Message{
+			{
+				Role:    "assistant",
+				Content: `<thinking type="redacted">SIG_DATA</thinking><thinking type="redacted">SIG_DATA_2</thinking>`,
+			},
+		}
+
+		// Save and restore original env
+		origKey := os.Getenv("ANTHROPIC_API_KEY")
+		defer os.Setenv("ANTHROPIC_API_KEY", origKey)
+		os.Setenv("ANTHROPIC_API_KEY", "current-key")
+
+		caps := Capabilities{OriginalAPIKey: "original-key"}
+		_, _, logs := NormalizeMessages(messages, nil, caps)
+
+		// Verify log entry
+		foundLog := false
+		for _, log := range logs {
+			if log.Pass == "StripCredentialBoundArtifacts" {
+				foundLog = true
+				// Should mention 2 blocks stripped
+				if !containsString(log.Message, "2") {
+					t.Errorf("log message should mention 2 blocks stripped: %s", log.Message)
+				}
+				break
+			}
+		}
+		if !foundLog {
+			t.Error("expected NormalizationLog entry for StripCredentialBoundArtifacts")
 		}
 	})
 }
