@@ -294,7 +294,9 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 				if err == nil {
 					// Compaction succeeded - normalize the compacted chain
 					messages = normalizeCompactedChain(compacted)
-					preservedCount := len(compacted)
+					// Subtract 1 from len(compacted) because preservedCount tracks actual
+					// preserved messages, not the boundary marker (which is len-1 of compacted)
+					preservedCount := len(compacted) - 1
 					// Persist compaction boundary to transcript for resume filtering
 					e.persistCompactBoundary(preCompactTokens, preservedCount, "auto")
 					log.Debug("Context compaction succeeded", "newMessageCount", len(messages))

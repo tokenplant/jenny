@@ -25,6 +25,12 @@ var chainParticipantTypes = map[string]bool{
 	"tool_result": true,
 }
 
+// systemMessageTypes are entry types that become system role messages in the API chain.
+// These are preserved in RebuildMessages to maintain session context markers.
+var systemMessageTypes = map[string]bool{
+	"system": true,
+}
+
 // HasChainMessages reports whether at least one entry produces a chain participant
 // message (user, assistant, tool_result) after filtering progress/ephemeral types.
 // This is used to reject queue-only/empty transcripts during resume.
@@ -100,6 +106,21 @@ func RebuildMessages(entries []session.TranscriptEntry) []api.Message {
 					},
 				},
 			})
+
+		case "system":
+			// Flush any pending assistant message first to maintain ordering
+			if currentAssistant != nil {
+				messages = append(messages, *currentAssistant)
+				currentAssistant = nil
+			}
+			// System messages (e.g., compaction boundary markers) become role:system API messages
+			// This preserves session context markers like compact_boundary from the transcript
+			if entry.Content != "" {
+				messages = append(messages, api.Message{
+					Role:    "system",
+					Content: entry.Content,
+				})
+			}
 		}
 	}
 

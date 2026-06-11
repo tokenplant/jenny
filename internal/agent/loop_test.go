@@ -1577,3 +1577,127 @@ func TestMaxIterations_EngineConfigWired(t *testing.T) {
 		t.Errorf("engine.streamCfg.MaxIterations = %d, want 7", engine.streamCfg.MaxIterations)
 	}
 }
+
+// ============================================================================
+// AC3: Compaction boundary marker in resumed API chain
+// ============================================================================
+
+// TestAC3_RebuildMessages_PreservesSystemBoundary verifies that when a transcript
+// contains a system entry with compact_boundary subtype, RebuildMessages produces
+// a role:system API message that becomes the first message in the resumed chain.
+// This ensures the boundary marker reaches the API, preserving token savings from compaction.
+func TestAC3_RebuildMessages_PreservesSystemBoundary(t *testing.T) {
+	// Simulate a compacted session transcript with a compact_boundary entry
+	entries := []session.TranscriptEntry{
+		// Pre-compaction entries (would be excluded by LoadPostBoundaryMessages)
+		{Type: "user", Content: "old message 1"},
+		{Type: "assistant", Content: "old response 1"},
+		{Type: "user", Content: "old message 2"},
+		{Type: "assistant", Content: "old response 2"},
+		// Compaction boundary marker
+		{
+			Type:    "system",
+			Subtype: "compact_boundary",
+			Content: "[Context boundary: earlier conversation summarized]",
+			CompactMetadata: &session.CompactMetadata{
+				Trigger:          "auto",
+				PreTokens:       5000,
+				PreservedSegment: 10,
+			},
+		},
+		// Post-compaction entries
+		{Type: "user", Content: "new message"},
+		{Type: "assistant", Content: "new response"},
+	}
+
+	// Rebuild messages from post-boundary entries (simulating what LoadPostBoundaryMessages returns)
+	postBoundaryEntries := entries[4:] // compact_boundary + post-compaction entries
+	msgs := RebuildMessages(postBoundaryEntries)
+
+	// AC3: First message should be a role:system message with the boundary content
+	if len(msgs) < 1 {
+		t.Fatalf("expected at least 1 message, got %d", len(msgs))
+	}
+
+	// Verify first message is system role with boundary content
+	if msgs[0].Role != "system" {
+		t.Errorf("msgs[0] role = %q, want %q (system boundary marker)", msgs[0].Role, "system")
+	}
+
+	// Verify the boundary content is preserved
+	if !strings.Contains(msgs[0].Content, "Context boundary") {
+		t.Errorf("msgs[0] content = %q, want to contain 'Context boundary'", msgs[0].Content)
+	}
+
+	// Verify post-compaction messages follow the boundary
+	if len(msgs) < 2 {
+		t.Fatalf("expected at least 2 messages, got %d", len(msgs))
+	}
+	if msgs[1].Role != "user" {
+		t.Errorf("msgs[1] role = %q, want %q", msgs[1].Role, "user")
+	}
+	if msgs[1].Content != "new message" {
+		t.Errorf("msgs[1] content = %q, want %q", msgs[1].Content, "new message")
+	}
+
+	t.Log("AC3 PASS: RebuildMessages preserves system boundary marker as role:system message")
+}
+
+// TestAC3_RebuildMessages_EmptyContentSystemEntriesSkipped verifies that system entries
+// with empty content are skipped (they don't produce empty API messages).
+func TestAC3_RebuildMessages_EmptyContentSystemEntriesSkipped(t *testing.T) {
+	entries := []session.TranscriptEntry{
+		{Type: "system", Content: ""}, // Empty content - should be skipped
+		{Type: "user", Content: "hello"},
+	}
+
+	msgs := RebuildMessages(entries)
+
+	// Should only have the user message, not an empty system message
+	if len(msgs) != 1 {
+		t.Errorf("expected 1 message (empty system skipped), got %d", len(msgs))
+	}
+	if msgs[0].Role != "user" {
+		t.Errorf("msgs[0] role = %q, want %q", msgs[0].Role, "user")
+	}
+
+	t.Log("AC3 PASS: empty content system entries are skipped")
+}
+
+// TestAC3_RebuildMessages_MultipleSystemEntriesOrdered verifies that multiple system
+// entries are preserved in order.
+func TestAC3_RebuildMessages_MultipleSystemEntriesOrdered(t *testing.T) {
+	entries := []session.TranscriptEntry{
+		{Type: "user", Content: "first"},
+		{Type: "system", Content: "[marker 1]"},
+		{Type: "assistant", Content: "response"},
+		{Type: "system", Content: "[marker 2]"},
+		{Type: "user", Content: "second"},
+	}
+
+	msgs := RebuildMessages(entries)
+
+	// Expected order: user, system(marker1), assistant, system(marker2), user(second)
+	if len(msgs) != 5 {
+		t.Fatalf("expected 5 messages, got %d", len(msgs))
+	}
+
+	// Verify system entries are in correct positions
+	if msgs[0].Role != "user" || msgs[0].Content != "first" {
+		t.Errorf("msgs[0] unexpected: %+v", msgs[0])
+	}
+	if msgs[1].Role != "system" || msgs[1].Content != "[marker 1]" {
+		t.Errorf("msgs[1] unexpected: %+v", msgs[1])
+	}
+	if msgs[2].Role != "assistant" || msgs[2].Content != "response" {
+		t.Errorf("msgs[2] unexpected: %+v", msgs[2])
+	}
+	if msgs[3].Role != "system" || msgs[3].Content != "[marker 2]" {
+		t.Errorf("msgs[3] unexpected: %+v", msgs[3])
+	}
+	if msgs[4].Role != "user" || msgs[4].Content != "second" {
+		t.Errorf("msgs[4] unexpected: %+v", msgs[4])
+	}
+
+	t.Log("AC3 PASS: multiple system entries preserved in order")
+}
