@@ -9,6 +9,7 @@ import (
 
 	"github.com/ipy/jenny/internal/agent"
 	"github.com/ipy/jenny/internal/cli"
+	"github.com/ipy/jenny/internal/log"
 	"github.com/ipy/jenny/internal/mcp"
 	"github.com/ipy/jenny/internal/plugin"
 	"github.com/ipy/jenny/internal/session"
@@ -64,10 +65,8 @@ func run() error {
 		flags.Verbose = true
 	}
 
-	// Propagate --verbose flag to logging via JENNY_VERBOSE env var
-	if flags.Verbose {
-		os.Setenv("JENNY_VERBOSE", "1")
-	}
+	// Set verbose mode in the logger (re-runs resetLogger to enable debug level)
+	log.SetVerbose(flags.Verbose)
 
 	// Get working directory
 	cwd, err := os.Getwd()

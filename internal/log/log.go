@@ -56,6 +56,18 @@ func SetOutput(w io.Writer) {
 	resetLogger()
 }
 
+// SetVerbose enables or disables debug-level logging.
+// This is called from main.go after command-line flag parsing,
+// since the --verbose flag is set after log.init() runs.
+func SetVerbose(verbose bool) {
+	if verbose {
+		os.Setenv("JENNY_VERBOSE", "1")
+	} else {
+		os.Unsetenv("JENNY_VERBOSE")
+	}
+	resetLogger()
+}
+
 // Output returns the current output writer. Used for testing.
 func Output() io.Writer {
 	return outputWriter

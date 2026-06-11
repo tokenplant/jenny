@@ -236,8 +236,59 @@ func TestVerbose_EmptyValue(t *testing.T) {
 	buf.Reset()
 	Debug("verbose debug test")
 
-	// No output expected when verbose is disabled
-	// (This is correct behavior - slog at DEBUG level won't write when level is INFO)
+	// Assert no output when verbose is disabled
+	if buf.Len() != 0 {
+		t.Errorf("expected no output when verbose is disabled, got %d bytes", buf.Len())
+	}
+
+	// Restore default output
+	SetOutput(os.Stderr)
+}
+
+// TestSetVerbose_ProgrammaticEnable tests that SetVerbose(true) enables debug logging
+// when called after init() has already run (simulating main.go behavior).
+func TestSetVerbose_ProgrammaticEnable(t *testing.T) {
+	var buf bytes.Buffer
+	SetOutput(&buf)
+
+	// Clear all debug env vars first
+	t.Setenv("DEBUG", "")
+	t.Setenv("JENNY_DEBUG", "")
+	t.Setenv("JENNY_VERBOSE", "")
+
+	// Reset to ensure clean state
+	resetLogger()
+
+	// Initially, debug should be disabled
+	buf.Reset()
+	Debug("should not appear")
+	if buf.Len() != 0 {
+		t.Error("expected no debug output initially")
+	}
+
+	// Call SetVerbose(true) - this should enable debug logging
+	SetVerbose(true)
+
+	// Now debug should be enabled
+	buf.Reset()
+	Debug("should appear now")
+
+	if buf.Len() == 0 {
+		t.Error("expected debug output after SetVerbose(true), got empty buffer")
+	}
+
+	if !strings.Contains(buf.String(), "should appear now") {
+		t.Errorf("expected 'should appear now' in debug output, got %q", buf.String())
+	}
+
+	// SetVerbose(false) should disable it again
+	SetVerbose(false)
+
+	buf.Reset()
+	Debug("should not appear after disable")
+	if buf.Len() != 0 {
+		t.Errorf("expected no debug output after SetVerbose(false), got %d bytes", buf.Len())
+	}
 
 	// Restore default output
 	SetOutput(os.Stderr)
