@@ -1,11 +1,12 @@
 ---
 title: File I/O Robustness Remediation
 slug: file-io-robustness
-status: not_started
+status: complete
 priority: P0
 spec: complete
-code: not_started
+code: complete
 package: internal/tool, internal/session, internal/agent
+date_completed: 2026-06-12
 ---
 
 # File I/O Robustness Remediation Plan
@@ -84,9 +85,9 @@ For each P0/P1 issue:
 
 | Task | Priority | Status | Owner |
 |------|----------|--------|-------|
-| read.go TOCTOU | P0 | Not Started | |
-| session.go Mutex | P0 | Not Started | |
-| extraction.go Leak | P0 | Not Started | |
-| edit.go OOM check | P0 | Not Started | |
+| read.go TOCTOU | P0 | ✅ Complete | |
+| session.go Mutex | P0 | ✅ Complete | |
+| extraction.go Leak | P0 | ✅ Complete | |
+| edit.go OOM check | P0 | ✅ Complete | |
 | task.go Append | P1 | Not Started | |
 | atomic rename fix | P1 | Not Started | |
