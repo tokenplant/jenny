@@ -11,6 +11,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/ipy/jenny/internal/testutil/mockapi"
 )
 
 // ---------------------------------------------------------------------------
@@ -24,7 +26,8 @@ func sseLine(event, data string) string {
 func makeStreamServer(t *testing.T, events []string) (*httptest.Server, chan []byte) {
 	t.Helper()
 	bodyCh := make(chan []byte, 1)
-	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ms := mockapi.NewMockServer()
+	ms.SetPathHandler("POST /v1/messages", func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			t.Logf("error reading request body: %v", err)
@@ -44,8 +47,8 @@ func makeStreamServer(t *testing.T, events []string) (*httptest.Server, chan []b
 			io.WriteString(w, e)
 			flusher.Flush()
 		}
-	}))
-	return s, bodyCh
+	})
+	return ms.Server, bodyCh
 }
 
 func setTestEnv(t *testing.T, serverURL string) {
@@ -89,7 +92,8 @@ func assertJSONBody(t *testing.T, body []byte, key string, expected any) {
 // then sends `final` events. Used to test idle-timeout behavior.
 func makeDelayedServer(t *testing.T, initial []string, delay time.Duration, final []string) *httptest.Server {
 	t.Helper()
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ms := mockapi.NewMockServer()
+	ms.SetPathHandler("POST /v1/messages", func(w http.ResponseWriter, r *http.Request) {
 		io.ReadAll(r.Body)
 		r.Body.Close()
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -107,7 +111,8 @@ func makeDelayedServer(t *testing.T, initial []string, delay time.Duration, fina
 			io.WriteString(w, e)
 			flusher.Flush()
 		}
-	}))
+	})
+	return ms.Server
 }
 
 // ---------------------------------------------------------------------------
@@ -351,7 +356,8 @@ func TestAC1_CacheOnlyMessageDeltaEdgeCase(t *testing.T) {
 
 func TestAC1_NonStreamingCacheTokensExtracted(t *testing.T) {
 	// This test verifies the non-streaming path via a mock server
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ms := mockapi.NewMockServer()
+	ms.SetPathHandler("POST /v1/messages", func(w http.ResponseWriter, r *http.Request) {
 		io.ReadAll(r.Body)
 		r.Body.Close()
 		w.Header().Set("Content-Type", "application/json")
@@ -359,9 +365,9 @@ func TestAC1_NonStreamingCacheTokensExtracted(t *testing.T) {
 		// Response with all four token types
 		resp := `{"id":"msg_1","type":"message","role":"assistant","content":[{"type":"text","text":"Hello"}],"model":"m","stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":10,"output_tokens":5,"cache_read_input_tokens":3,"cache_creation_input_tokens":1}}`
 		w.Write([]byte(resp))
-	}))
-	defer server.Close()
-	setTestEnv(t, server.URL)
+	})
+	defer ms.Close()
+	setTestEnv(t, ms.URL())
 
 	client, _ := NewClientWithModel("m")
 	client.SetMaxTokensOverride(8192)
@@ -465,15 +471,16 @@ func TestAC3_FallbackOnIncompleteStream(t *testing.T) {
 }
 
 func TestAC3_FallbackOnNonSSEResponse(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ms := mockapi.NewMockServer()
+	ms.SetPathHandler("POST /v1/messages", func(w http.ResponseWriter, r *http.Request) {
 		io.ReadAll(r.Body)
 		r.Body.Close()
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("not an SSE stream"))
-	}))
-	defer server.Close()
-	setTestEnv(t, server.URL)
+	})
+	defer ms.Close()
+	setTestEnv(t, ms.URL())
 
 	client, _ := NewClientWithModel("m")
 
@@ -644,16 +651,17 @@ func TestStreamingMultipleContentBlocks(t *testing.T) {
 // client level via option.WithRequestTimeout(1*time.Hour).
 func TestFallback_NonStreamingMaxTokens64000(t *testing.T) {
 	var capturedBody []byte
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ms := mockapi.NewMockServer()
+	ms.SetPathHandler("POST /v1/messages", func(w http.ResponseWriter, r *http.Request) {
 		capturedBody, _ = io.ReadAll(r.Body)
 		r.Body.Close()
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		resp := `{"id":"msg_1","type":"message","role":"assistant","content":[{"type":"text","text":"Hello"}],"model":"m","stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":10,"output_tokens":5}}`
 		w.Write([]byte(resp))
-	}))
-	defer server.Close()
-	setTestEnv(t, server.URL)
+	})
+	defer ms.Close()
+	setTestEnv(t, ms.URL())
 
 	client, _ := NewClientWithModel("m")
 	// No SetMaxTokensOverride — must use the universal 64000 default.

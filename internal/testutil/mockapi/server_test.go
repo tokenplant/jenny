@@ -11,6 +11,51 @@ import (
 	"testing"
 )
 
+func TestCassetteLookup(t *testing.T) {
+	// Verify .sse lookup
+	path, err := Lookup("anthropic/hello-world")
+	if err != nil {
+		t.Fatalf("Lookup(anthropic/hello-world) failed: %v", err)
+	}
+	if !strings.HasSuffix(path, "hello-world.sse") {
+		t.Errorf("expected path ending with hello-world.sse, got %s", path)
+	}
+
+	// Verify .json lookup
+	path, err = Lookup("openai/chat-basic")
+	if err != nil {
+		t.Fatalf("Lookup(openai/chat-basic) failed: %v", err)
+	}
+	if !strings.HasSuffix(path, "chat-basic.json") {
+		t.Errorf("expected path ending with chat-basic.json, got %s", path)
+	}
+
+	// Verify error for nonexistent
+	_, err = Lookup("nonexistent/nothing")
+	if err == nil {
+		t.Fatal("expected error for nonexistent cassette")
+	}
+}
+
+func TestCassetteLoading(t *testing.T) {
+	// Use the central testdata directory
+	ms := NewMockServer(WithCassetteDir("testdata"))
+	defer ms.Close()
+
+	resp, err := http.Post(ms.URL()+"/cassette/anthropic/hello-world/v1/messages", "application/json",
+		strings.NewReader(`{"model":"test"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Errorf("got %d, want 200", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "text/event-stream" {
+		t.Errorf("Content-Type = %q, want text/event-stream", ct)
+	}
+}
+
 func TestMockServerStart(t *testing.T) {
 	tmpDir := t.TempDir()
 	// Write a minimal cassette

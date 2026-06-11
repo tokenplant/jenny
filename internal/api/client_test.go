@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ipy/jenny/internal/testutil/mockapi"
 )
 
 func TestNewClientWithModelEnvVar(t *testing.T) {
@@ -476,7 +477,8 @@ func TestMaxBase64ImageSizeConstant(t *testing.T) {
 
 func TestClient_NonStreaming_SendsPromptCachingBetaHeader(t *testing.T) {
 	var capturedBeta []string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ms := mockapi.NewMockServer()
+	ms.SetPathHandler("POST /v1/messages", func(w http.ResponseWriter, r *http.Request) {
 		capturedBeta = r.Header.Values("anthropic-beta")
 		io.ReadAll(r.Body)
 		r.Body.Close()
@@ -484,10 +486,10 @@ func TestClient_NonStreaming_SendsPromptCachingBetaHeader(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		resp := `{"id":"msg_1","type":"message","role":"assistant","content":[{"type":"text","text":"Hello"}],"model":"m","stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":10,"output_tokens":5}}`
 		w.Write([]byte(resp))
-	}))
-	defer server.Close()
+	})
+	defer ms.Close()
 
-	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_BASE_URL", ms.URL())
 	t.Setenv("ANTHROPIC_API_KEY", "test-key-0000000000000000")
 
 	client, _ := NewClientWithModel("m")
@@ -521,7 +523,8 @@ func TestClient_NonStreaming_SendsPromptCachingBetaHeader(t *testing.T) {
 
 func TestClient_ANTHROPIC_BETAS_AdditionalHeaders(t *testing.T) {
 	var capturedBeta []string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ms := mockapi.NewMockServer()
+	ms.SetPathHandler("POST /v1/messages", func(w http.ResponseWriter, r *http.Request) {
 		capturedBeta = r.Header.Values("anthropic-beta")
 		io.ReadAll(r.Body)
 		r.Body.Close()
@@ -529,10 +532,10 @@ func TestClient_ANTHROPIC_BETAS_AdditionalHeaders(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		resp := `{"id":"msg_1","type":"message","role":"assistant","content":[{"type":"text","text":"Hello"}],"model":"m","stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":10,"output_tokens":5}}`
 		w.Write([]byte(resp))
-	}))
-	defer server.Close()
+	})
+	defer ms.Close()
 
-	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_BASE_URL", ms.URL())
 	t.Setenv("ANTHROPIC_API_KEY", "test-key-0000000000000000")
 	t.Setenv("ANTHROPIC_BETAS", "beta1, beta2,beta3") // test spaces around commas
 
@@ -577,7 +580,8 @@ func TestClient_ANTHROPIC_BETAS_Streaming(t *testing.T) {
 		"event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null},\"usage\":{\"input_tokens\":5,\"output_tokens\":1}}\n\n",
 		"event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n",
 	}
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ms := mockapi.NewMockServer()
+	ms.SetPathHandler("POST /v1/messages", func(w http.ResponseWriter, r *http.Request) {
 		capturedBeta = r.Header.Values("anthropic-beta")
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
@@ -585,10 +589,10 @@ func TestClient_ANTHROPIC_BETAS_Streaming(t *testing.T) {
 		for _, e := range events {
 			w.Write([]byte(e))
 		}
-	}))
-	defer server.Close()
+	})
+	defer ms.Close()
 
-	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_BASE_URL", ms.URL())
 	t.Setenv("ANTHROPIC_API_KEY", "test-key-0000000000000000")
 	t.Setenv("ANTHROPIC_BETAS", "prompt_eval_cache,some_other_beta")
 
@@ -699,7 +703,8 @@ func TestClient_Streaming_SendsPromptCachingBetaHeader(t *testing.T) {
 		"event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null},\"usage\":{\"input_tokens\":5,\"output_tokens\":1}}\n\n",
 		"event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n",
 	}
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ms := mockapi.NewMockServer()
+	ms.SetPathHandler("POST /v1/messages", func(w http.ResponseWriter, r *http.Request) {
 		capturedBeta = r.Header.Get("anthropic-beta")
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
@@ -707,10 +712,10 @@ func TestClient_Streaming_SendsPromptCachingBetaHeader(t *testing.T) {
 		for _, e := range events {
 			w.Write([]byte(e))
 		}
-	}))
-	defer server.Close()
+	})
+	defer ms.Close()
 
-	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_BASE_URL", ms.URL())
 	t.Setenv("ANTHROPIC_API_KEY", "test-key-0000000000000000")
 
 	client, _ := NewClientWithModel("m")
@@ -735,17 +740,18 @@ func TestClient_Streaming_ThinkingAccumulation(t *testing.T) {
 		"event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null},\"usage\":{\"input_tokens\":5,\"output_tokens\":1}}\n\n",
 		"event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n",
 	}
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ms := mockapi.NewMockServer()
+	ms.SetPathHandler("POST /v1/messages", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.WriteHeader(http.StatusOK)
 		for _, e := range events {
 			w.Write([]byte(e))
 		}
-	}))
-	defer server.Close()
+	})
+	defer ms.Close()
 
-	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_BASE_URL", ms.URL())
 	t.Setenv("ANTHROPIC_API_KEY", "test-key-0000000000000000")
 
 	client, _ := NewClientWithModel("m")
@@ -782,17 +788,18 @@ func TestClient_Streaming_ThinkingAccumulation(t *testing.T) {
 
 func TestClient_SystemPrompt_HasCacheControl_Ephemeral(t *testing.T) {
 	var capturedBody []byte
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ms := mockapi.NewMockServer()
+	ms.SetPathHandler("POST /v1/messages", func(w http.ResponseWriter, r *http.Request) {
 		capturedBody, _ = io.ReadAll(r.Body)
 		r.Body.Close()
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		resp := `{"id":"msg_1","type":"message","role":"assistant","content":[{"type":"text","text":"Hello"}],"model":"m","stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":10,"output_tokens":5}}`
 		w.Write([]byte(resp))
-	}))
-	defer server.Close()
+	})
+	defer ms.Close()
 
-	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_BASE_URL", ms.URL())
 	t.Setenv("ANTHROPIC_API_KEY", "test-key-0000000000000000")
 
 	client, _ := NewClientWithModel("m")
@@ -830,17 +837,18 @@ func TestClient_SystemPrompt_HasCacheControl_Ephemeral(t *testing.T) {
 
 func TestClient_Tools_LastEntryHasCacheControl_Ephemeral(t *testing.T) {
 	var capturedBody []byte
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ms := mockapi.NewMockServer()
+	ms.SetPathHandler("POST /v1/messages", func(w http.ResponseWriter, r *http.Request) {
 		capturedBody, _ = io.ReadAll(r.Body)
 		r.Body.Close()
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		resp := `{"id":"msg_1","type":"message","role":"assistant","content":[{"type":"text","text":"Hello"}],"model":"m","stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":10,"output_tokens":5}}`
 		w.Write([]byte(resp))
-	}))
-	defer server.Close()
+	})
+	defer ms.Close()
 
-	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_BASE_URL", ms.URL())
 	t.Setenv("ANTHROPIC_API_KEY", "test-key-0000000000000000")
 
 	client, _ := NewClientWithModel("m")
@@ -896,17 +904,18 @@ func TestClient_Tools_LastEntryHasCacheControl_Ephemeral(t *testing.T) {
 
 func TestClient_NoTools_NoToolsCacheControl_NoPanic(t *testing.T) {
 	var capturedBody []byte
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ms := mockapi.NewMockServer()
+	ms.SetPathHandler("POST /v1/messages", func(w http.ResponseWriter, r *http.Request) {
 		capturedBody, _ = io.ReadAll(r.Body)
 		r.Body.Close()
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		resp := `{"id":"msg_1","type":"message","role":"assistant","content":[{"type":"text","text":"Hello"}],"model":"m","stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":10,"output_tokens":5}}`
 		w.Write([]byte(resp))
-	}))
-	defer server.Close()
+	})
+	defer ms.Close()
 
-	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_BASE_URL", ms.URL())
 	t.Setenv("ANTHROPIC_API_KEY", "test-key-0000000000000000")
 
 	client, _ := NewClientWithModel("m")
@@ -933,17 +942,18 @@ func TestClient_NoTools_NoToolsCacheControl_NoPanic(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestClient_NonStreaming_UsageTokensRegression(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ms := mockapi.NewMockServer()
+	ms.SetPathHandler("POST /v1/messages", func(w http.ResponseWriter, r *http.Request) {
 		io.ReadAll(r.Body)
 		r.Body.Close()
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		resp := `{"id":"msg_1","type":"message","role":"assistant","content":[{"type":"text","text":"Hello"}],"model":"m","stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":10,"output_tokens":5,"cache_read_input_tokens":500,"cache_creation_input_tokens":100}}`
 		w.Write([]byte(resp))
-	}))
-	defer server.Close()
+	})
+	defer ms.Close()
 
-	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_BASE_URL", ms.URL())
 	t.Setenv("ANTHROPIC_API_KEY", "test-key-0000000000000000")
 
 	client, _ := NewClientWithModel("m")
@@ -1072,17 +1082,18 @@ func TestToolToSDK_EmptyProperties(t *testing.T) {
 func TestClient_ToolResultDedup(t *testing.T) {
 	// AC3: API serialization deduplicates tool_results as safety net
 	var capturedBody []byte
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ms := mockapi.NewMockServer()
+	ms.SetPathHandler("POST /v1/messages", func(w http.ResponseWriter, r *http.Request) {
 		capturedBody, _ = io.ReadAll(r.Body)
 		r.Body.Close()
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		resp := `{"id":"msg_1","type":"message","role":"assistant","content":[{"type":"text","text":"Hello"}],"model":"m","stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":10,"output_tokens":5}}`
 		w.Write([]byte(resp))
-	}))
-	defer server.Close()
+	})
+	defer ms.Close()
 
-	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_BASE_URL", ms.URL())
 	t.Setenv("ANTHROPIC_API_KEY", "test-key-0000000000000000")
 
 	client, _ := NewClientWithModel("m")
@@ -1282,17 +1293,18 @@ func TestNormalize_UniversalEmptySchemaPlaceholder(t *testing.T) {
 // and properly normalizes messages before serialization.
 func TestNormalize_RoutesThroughNormalizeMessages(t *testing.T) {
 	var capturedBody []byte
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ms := mockapi.NewMockServer()
+	ms.SetPathHandler("POST /v1/messages", func(w http.ResponseWriter, r *http.Request) {
 		capturedBody, _ = io.ReadAll(r.Body)
 		r.Body.Close()
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		resp := `{"id":"msg_1","type":"message","role":"assistant","content":[{"type":"text","text":"Hello"}],"model":"m","stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":10,"output_tokens":5}}`
 		w.Write([]byte(resp))
-	}))
-	defer server.Close()
+	})
+	defer ms.Close()
 
-	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_BASE_URL", ms.URL())
 	t.Setenv("ANTHROPIC_API_KEY", "test-key-0000000000000000")
 
 	client, _ := NewClientWithModel("m")

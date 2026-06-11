@@ -20,6 +20,7 @@ import (
 	"github.com/ipy/jenny/internal/log"
 	"github.com/ipy/jenny/internal/memdir"
 	"github.com/ipy/jenny/internal/session"
+	"github.com/ipy/jenny/internal/testutil/mockapi"
 	"github.com/ipy/jenny/internal/tool"
 )
 
@@ -1275,7 +1276,8 @@ func TestInterruptSyntheticToolResults_AC5(t *testing.T) {
 	}
 
 	var apiCallCount atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ms := mockapi.NewMockServer()
+	ms.SetPathHandler("POST /v1/messages", func(w http.ResponseWriter, r *http.Request) {
 		io.ReadAll(r.Body)
 		r.Body.Close()
 
@@ -1299,7 +1301,8 @@ func TestInterruptSyntheticToolResults_AC5(t *testing.T) {
 			io.WriteString(w, e)
 			flusher.Flush()
 		}
-	}))
+	})
+	server := ms.Server
 	defer server.Close()
 
 	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
@@ -1430,7 +1433,8 @@ func TestEngine_InterruptedField_TriggersSynthetic(t *testing.T) {
 	}
 
 	var apiCallCount atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ms := mockapi.NewMockServer()
+	ms.SetPathHandler("POST /v1/messages", func(w http.ResponseWriter, r *http.Request) {
 		io.ReadAll(r.Body)
 		r.Body.Close()
 
@@ -1454,7 +1458,8 @@ func TestEngine_InterruptedField_TriggersSynthetic(t *testing.T) {
 			io.WriteString(w, e)
 			flusher.Flush()
 		}
-	}))
+	})
+	server := ms.Server
 	defer server.Close()
 
 	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
@@ -1749,7 +1754,8 @@ func stopReasonTestServer(t *testing.T, calls *atomic.Int32, stopReason string, 
 		sseLine("message_stop", `{"type":"message_stop"}`),
 	}
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ms := mockapi.NewMockServer()
+	ms.SetPathHandler("POST /v1/messages", func(w http.ResponseWriter, r *http.Request) {
 		io.ReadAll(r.Body)
 		r.Body.Close()
 
@@ -1774,8 +1780,8 @@ func stopReasonTestServer(t *testing.T, calls *atomic.Int32, stopReason string, 
 			io.WriteString(w, e)
 			flusher.Flush()
 		}
-	}))
-	return server
+	})
+	return ms.Server
 }
 
 // TestRunLoop_EmptyStopReason_TerminatesAsEndTurn verifies AC3: when the API
@@ -1824,7 +1830,8 @@ func TestRunLoop_EmptyStopReason_TerminatesAsEndTurn(t *testing.T) {
 func TestRunLoop_NullStopReason_TerminatesAsEndTurn(t *testing.T) {
 	var calls atomic.Int32
 	// null stop_reason: omit stop_reason from message_delta entirely
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ms := mockapi.NewMockServer()
+	ms.SetPathHandler("POST /v1/messages", func(w http.ResponseWriter, r *http.Request) {
 		io.ReadAll(r.Body)
 		r.Body.Close()
 
@@ -1852,7 +1859,8 @@ func TestRunLoop_NullStopReason_TerminatesAsEndTurn(t *testing.T) {
 			io.WriteString(w, e)
 			flusher.Flush()
 		}
-	}))
+	})
+	server := ms.Server
 	defer server.Close()
 	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
 	t.Setenv("ANTHROPIC_API_KEY", "test-key")
@@ -2216,14 +2224,16 @@ func TestEngine_ContextExhausted_EmitsStructuredError(t *testing.T) {
 
 	// Server returns HTTP 400 with prompt_too_long error
 	// This simulates a context exhaustion rejection before streaming begins
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ms := mockapi.NewMockServer()
+	ms.SetPathHandler("POST /v1/messages", func(w http.ResponseWriter, r *http.Request) {
 		io.ReadAll(r.Body)
 		r.Body.Close()
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		// Return a prompt_too_long error response
 		w.Write([]byte(`{"error":{"type":"invalid_request_error","message":"prompt_too_long: input too long"}}`))
-	}))
+	})
+	server := ms.Server
 	defer server.Close()
 
 	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
@@ -2311,7 +2321,8 @@ func TestEngine_AutoCompactFiresAboveThreshold(t *testing.T) {
 
 	// First call returns partial response, second call (after compact) returns success
 	callCount := atomic.Int32{}
-	mainServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ms := mockapi.NewMockServer()
+	ms.SetPathHandler("POST /v1/messages", func(w http.ResponseWriter, r *http.Request) {
 		count := callCount.Add(1)
 		io.ReadAll(r.Body)
 		r.Body.Close()
@@ -2355,7 +2366,8 @@ func TestEngine_AutoCompactFiresAboveThreshold(t *testing.T) {
 				flusher.Flush()
 			}
 		}
-	}))
+	})
+	mainServer := ms.Server
 	defer mainServer.Close()
 
 	t.Setenv("ANTHROPIC_BASE_URL", mainServer.URL)
@@ -2405,13 +2417,15 @@ func TestEngine_ContextExhausted_MiniMax_EmitsStructuredError(t *testing.T) {
 	sessionID := "sess_context_exhausted_minimax_test"
 
 	// Server returns HTTP 400 with MiniMax context limit error
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ms := mockapi.NewMockServer()
+	ms.SetPathHandler("POST /v1/messages", func(w http.ResponseWriter, r *http.Request) {
 		io.ReadAll(r.Body)
 		r.Body.Close()
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(`{"type":"error","error":{"type":"invalid_request_error","message":"invalid params, context window exceeds limit (2013)"},"request_id":"06775bac09d2d88c0d5176f10eddc0e4"}`))
-	}))
+	})
+	server := ms.Server
 	defer server.Close()
 
 	t.Setenv("ANTHROPIC_BASE_URL", server.URL)

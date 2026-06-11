@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/ipy/jenny/internal/session"
+	"github.com/ipy/jenny/internal/testutil/mockapi"
 	"github.com/ipy/jenny/internal/tool"
 )
 
@@ -306,12 +307,13 @@ func TestStreamEvent_NotEmittedOnFallback(t *testing.T) {
 
 	// Server that fails streaming but succeeds on non-streaming
 	fallbackCalled := false
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ms := mockapi.NewMockServer()
+	ms.SetPathHandler("POST /v1/messages", func(w http.ResponseWriter, r *http.Request) {
 		io.ReadAll(r.Body)
 		r.Body.Close()
 
 		// Return502 on streaming endpoint to trigger fallback
-		if r.URL.Path == "/v1/messages" && r.URL.Query().Get("stream") == "true" {
+		if r.URL.Query().Get("stream") == "true" {
 			w.WriteHeader(http.StatusBadGateway)
 			return
 		}
@@ -322,7 +324,8 @@ func TestStreamEvent_NotEmittedOnFallback(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		jsonResp := `{"id":"msg_fallback","type":"message","role":"assistant","content":[{"type":"text","text":"Fallback response"}],"model":"test-model","stop_reason":"end_turn","usage":{"input_tokens":1,"output_tokens":3}}`
 		w.Write([]byte(jsonResp))
-	}))
+	})
+	server := ms.Server
 	defer server.Close()
 	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
 	t.Setenv("ANTHROPIC_API_KEY", "test-key-00000")
@@ -373,7 +376,8 @@ func TestStreamEvent_NotEmittedOnFallback(t *testing.T) {
 }
 
 func TestStreamEvent_ThinkingAndSignature(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ms := mockapi.NewMockServer()
+	ms.SetPathHandler("POST /v1/messages", func(w http.ResponseWriter, r *http.Request) {
 		io.ReadAll(r.Body)
 		r.Body.Close()
 
@@ -406,7 +410,8 @@ func TestStreamEvent_ThinkingAndSignature(t *testing.T) {
 			io.WriteString(w, e)
 			flusher.Flush()
 		}
-	}))
+	})
+	server := ms.Server
 	defer server.Close()
 
 	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
@@ -470,7 +475,8 @@ func TestStreamEvent_ThinkingAndSignature(t *testing.T) {
 // event is emitted.
 func TestStreamingFallbackParityPreserved(t *testing.T) {
 	// Server that fails streaming but returns content via fallback
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ms := mockapi.NewMockServer()
+	ms.SetPathHandler("POST /v1/messages", func(w http.ResponseWriter, r *http.Request) {
 		io.ReadAll(r.Body)
 		r.Body.Close()
 
@@ -485,7 +491,8 @@ func TestStreamingFallbackParityPreserved(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		resp := `{"id":"msg_fb","type":"message","role":"assistant","content":[{"type":"text","text":"Fallback text"},{"type":"tool_use","id":"fb1","name":"Read","input":{"file_path":"fallback.go"}}],"model":"test","stop_reason":"end_turn","usage":{"input_tokens":1,"output_tokens":3}}`
 		w.Write([]byte(resp))
-	}))
+	})
+	server := ms.Server
 	defer server.Close()
 
 	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
@@ -564,7 +571,8 @@ func multiTurnTextPlusToolUsesServer() *httptest.Server {
 	}
 
 	var calls atomic.Int32
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ms := mockapi.NewMockServer()
+	ms.SetPathHandler("POST /v1/messages", func(w http.ResponseWriter, r *http.Request) {
 		io.ReadAll(r.Body)
 		r.Body.Close()
 
@@ -586,7 +594,8 @@ func multiTurnTextPlusToolUsesServer() *httptest.Server {
 			io.WriteString(w, e)
 			flusher.Flush()
 		}
-	}))
+	})
+	return ms.Server
 }
 
 // TestStreamingEmitsOneAssistantPerTurn verifies AC1: when a model turn
@@ -764,7 +773,8 @@ func TestStreamingNoTextDuplication(t *testing.T) {
 // content is a single-element array [text]. No empty/null content blocks, no
 // tool_use content blocks.
 func TestStreamingTextOnlyTurn(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ms := mockapi.NewMockServer()
+	ms.SetPathHandler("POST /v1/messages", func(w http.ResponseWriter, r *http.Request) {
 		io.ReadAll(r.Body)
 		r.Body.Close()
 
@@ -789,7 +799,8 @@ func TestStreamingTextOnlyTurn(t *testing.T) {
 			io.WriteString(w, e)
 			flusher.Flush()
 		}
-	}))
+	})
+	server := ms.Server
 	defer server.Close()
 	t.Setenv("ANTHROPIC_BASE_URL", "")
 	t.Setenv("ANTHROPIC_API_KEY", "")
@@ -883,7 +894,8 @@ func TestStreamingToolUseOnlyTurn(t *testing.T) {
 	}
 
 	var calls atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ms := mockapi.NewMockServer()
+	ms.SetPathHandler("POST /v1/messages", func(w http.ResponseWriter, r *http.Request) {
 		io.ReadAll(r.Body)
 		r.Body.Close()
 
@@ -905,7 +917,8 @@ func TestStreamingToolUseOnlyTurn(t *testing.T) {
 			io.WriteString(w, e)
 			flusher.Flush()
 		}
-	}))
+	})
+	server := ms.Server
 	defer server.Close()
 	t.Setenv("ANTHROPIC_BASE_URL", "")
 	t.Setenv("ANTHROPIC_API_KEY", "")

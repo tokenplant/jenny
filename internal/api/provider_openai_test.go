@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ipy/jenny/internal/testutil/mockapi"
 )
 
 // ---------------------------------------------------------------------------
@@ -17,17 +18,20 @@ import (
 // ---------------------------------------------------------------------------
 
 func TestOpenAIProvider_ChatBasic(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Verify request format
+	ms := mockapi.NewMockServer()
+	ms.SetRequestInspector(func(r mockapi.APIRequest) error {
 		if r.Header.Get("Content-Type") != "application/json" {
 			t.Errorf("expected Content-Type application/json, got %s", r.Header.Get("Content-Type"))
 		}
 		if r.Header.Get("Authorization") == "" {
 			t.Error("expected Authorization header")
 		}
-
+		return nil
+	})
+	ms.SetPathHandler("POST /chat/completions", func(w http.ResponseWriter, r *http.Request) {
 		// Parse request body
 		body, _ := io.ReadAll(r.Body)
+		r.Body.Close()
 		var req map[string]any
 		if err := json.Unmarshal(body, &req); err != nil {
 			t.Fatalf("failed to parse request: %v", err)
@@ -65,10 +69,10 @@ func TestOpenAIProvider_ChatBasic(t *testing.T) {
 			}
 		}`
 		w.Write([]byte(resp))
-	}))
-	defer server.Close()
+	})
+	defer ms.Close()
 
-	t.Setenv("OPENAI_BASE_URL", server.URL)
+	t.Setenv("OPENAI_BASE_URL", ms.URL())
 	t.Setenv("OPENAI_API_KEY", "test-key-123")
 	t.Setenv("OPENAI_DEFAULT_MODEL", "gpt-5.4-nano")
 	t.Setenv("ANTHROPIC_BASE_URL", "https://api.anthropic.com") // Should be ignored
@@ -114,8 +118,10 @@ func TestOpenAIProvider_ChatBasic(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestOpenAIProvider_ChatWithTools(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ms := mockapi.NewMockServer()
+	ms.SetPathHandler("POST /chat/completions", func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
+		r.Body.Close()
 		var req map[string]any
 		json.Unmarshal(body, &req)
 
@@ -152,10 +158,10 @@ func TestOpenAIProvider_ChatWithTools(t *testing.T) {
 			"usage": {"prompt_tokens": 10, "completion_tokens": 20}
 		}`
 		w.Write([]byte(resp))
-	}))
-	defer server.Close()
+	})
+	defer ms.Close()
 
-	t.Setenv("OPENAI_BASE_URL", server.URL)
+	t.Setenv("OPENAI_BASE_URL", ms.URL())
 	t.Setenv("OPENAI_API_KEY", "test-key-123")
 	t.Setenv("OPENAI_DEFAULT_MODEL", "gpt-5.4-nano")
 
@@ -215,7 +221,8 @@ func TestOpenAIProvider_ChatWithTools(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestOpenAIProvider_ChatStream(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ms := mockapi.NewMockServer()
+	ms.SetPathHandler("POST /chat/completions", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.WriteHeader(http.StatusOK)
@@ -232,10 +239,10 @@ func TestOpenAIProvider_ChatStream(t *testing.T) {
 			w.Write([]byte(chunk + "\n\n"))
 			w.(http.Flusher).Flush()
 		}
-	}))
-	defer server.Close()
+	})
+	defer ms.Close()
 
-	t.Setenv("OPENAI_BASE_URL", server.URL)
+	t.Setenv("OPENAI_BASE_URL", ms.URL())
 	t.Setenv("OPENAI_API_KEY", "test-key-123")
 	t.Setenv("OPENAI_DEFAULT_MODEL", "gpt-5.4-nano")
 
@@ -302,15 +309,16 @@ func TestOpenAIProvider_NoOpenAIEnv(t *testing.T) {
 	t.Setenv("OPENAI_DEFAULT_MODEL", "")
 
 	// Set Anthropic vars (point to mock server)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ms := mockapi.NewMockServer()
+	ms.SetPathHandler("POST /v1/messages", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		resp := `{"id":"msg_1","type":"message","role":"assistant","content":[{"type":"text","text":"Hello"}],"model":"test-model","stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":10,"output_tokens":5}}`
 		w.Write([]byte(resp))
-	}))
-	defer server.Close()
+	})
+	defer ms.Close()
 
-	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_BASE_URL", ms.URL())
 	t.Setenv("ANTHROPIC_AUTH_TOKEN", "test-key-0000000000000000")
 	t.Setenv("ANTHROPIC_MODEL", "test-model")
 
@@ -351,8 +359,10 @@ func TestOpenAIProvider_WireAPIResponsesError(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestOpenAIProvider_SystemPrompt(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ms := mockapi.NewMockServer()
+	ms.SetPathHandler("POST /chat/completions", func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
+		r.Body.Close()
 		var req map[string]any
 		json.Unmarshal(body, &req)
 
@@ -374,10 +384,10 @@ func TestOpenAIProvider_SystemPrompt(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		resp := `{"id":"chatcmpl-123","object":"chat.completion","created":1677652288,"model":"gpt-5.4-nano","choices":[{"index":0,"message":{"role":"assistant","content":"OK"},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":5}}`
 		w.Write([]byte(resp))
-	}))
-	defer server.Close()
+	})
+	defer ms.Close()
 
-	t.Setenv("OPENAI_BASE_URL", server.URL)
+	t.Setenv("OPENAI_BASE_URL", ms.URL())
 	t.Setenv("OPENAI_API_KEY", "test-key")
 	t.Setenv("OPENAI_DEFAULT_MODEL", "gpt-5.4-nano")
 
@@ -399,7 +409,8 @@ func TestOpenAIProvider_SystemPrompt(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestOpenAIProvider_ChatStreamWithToolCalls(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ms := mockapi.NewMockServer()
+	ms.SetPathHandler("POST /chat/completions", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.WriteHeader(http.StatusOK)
@@ -417,10 +428,10 @@ func TestOpenAIProvider_ChatStreamWithToolCalls(t *testing.T) {
 			w.Write([]byte(chunk + "\n\n"))
 			w.(http.Flusher).Flush()
 		}
-	}))
-	defer server.Close()
+	})
+	defer ms.Close()
 
-	t.Setenv("OPENAI_BASE_URL", server.URL)
+	t.Setenv("OPENAI_BASE_URL", ms.URL())
 	t.Setenv("OPENAI_API_KEY", "test-key")
 	t.Setenv("OPENAI_DEFAULT_MODEL", "gpt-5.4-nano")
 
@@ -472,7 +483,8 @@ func TestOpenAIProvider_ChatStreamWithToolCalls(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestOpenAIProvider_ReasoningContent(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ms := mockapi.NewMockServer()
+	ms.SetPathHandler("POST /chat/completions", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		resp := `{
@@ -492,10 +504,10 @@ func TestOpenAIProvider_ReasoningContent(t *testing.T) {
 			"usage": {"prompt_tokens": 10, "completion_tokens": 20}
 		}`
 		w.Write([]byte(resp))
-	}))
-	defer server.Close()
+	})
+	defer ms.Close()
 
-	t.Setenv("OPENAI_BASE_URL", server.URL)
+	t.Setenv("OPENAI_BASE_URL", ms.URL())
 	t.Setenv("OPENAI_API_KEY", "test-key")
 	t.Setenv("OPENAI_DEFAULT_MODEL", "o3-mini")
 
@@ -524,7 +536,8 @@ func TestOpenAIProvider_ReasoningContent(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestOpenAIProvider_CachedTokensNonStreaming(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ms := mockapi.NewMockServer()
+	ms.SetPathHandler("POST /chat/completions", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		resp := `{
@@ -544,10 +557,10 @@ func TestOpenAIProvider_CachedTokensNonStreaming(t *testing.T) {
 			}
 		}`
 		w.Write([]byte(resp))
-	}))
-	defer server.Close()
+	})
+	defer ms.Close()
 
-	t.Setenv("OPENAI_BASE_URL", server.URL)
+	t.Setenv("OPENAI_BASE_URL", ms.URL())
 	t.Setenv("OPENAI_API_KEY", "test-key")
 	t.Setenv("OPENAI_DEFAULT_MODEL", "gpt-5.4-nano")
 
@@ -567,7 +580,8 @@ func TestOpenAIProvider_CachedTokensNonStreaming(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestOpenAIProvider_StreamingReasoningContent(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ms := mockapi.NewMockServer()
+	ms.SetPathHandler("POST /chat/completions", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.WriteHeader(http.StatusOK)
@@ -584,10 +598,10 @@ func TestOpenAIProvider_StreamingReasoningContent(t *testing.T) {
 			w.Write([]byte(chunk + "\n\n"))
 			w.(http.Flusher).Flush()
 		}
-	}))
-	defer server.Close()
+	})
+	defer ms.Close()
 
-	t.Setenv("OPENAI_BASE_URL", server.URL)
+	t.Setenv("OPENAI_BASE_URL", ms.URL())
 	t.Setenv("OPENAI_API_KEY", "test-key")
 	t.Setenv("OPENAI_DEFAULT_MODEL", "o3-mini")
 
@@ -659,7 +673,8 @@ func TestOpenAIProvider_StreamingReasoningContent(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestOpenAIProvider_StreamingCachedTokens(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ms := mockapi.NewMockServer()
+	ms.SetPathHandler("POST /chat/completions", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.WriteHeader(http.StatusOK)
@@ -674,10 +689,10 @@ func TestOpenAIProvider_StreamingCachedTokens(t *testing.T) {
 			w.Write([]byte(chunk + "\n\n"))
 			w.(http.Flusher).Flush()
 		}
-	}))
-	defer server.Close()
+	})
+	defer ms.Close()
 
-	t.Setenv("OPENAI_BASE_URL", server.URL)
+	t.Setenv("OPENAI_BASE_URL", ms.URL())
 	t.Setenv("OPENAI_API_KEY", "test-key")
 	t.Setenv("OPENAI_DEFAULT_MODEL", "gpt-5.4-nano")
 

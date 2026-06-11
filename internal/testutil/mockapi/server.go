@@ -10,6 +10,11 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	// The "testing" import below is required by NewTestServer, which provides
+	// a test-harness convenience wrapper around NewMockServer + Lookup.
+	// It is deliberately kept in this non-test file because NewTestServer is
+	// part of the exported mockapi API surface: callers use it in their own
+	// _test.go files.
 	"testing"
 )
 
@@ -415,37 +420,6 @@ func extractCassetteID(path string) (string, bool) {
 		return "", false
 	}
 	return id, true
-}
-
-// Lookup resolves a cassette ID to a filesystem path.
-// This is a minimal Stage 3 placeholder; Stage 4's lookup.go replaces it.
-// It checks for .sse first, then .json, in testdata/.
-// To support test execution from the package directory (go test runs from package dir),
-// this function resolves the testdata path relative to the module root.
-func Lookup(cassetteID string) (string, error) {
-	// Determine the base directory for testdata.
-	// When run via 'go test', CWD is the package directory (internal/testutil/mockapi).
-	// The testdata dir is at internal/testutil/mockapi/testdata relative to module root.
-	// Compute an absolute path to the module root by going up 3 directories from CWD.
-	cwd, err := os.Getwd()
-	if err != nil {
-		return "", fmt.Errorf("Lookup: cannot get working directory: %w", err)
-	}
-	// Go up 3 levels: internal/testutil/mockapi -> internal/testutil -> internal -> module root
-	moduleRoot := cwd
-	for i := 0; i < 3; i++ {
-		moduleRoot = filepath.Dir(moduleRoot)
-	}
-	testdataDir := filepath.Join(moduleRoot, "internal", "testutil", "mockapi", "testdata")
-	ssePath := filepath.Join(testdataDir, cassetteID+".sse")
-	if _, err := os.Stat(ssePath); err == nil {
-		return ssePath, nil
-	}
-	jsonPath := filepath.Join(testdataDir, cassetteID+".json")
-	if _, err := os.Stat(jsonPath); err == nil {
-		return jsonPath, nil
-	}
-	return "", fmt.Errorf("cassette %q not found in %s", cassetteID, testdataDir)
 }
 
 // NewTestServer creates a test server for the given cassetteID.

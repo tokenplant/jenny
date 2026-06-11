@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/ipy/jenny/internal/testutil"
+	"github.com/ipy/jenny/internal/testutil/mockapi"
 )
 
 // captureStdout delegates to testutil.CaptureStdout for stdout capture.
@@ -20,7 +21,8 @@ var sseLine = testutil.SSELine
 
 func makeMockStreamServerWithPartialEvents(t *testing.T) *httptest.Server {
 	t.Helper()
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ms := mockapi.NewMockServer()
+	ms.SetPathHandler("POST /v1/messages", func(w http.ResponseWriter, r *http.Request) {
 		io.ReadAll(r.Body)
 		r.Body.Close()
 
@@ -47,12 +49,14 @@ func makeMockStreamServerWithPartialEvents(t *testing.T) *httptest.Server {
 			io.WriteString(w, e)
 			flusher.Flush()
 		}
-	}))
+	})
+	return ms.Server
 }
 
 func makeMockStreamServerWithCacheTokens(t *testing.T) *httptest.Server {
 	t.Helper()
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ms := mockapi.NewMockServer()
+	ms.SetPathHandler("POST /v1/messages", func(w http.ResponseWriter, r *http.Request) {
 		io.ReadAll(r.Body)
 		r.Body.Close()
 
@@ -80,31 +84,46 @@ func makeMockStreamServerWithCacheTokens(t *testing.T) *httptest.Server {
 			fmt.Fprint(w, e)
 			flusher.Flush()
 		}
-	}))
+	})
+	return ms.Server
 }
 
 // makeMockStreamServerWithEvents creates a mock SSE server with explicit event slice.
 func makeMockStreamServerWithEvents(t *testing.T, events []string) *httptest.Server {
 	t.Helper()
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ms := mockapi.NewMockServer()
+
+	// Serve POST /v1/messages (SDK streaming endpoint)
+	ms.SetPathHandler("POST /v1/messages", func(w http.ResponseWriter, r *http.Request) {
 		io.ReadAll(r.Body)
 		r.Body.Close()
+		writeSSEEvents(w, events)
+	})
 
-		w.Header().Set("Content-Type", "text/event-stream")
-		w.Header().Set("Cache-Control", "no-cache")
-		w.WriteHeader(http.StatusOK)
+	// Also serve GET / so that TestHelpers (which does http.Get(server.URL)) works.
+	ms.SetPathHandler("GET /", func(w http.ResponseWriter, r *http.Request) {
+		writeSSEEvents(w, events)
+	})
 
-		flusher, ok := w.(http.Flusher)
-		if !ok {
-			return
-		}
+	return ms.Server
+}
+
+// writeSSEEvents writes SSE headers and the given events to the response.
+func writeSSEEvents(w http.ResponseWriter, events []string) {
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.WriteHeader(http.StatusOK)
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		return
+	}
+	flusher.Flush()
+
+	for _, e := range events {
+		io.WriteString(w, e)
 		flusher.Flush()
-
-		for _, e := range events {
-			io.WriteString(w, e)
-			flusher.Flush()
-		}
-	}))
+	}
 }
 
 // TestHelpers verifies that the SSE mock server helpers produce valid servers.

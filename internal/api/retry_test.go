@@ -11,6 +11,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/ipy/jenny/internal/testutil/mockapi"
 )
 
 func TestRetryConfig_DefaultValues(t *testing.T) {
@@ -212,7 +214,10 @@ func (ts *testServer) handleRequest(w http.ResponseWriter, r *http.Request) {
 }
 
 func (ts *testServer) createServer() *httptest.Server {
-	return httptest.NewServer(http.HandlerFunc(ts.handleRequest))
+	ms := mockapi.NewMockServer()
+	ms.SetPathHandler("POST /v1/messages", ts.handleRequest)
+	ts.server = ms.Server
+	return ms.Server
 }
 
 // Helper to create a client that uses the test server
@@ -620,7 +625,8 @@ func TestRetry_AC5_PreservesParams(t *testing.T) {
 
 	// Create a test server that returns 429 for first 2 attempts, then 200
 	attemptCount := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ms := mockapi.NewMockServer()
+	ms.SetPathHandler("POST /v1/messages", func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		attemptCount++
 		currentAttempt := attemptCount
@@ -647,10 +653,10 @@ func TestRetry_AC5_PreservesParams(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"model":"test-model","content":[{"type":"text","text":"success"}],"stop_reason":"end_turn","usage":{"input_tokens":1,"output_tokens":1}}`))
-	}))
-	defer server.Close()
+	})
+	defer ms.Close()
 
-	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_BASE_URL", ms.URL())
 	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 
 	// Create client with specific model and maxTokensOverride
