@@ -718,6 +718,96 @@ func TestOpenAIProvider_StreamingCachedTokens(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// TestOpenAIProvider_ReasoningContentRoundTrip tests AC4: reasoning_content
+// round-trip for multi-turn OpenAI Chat conversations
+// ---------------------------------------------------------------------------
+
+func TestOpenAIProvider_ReasoningContentRoundTrip(t *testing.T) {
+	ms := mockapi.NewMockServer()
+	ms.SetPathHandler("POST /chat/completions", func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		r.Body.Close()
+		var req map[string]any
+		if err := json.Unmarshal(body, &req); err != nil {
+			t.Fatalf("failed to parse request: %v", err)
+		}
+
+		// Verify reasoning_content is present on assistant message
+		messages, ok := req["messages"].([]any)
+		if !ok || len(messages) == 0 {
+			t.Fatal("expected messages in request")
+		}
+
+		// Find assistant message with tool_calls
+		var foundReasoningContent bool
+		for _, msg := range messages {
+			m := msg.(map[string]any)
+			if m["role"] == "assistant" {
+				if rc, ok := m["reasoning_content"].(string); ok && rc == "Previous thinking process..." {
+					foundReasoningContent = true
+				}
+				// Also verify tool_calls are present alongside reasoning_content
+				if _, ok := m["tool_calls"].([]any); ok {
+					if _, ok := m["reasoning_content"]; !ok {
+						t.Error("expected reasoning_content on assistant message with tool_calls")
+					}
+				}
+			}
+		}
+
+		if !foundReasoningContent {
+			t.Error("expected reasoning_content 'Previous thinking process...' in assistant message")
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		resp := `{
+			"id": "chatcmpl-126",
+			"object": "chat.completion",
+			"created": 1677652288,
+			"model": "o3-mini",
+			"choices": [{
+				"index": 0,
+				"message": {
+					"role": "assistant",
+					"content": "Based on my reasoning, the answer is clear."
+				},
+				"finish_reason": "stop"
+			}],
+			"usage": {"prompt_tokens": 20, "completion_tokens": 10}
+		}`
+		w.Write([]byte(resp))
+	})
+	defer ms.Close()
+
+	t.Setenv("OPENAI_BASE_URL", ms.URL())
+	t.Setenv("OPENAI_API_KEY", "test-key")
+	t.Setenv("OPENAI_DEFAULT_MODEL", "o3-mini")
+
+	client, _ := NewClientWithModel("")
+
+	// Simulate a resumed conversation with thinking from previous turn
+	messages := []Message{
+		{Role: "user", Content: "What's the answer?"},
+		{Role: "assistant", Content: "I need to analyze this",
+			Thinking: "Previous thinking process...",
+			ToolUse: []ToolUseBlock{{ID: "call_prev", Name: "analyze", Input: map[string]any{"data": "test"}}}},
+	}
+	toolResults := []ToolResult{
+		{ToolUseID: "call_prev", Content: "Analysis complete"},
+	}
+
+	resp, err := client.SendMessage(context.Background(), messages, nil, toolResults, "", "")
+	if err != nil {
+		t.Fatalf("SendMessage error = %v", err)
+	}
+
+	if resp.StopReason != StopReasonEndTurn {
+		t.Errorf("expected stop reason 'end_turn', got %q", resp.StopReason)
+	}
+}
+
+// ---------------------------------------------------------------------------
 // TestOpenAIResponsesProvider_Basic tests basic Responses API response
 // AC1: Responses API selection via OPENAI_WIRE_API=responses
 // ---------------------------------------------------------------------------
