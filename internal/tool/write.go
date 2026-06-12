@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"time"
 
 	"github.com/ipy/jenny/internal/constants"
 )
@@ -178,12 +180,66 @@ func (t *WriteTool) Execute(ctx context.Context, input map[string]any, cwd strin
 		}
 	}
 
-	// Write content
-	if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
+	// AC4: Atomic write — write to temp file in same directory, sync, rename.
+	// This guarantees that a crash never leaves a partially-written target.
+	tmpFile, err := os.CreateTemp(filepath.Dir(filePath), ".write-*")
+	if err != nil {
 		return &ToolResult{
-			Content: fmt.Sprintf("Failed to write file: %v", err),
+			Content: fmt.Sprintf("Failed to create temp file: %v", err),
 			IsError: true,
 		}, nil
+	}
+	tmpPath := tmpFile.Name()
+	defer os.Remove(tmpPath) // Clean up on any error path
+
+	// Normalize path separators on Windows for consistent rename.
+	if runtime.GOOS == "windows" {
+		tmpPath = filepath.FromSlash(tmpPath)
+	}
+
+	if _, err := tmpFile.Write([]byte(content)); err != nil {
+		tmpFile.Close()
+		return &ToolResult{
+			Content: fmt.Sprintf("Failed to write temp file: %v", err),
+			IsError: true,
+		}, nil
+	}
+
+	// Sync to durable storage before rename.
+	if err := tmpFile.Sync(); err != nil {
+		tmpFile.Close()
+		return &ToolResult{
+			Content: fmt.Sprintf("Failed to sync temp file: %v", err),
+			IsError: true,
+		}, nil
+	}
+	tmpFile.Close()
+
+	// Atomic rename with cross-device fallback.
+	if err := os.Rename(tmpPath, filePath); err != nil {
+		if isCrossDeviceErr(err) {
+			if fbErr := copyAndReplace(tmpPath, filePath); fbErr != nil {
+				return &ToolResult{
+					Content: fmt.Sprintf("Failed to rename temp file (EXDEV fallback failed): %v / %v", err, fbErr),
+					IsError: true,
+				}, nil
+			}
+		} else if runtime.GOOS == "windows" {
+			time.Sleep(10 * time.Millisecond)
+			if retryErr := os.Rename(tmpPath, filePath); retryErr != nil {
+				if fbErr := copyAndReplace(tmpPath, filePath); fbErr != nil {
+					return &ToolResult{
+						Content: fmt.Sprintf("Failed to rename temp file: %v (retry failed: %v, fallback also failed: %v)", err, retryErr, fbErr),
+						IsError: true,
+					}, nil
+				}
+			}
+		} else {
+			return &ToolResult{
+				Content: fmt.Sprintf("Failed to rename temp file: %v", err),
+				IsError: true,
+			}, nil
+		}
 	}
 
 	// Get new mtime after write
@@ -237,3 +293,5 @@ func PathInWorkingDir(filePath, cwd string, scratchpadDirs ...string) (string, e
 
 	return absFilePath, nil
 }
+
+

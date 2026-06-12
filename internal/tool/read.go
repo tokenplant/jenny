@@ -17,6 +17,10 @@ import (
 const (
 	defaultMaxSizeBytes = 256 * 1024 // 256 KB
 	defaultMaxTokens    = 25000
+	// maxSizeHardLimit is the absolute ceiling the Read tool will never
+	// exceed, regardless of the caller-supplied max_size parameter.
+	// AC3: 1 GiB OOM guard — os.Stat must be consulted before any read.
+	maxSizeHardLimit = 1 << 30 // 1,073,741,824 bytes
 )
 
 type ReadTool struct {
@@ -227,11 +231,22 @@ func (t *ReadTool) Execute(ctx context.Context, input map[string]any, cwd string
 		// fall through and let the actual open below fail with a clear error.
 	}
 
+	// AC3: 1 GiB OOM guard — reject files ≥1 GiB before any read.
+	if isFullRead && info.Size() > maxSizeHardLimit {
+		return &ToolResult{
+			Content: fmt.Sprintf("file is too large (%d bytes): exceeds maxSizeBytes limit (1 GiB)", info.Size()),
+			IsError: true,
+		}, nil
+	}
+
 	// maxSizeBytes check (pre-read, only for full reads)
 	if isFullRead {
 		maxSize := int64(defaultMaxSizeBytes)
 		if maxSizeVal, ok := input["max_size"].(float64); ok {
 			maxSize = int64(maxSizeVal)
+		}
+		if maxSize > maxSizeHardLimit {
+			maxSize = maxSizeHardLimit
 		}
 		if info.Size() > maxSize {
 			return &ToolResult{

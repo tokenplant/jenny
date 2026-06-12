@@ -8,8 +8,13 @@ import (
 	"runtime"
 	"sort"
 	"strings"
-
 	"github.com/ipy/jenny/internal/tool/ignore"
+)
+
+const (
+	maxResults = 100
+	// AC8: maxDepth limits directory traversal depth (default 64).
+	maxDepth = 64
 )
 
 // GlobTool finds files matching a glob pattern.
@@ -189,16 +194,21 @@ func (t *GlobTool) Execute(ctx context.Context, input map[string]any, cwd string
 
 	// Walk the directory tree and collect matching files
 	var matches []fileMatch
-	const maxResults = 100
+	var depth int
 
 	err := filepath.Walk(searchRoot, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return nil // Skip inaccessible files
-		}
-
 		// Get relative path from search root
 		relPath, err := filepath.Rel(searchRoot, path)
 		if err != nil {
+			return nil
+		}
+
+		// AC8: compute depth from relPath separator count (root=depth 1).
+		depth = 1 + strings.Count(relPath, string(filepath.Separator))
+		if depth > maxDepth {
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 
