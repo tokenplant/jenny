@@ -673,9 +673,11 @@ func isCrossDeviceErr(err error) bool {
 	return false
 }
 
-// copyAndReplace is the EXDEV fallback for executeScoped. It copies the
-// temp file's contents to filePath, deletes the temp file, and returns
-// any error encountered.
+// copyAndReplace is the fallback for executeScoped. It copies the temp
+// file's contents to filePath, deletes the temp file, and returns any
+// error encountered. On Windows, O_TRUNC overwrites the existing file
+// in-place without needing to delete it first (avoids "file in use" errors
+// when an AV scanner or the Read tool has the file open).
 func copyAndReplace(srcPath, dstPath string) error {
 	src, err := os.Open(srcPath)
 	if err != nil {
@@ -683,15 +685,16 @@ func copyAndReplace(srcPath, dstPath string) error {
 	}
 	defer src.Close()
 
-	// Remove the destination first so OpenFile(dst, O_WRONLY|O_CREATE|O_TRUNC)
-	// is well-defined when dst is on a different filesystem.
-	if err := os.Remove(dstPath); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("removing dst: %w", err)
-	}
-
+	// On Windows, retry once if dst is briefly held by an AV scanner.
 	dst, err := os.OpenFile(dstPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
-		return fmt.Errorf("opening dst: %w", err)
+		if runtime.GOOS == "windows" {
+			time.Sleep(10 * time.Millisecond)
+			dst, err = os.OpenFile(dstPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+		}
+		if err != nil {
+			return fmt.Errorf("opening dst: %w", err)
+		}
 	}
 	defer dst.Close()
 

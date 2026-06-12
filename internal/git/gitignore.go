@@ -9,56 +9,65 @@ import (
 )
 
 func IsIgnored(repoRoot, path string) (bool, error) {
-	// Resolve symlinks on repoRoot to ensure consistent path comparison
-	// (on macOS /var/folders is a symlink to /private/var/folders)
+	// Normalize both paths to absolute + forward-slash form for consistent
+	// comparison on Windows where filepath.EvalSymlinks may return different
+	// formats for short-name vs long-name paths.
+	repoRoot, err := filepath.Abs(repoRoot)
+	if err != nil {
+		return false, err
+	}
+	repoRoot = filepath.ToSlash(repoRoot)
+
+	path, err = filepath.Abs(path)
+	if err != nil {
+		return false, err
+	}
+	path = filepath.ToSlash(path)
+
+	// Try to resolve symlinks on path (mirrors repoRoot resolution).
+	// On Windows, filepath.EvalSymlinks returns long names for short-name
+	// paths (e.g. RUNNER~1 → LongName). Normalizing first ensures both
+	// inputs are in comparable form.
+	if resolvedPath, err := filepath.EvalSymlinks(path); err == nil {
+		path = filepath.ToSlash(resolvedPath)
+	} else if resolvedDir, err := filepath.EvalSymlinks(filepath.Dir(path)); err == nil {
+		path = filepath.ToSlash(filepath.Join(resolvedDir, filepath.Base(path)))
+	}
+
+	// resolvedRoot: resolve symlinks then normalize to forward slashes.
 	resolvedRoot, err := filepath.EvalSymlinks(repoRoot)
 	if err != nil {
-		return false, err
+		resolvedRoot = repoRoot
+	} else {
+		resolvedRoot = filepath.ToSlash(resolvedRoot)
 	}
-	resolvedRoot, err = filepath.Abs(resolvedRoot)
+
+	// relPath uses forward slashes for gitignore pattern matching.
+	relPath, err := filepath.Rel(resolvedRoot, path)
 	if err != nil {
 		return false, err
 	}
+	relPath = filepath.ToSlash(relPath)
 
-	// Make path absolute
-	absPath, err := filepath.Abs(path)
-	if err != nil {
-		return false, err
-	}
-
-	// Resolve symlinks on path too (mirrors repoRoot resolution).
-	// On Windows, filepath.Abs returns short-name form (e.g. RUNNER~1) while
-	// filepath.EvalSymlinks on repoRoot returns long names — resolving here
-	// makes the two comparable.
-	if resolvedPath, err := filepath.EvalSymlinks(absPath); err == nil {
-		absPath = resolvedPath
-	} else if resolvedDir, err := filepath.EvalSymlinks(filepath.Dir(absPath)); err == nil {
-		absPath = filepath.Join(resolvedDir, filepath.Base(absPath))
-	}
-
-	// Get the relative path from repo root (use native separators for dir traversal)
-	relPath, err := filepath.Rel(resolvedRoot, absPath)
-	if err != nil {
-		return false, err
-	}
-
-	// Load gitignore patterns from repo root
+	// Load gitignore patterns from repo root.
 	patterns, err := loadGitignorePatterns(repoRoot)
 	if err != nil {
 		return false, err
 	}
 
 	// Also load patterns from parent directories up to repo root (excluding root).
-	// Use relPath's native-separator form for the loop to match dir traversal.
-	dir := filepath.Dir(absPath)
-	for dir != resolvedRoot {
+	// Use forward-slash relPath for comparison; dir is the native-separator
+	// form of the current traversal point.
+	dir := filepath.Dir(path)
+	resolvedRootNative := filepath.FromSlash(resolvedRoot)
+	for dir != "" && dir != "." && dir != resolvedRootNative {
 		parentPatterns, err := loadGitignorePatterns(dir)
 		if err == nil {
 			patterns = append(patterns, parentPatterns...)
 		}
 		nextDir := filepath.Dir(dir)
 		if nextDir == dir {
-			break // reached filesystem root
+			break
 		}
 		dir = nextDir
 	}
