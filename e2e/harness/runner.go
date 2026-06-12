@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -136,7 +137,14 @@ func buildBinary() (string, error) {
 			binaryErr = err
 			return
 		}
-		path := filepath.Join(tmpDir, "target")
+		// On Windows, executables require a .exe suffix; `go build` produces
+		// `target.exe` when given `-o target`, and exec.LookPath/Command
+		// will not find it without the extension.
+		binaryName := "target"
+		if runtime.GOOS == "windows" {
+			binaryName = "target.exe"
+		}
+		path := filepath.Join(tmpDir, binaryName)
 
 		repoRoot, err := findRepoRoot()
 		if err != nil {
