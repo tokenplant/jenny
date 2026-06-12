@@ -6,35 +6,26 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/ipy/jenny/internal/log"
-	"google.golang.org/genai"
 )
 
 // ProviderKind for the Google GenAI provider.
 const ProviderGenAI ProviderKind = "genai"
 
-// genaiProvider implements the Provider interface using the official
-// google.golang.org/genai Go SDK. It can target either the public Gemini API
-// or Vertex AI, selected automatically from environment variables.
+// genaiProvider implements the Provider interface using a lightweight HTTP client.
 type genaiProvider struct {
-	client      *genai.Client
+	client      *HTTPClient
 	model       string
 	maxTokens   int
 	retryConfig RetryConfig
 }
 
-// newGenAIProvider creates a new GenAI provider. The backend is selected from
-// environment variables:
-//
-//  1. If GENAI_API_KEY is set explicitly → Gemini API backend.
-//  2. Else if GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION are set → Vertex
-//     AI backend (Application Default Credentials are picked up by the SDK).
-//  3. Else if GOOGLE_API_KEY or GEMINI_API_KEY is set → Gemini API backend.
-//  4. Otherwise returns an error.
+// newGenAIProvider creates a new GenAI provider.
 func newGenAIProvider(model string) (*genaiProvider, error) {
 	if model == "" {
 		model = os.Getenv("GENAI_DEFAULT_MODEL")
@@ -43,46 +34,13 @@ func newGenAIProvider(model string) (*genaiProvider, error) {
 		return nil, errors.New("GENAI_DEFAULT_MODEL is required when using genai provider")
 	}
 
-	cfg := &genai.ClientConfig{}
-
-	// Optional base URL override (proxies, VPC endpoints, etc).
-	if baseURL := os.Getenv("GENAI_BASE_URL"); baseURL != "" {
-		cfg.HTTPOptions.BaseURL = baseURL
-	}
-
-	// Request timeout from API_TIMEOUT_MS.
-	if timeout := ResolveTimeout(os.Getenv("API_TIMEOUT_MS")); timeout > 0 {
-		t := timeout
-		cfg.HTTPOptions.Timeout = &t
-	}
-
-	// Explicit API key (bypasses SDK's GOOGLE_API_KEY / GEMINI_API_KEY lookups).
-	if explicit := os.Getenv("GENAI_API_KEY"); explicit != "" {
-		cfg.APIKey = explicit
-		cfg.Backend = genai.BackendGeminiAPI
-	}
-
-	// Vertex AI via Application Default Credentials.
-	if cfg.Backend == genai.BackendUnspecified {
-		project := os.Getenv("GOOGLE_CLOUD_PROJECT")
-		location := os.Getenv("GOOGLE_CLOUD_LOCATION")
-		if location == "" {
-			location = os.Getenv("GOOGLE_CLOUD_REGION")
-		}
-		if project != "" && location != "" {
-			cfg.Backend = genai.BackendVertexAI
-			cfg.Project = project
-			cfg.Location = location
-		}
-	}
-
-	client, err := genai.NewClient(context.Background(), cfg)
-	if err != nil {
-		return nil, fmt.Errorf("genai: failed to create client: %w", err)
+	timeout := ResolveTimeout(os.Getenv("API_TIMEOUT_MS"))
+	if timeout <= 0 {
+		timeout = 120 * time.Second
 	}
 
 	return &genaiProvider{
-		client:      client,
+		client:      NewHTTPClient(timeout),
 		model:       model,
 		maxTokens:   64000,
 		retryConfig: DefaultRetryConfig(),
@@ -121,8 +79,7 @@ func (p *genaiProvider) SendMessage(ctx context.Context, messages []Message, too
 	}, false)
 }
 
-// sendWithRetry executes a function with retry logic. Mirrors the structure
-// used by the Anthropic and OpenAI providers so behavior is consistent.
+// sendWithRetry executes a function with retry logic.
 func (p *genaiProvider) sendWithRetry(ctx context.Context, fn func(context.Context) (*Response, error), isBackground bool) (*Response, error) {
 	cfg := p.retryConfig
 	if cfg.MaxRetries == 0 {
@@ -134,42 +91,49 @@ func (p *genaiProvider) sendWithRetry(ctx context.Context, fn func(context.Conte
 
 	for attempt := 0; attempt <= cfg.MaxRetries; attempt++ {
 		resp, err := fn(ctx)
+
 		if err != nil {
-			statusCode := 0
-			if apiErr, ok := asAPIError(err); ok {
-				statusCode = apiErr.Code
-			}
+			var httpErr *HTTPError
+			if errors.As(err, &httpErr) {
+				statusCode := httpErr.StatusCode
 
-			if isBackground && statusCode == StatusProxyError {
-				return nil, &CannotRetryError{
-					Message:    "Background request rejected with 529 Overloaded",
-					StatusCode: statusCode,
-				}
-			}
-
-			if statusCode == StatusProxyError {
-				consecutive529++
-				if consecutive529 > cfg.Max529Retries {
+				if isBackground && statusCode == StatusProxyError {
 					return nil, &CannotRetryError{
-						Message:    "Repeated 529 Overloaded errors",
+						Message:    "Background request rejected with 529 Overloaded",
 						StatusCode: statusCode,
 					}
 				}
-			} else {
-				consecutive529 = 0
-			}
 
-			retryableErr := wrapGenAIError(err)
-			if retryableErr != nil {
-				if r, ok := retryableErr.(*RetryableHTTPError); ok {
-					if r.IsPermanent || !isRetryable(r.StatusCode, nil) {
-						return nil, r
+				if statusCode == StatusProxyError {
+					consecutive529++
+					if consecutive529 > cfg.Max529Retries {
+						return nil, &CannotRetryError{
+							Message:    "Repeated 529 Overloaded errors",
+							StatusCode: statusCode,
+						}
 					}
+				} else {
+					consecutive529 = 0
 				}
+
+				isPermanent := statusCode >= 400 && statusCode < 500 &&
+					statusCode != 429 && statusCode != 408 && statusCode != 409
+				
+				retryableErr := &RetryableHTTPError{
+					StatusCode:  statusCode,
+					Message:     err.Error(),
+					IsPermanent: isPermanent,
+				}
+
+				if retryableErr.IsPermanent || !isRetryable(statusCode, nil) {
+					return nil, retryableErr
+				}
+
 				lastErr = retryableErr
-			} else if !isRetryable(0, err) {
-				return nil, err
 			} else {
+				if !isRetryable(0, err) {
+					return nil, err
+				}
 				lastErr = err
 			}
 		} else {
@@ -177,11 +141,8 @@ func (p *genaiProvider) sendWithRetry(ctx context.Context, fn func(context.Conte
 		}
 
 		if attempt < cfg.MaxRetries {
-			var retryAfter *time.Duration
-			if retryableErr, ok := lastErr.(*RetryableHTTPError); ok {
-				retryAfter = retryableErr.RetryAfter
-			}
-			delay := computeBackoff(attempt, cfg, retryAfter)
+			delay := computeBackoff(attempt, cfg, nil)
+
 			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
@@ -204,15 +165,63 @@ func (p *genaiProvider) doSendMessage(ctx context.Context, messages []Message, t
 
 	messages, tools, _ = NormalizeMessages(messages, tools, Capabilities{SupportsPromptCaching: false})
 
-	contents := p.buildContents(messages, toolResults)
-	config := p.buildConfig(systemPrompt, systemPromptSuffix, tools)
-
-	resp, err := p.client.Models.GenerateContent(ctx, p.model, contents, config)
-	if err != nil {
-		return nil, wrapGenAIError(err)
+	reqBody := GenAIRequest{
+		Contents: p.buildContents(messages, toolResults),
+		GenerationConfig: &GenAIGenerationConfig{
+			MaxOutputTokens: &p.maxTokens,
+		},
 	}
 
-	return p.parseResponse(resp)
+	fullSystem := systemPrompt
+	if systemPromptSuffix != "" {
+		if fullSystem != "" {
+			fullSystem += "\n\n"
+		}
+		fullSystem += systemPromptSuffix
+	}
+	if fullSystem != "" {
+		reqBody.SystemInstruction = &GenAIContent{
+			Parts: []GenAIPart{{Text: fullSystem}},
+		}
+	}
+
+	if len(tools) > 0 {
+		reqBody.Tools = []GenAITool{{
+			FunctionDeclarations: p.buildTools(tools),
+		}}
+	}
+
+	apiKey := os.Getenv("GENAI_API_KEY")
+	if apiKey == "" {
+		apiKey = os.Getenv("GOOGLE_API_KEY")
+	}
+	if apiKey == "" {
+		apiKey = os.Getenv("GEMINI_API_KEY")
+	}
+
+	baseURL := os.Getenv("GENAI_BASE_URL")
+	if baseURL == "" {
+		baseURL = "https://generativelanguage.googleapis.com"
+	}
+
+	url := fmt.Sprintf("%s/v1beta/models/%s:generateContent?key=%s", baseURL, p.model, apiKey)
+	headers := http.Header{}
+
+	var genAIResp GenAIResponse
+	if err := p.client.Request(ctx, "POST", url, headers, reqBody, &genAIResp); err != nil {
+		return nil, err
+	}
+
+	return p.parseResponse(&genAIResp)
+}
+
+// isPromptTooLongGenAI returns true if the error indicates prompt too long.
+func isPromptTooLongGenAI(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "prompt_too_long") || strings.Contains(msg, "context window exceeds limit")
 }
 
 // SendMessageStream sends a streaming message.
@@ -222,15 +231,6 @@ func (p *genaiProvider) SendMessageStream(ctx context.Context, messages []Messag
 
 	go func() {
 		defer close(blocksChan)
-		defer func() {
-			if r := recover(); r != nil {
-				errStr := fmt.Sprintf("panic: %v", r)
-				log.Warn("GenAI: stream goroutine panicked", "panic", r)
-				if result.Error == "" {
-					result.Error = errStr
-				}
-			}
-		}()
 
 		if err := ValidateMessagesMedia(messages); err != nil {
 			result.Error = err.Error()
@@ -239,22 +239,71 @@ func (p *genaiProvider) SendMessageStream(ctx context.Context, messages []Messag
 
 		messages, tools, _ = NormalizeMessages(messages, tools, Capabilities{SupportsPromptCaching: false})
 
-		contents := p.buildContents(messages, toolResults)
-		config := p.buildConfig(systemPrompt, systemPromptSuffix, tools)
+		reqBody := GenAIRequest{
+			Contents: p.buildContents(messages, toolResults),
+			GenerationConfig: &GenAIGenerationConfig{
+				MaxOutputTokens: &p.maxTokens,
+			},
+		}
 
-		log.Debug("GenAI: starting streaming request", "model", p.model)
+		fullSystem := systemPrompt
+		if systemPromptSuffix != "" {
+			if fullSystem != "" {
+				fullSystem += "\n\n"
+			}
+			fullSystem += systemPromptSuffix
+		}
+		if fullSystem != "" {
+			reqBody.SystemInstruction = &GenAIContent{
+				Parts: []GenAIPart{{Text: fullSystem}},
+			}
+		}
+
+		if len(tools) > 0 {
+			reqBody.Tools = []GenAITool{{
+				FunctionDeclarations: p.buildTools(tools),
+			}}
+		}
+
+		apiKey := os.Getenv("GENAI_API_KEY")
+		if apiKey == "" {
+			apiKey = os.Getenv("GOOGLE_API_KEY")
+		}
+		if apiKey == "" {
+			apiKey = os.Getenv("GEMINI_API_KEY")
+		}
+
+		baseURL := os.Getenv("GENAI_BASE_URL")
+		if baseURL == "" {
+			baseURL = "https://generativelanguage.googleapis.com"
+		}
+
+		url := fmt.Sprintf("%s/v1beta/models/%s:streamGenerateContent?alt=sse&key=%s", baseURL, p.model, apiKey)
+		headers := http.Header{}
 
 		if idleTimeout <= 0 {
 			idleTimeout = DefaultIdleTimeout
 		}
 
-		streamCtx, cancel := context.WithCancel(ctx)
-		defer cancel()
-
-		stream := p.client.Models.GenerateContentStream(streamCtx, p.model, contents, config)
+		body, err := p.client.StreamRequest(ctx, "POST", url, headers, reqBody)
+		if err != nil {
+			var httpErr *HTTPError
+			if errors.As(err, &httpErr) {
+				result.IsPermanent = httpErr.StatusCode >= 400 && httpErr.StatusCode < 500 &&
+					httpErr.StatusCode != 429 && httpErr.StatusCode != 408 && httpErr.StatusCode != 409
+			}
+			result.Error = err.Error()
+			if isPromptTooLongGenAI(err) {
+				result.ContextRejected = true
+				result.MaxTokensErr = categorizeMaxTokensError(p.model, result.Usage.OutputTokens, true)
+			}
+			return
+		}
+		defer body.Close()
 
 		acc := newGenAIStreamAccumulator()
 		hasFinishReason := false
+		scanner := NewSSEScanner(body)
 
 		idleTimer := time.NewTimer(idleTimeout)
 		defer idleTimer.Stop()
@@ -267,31 +316,15 @@ func (p *genaiProvider) SendMessageStream(ctx context.Context, messages []Messag
 			case <-idleTimer.C:
 				log.Warn("GenAI: idle timeout reached")
 				result.Error = "idle timeout"
-				cancel()
+				body.Close()
 			case <-watchdogCtx.Done():
 			}
 		}()
 
-		for resp, err := range stream {
-			if err != nil {
-				log.Warn("GenAI: stream error", "error", err)
-				apiErr := wrapGenAIError(err)
-				if apiErr != nil {
-					if retryable, ok := apiErr.(*RetryableHTTPError); ok {
-						result.IsPermanent = retryable.IsPermanent
-					}
-				}
-				if result.Error == "" {
-					result.Error = err.Error()
-				}
-				if isPromptTooLongGenAI(err) {
-					result.ContextRejected = true
-				}
-				return
-			}
-			if resp == nil {
-				log.Warn("GenAI: stream nil response")
-				continue
+		for {
+			data, ok := scanner.Next()
+			if !ok {
+				break
 			}
 
 			if !idleTimer.Stop() {
@@ -302,7 +335,13 @@ func (p *genaiProvider) SendMessageStream(ctx context.Context, messages []Messag
 			}
 			idleTimer.Reset(idleTimeout)
 
-			if stopReason, usage, model, ok := p.processStreamChunk(resp, acc, blocksChan, result); ok {
+			var resp GenAIResponse
+			if err := json.Unmarshal([]byte(data), &resp); err != nil {
+				log.Error("GenAI: failed to unmarshal chunk", "error", err, "data", data)
+				continue
+			}
+
+			if stopReason, usage, model, ok := p.processStreamChunk(&resp, acc, blocksChan, result); ok {
 				hasFinishReason = true
 				if usage.OutputTokens > 0 || usage.InputTokens > 0 {
 					result.Usage = usage
@@ -316,8 +355,20 @@ func (p *genaiProvider) SendMessageStream(ctx context.Context, messages []Messag
 			}
 		}
 
+		if scanner.Err() != nil && result.Error == "" {
+			result.Error = scanner.Err().Error()
+		}
+
+		if isPromptTooLongGenAI(errors.New(result.Error)) {
+			result.ContextRejected = true
+		}
+
 		if !hasFinishReason && result.Error == "" {
 			result.Error = "stream incomplete: no finish reason"
+		}
+
+		if (result.StopReason == StopReasonMaxTokens || result.ContextRejected) && result.MaxTokensErr == nil {
+			result.MaxTokensErr = categorizeMaxTokensError(result.Model, result.Usage.OutputTokens, result.ContextRejected)
 		}
 
 		result.StreamComplete = hasFinishReason
@@ -332,8 +383,7 @@ func (p *genaiProvider) SendMessageStream(ctx context.Context, messages []Messag
 }
 
 // processStreamChunk processes a single streaming chunk.
-// Returns (stopReason, usage, model, hasFinishReason).
-func (p *genaiProvider) processStreamChunk(resp *genai.GenerateContentResponse, acc *genAIStreamAccumulator, blocksChan chan<- StreamContentBlock, result *StreamResult) (StopReason, Usage, string, bool) {
+func (p *genaiProvider) processStreamChunk(resp *GenAIResponse, acc *genAIStreamAccumulator, blocksChan chan<- StreamContentBlock, result *StreamResult) (StopReason, Usage, string, bool) {
 	if resp == nil {
 		return "", Usage{}, "", false
 	}
@@ -350,13 +400,7 @@ func (p *genaiProvider) processStreamChunk(resp *genai.GenerateContentResponse, 
 
 	hasFinishReason := false
 	for _, cand := range resp.Candidates {
-		if cand.Content == nil {
-			continue
-		}
 		for _, part := range cand.Content.Parts {
-			if part == nil {
-				continue
-			}
 			if part.Thought && part.Text != "" {
 				acc.appendThinking(part.Text)
 				blocksChan <- StreamContentBlock{
@@ -383,17 +427,17 @@ func (p *genaiProvider) processStreamChunk(resp *genai.GenerateContentResponse, 
 		}
 
 		switch cand.FinishReason {
-		case genai.FinishReasonStop:
+		case "STOP":
 			acc.setStopReason(StopReasonEndTurn)
 			hasFinishReason = true
-		case genai.FinishReasonMaxTokens:
+		case "MAX_TOKENS":
 			acc.setStopReason(StopReasonMaxTokens)
 			hasFinishReason = true
-		case genai.FinishReasonSafety, genai.FinishReasonBlocklist, genai.FinishReasonProhibitedContent, genai.FinishReasonSPII:
+		case "SAFETY", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII":
 			acc.setStopReason(StopReasonStopSeq)
 			hasFinishReason = true
 		default:
-			if cand.FinishReason != "" && cand.FinishReason != genai.FinishReasonUnspecified {
+			if cand.FinishReason != "" && cand.FinishReason != "FINISH_REASON_UNSPECIFIED" {
 				acc.setStopReason(StopReason(cand.FinishReason))
 				hasFinishReason = true
 			}
@@ -403,27 +447,17 @@ func (p *genaiProvider) processStreamChunk(resp *genai.GenerateContentResponse, 
 	return acc.stopReason, result.Usage, model, hasFinishReason
 }
 
-// buildContents converts api.Message slices plus standalone tool results into
-// the genai.Content slice the SDK expects.
-//
-// Gemini tool-calling requires that the model's FunctionCall turn and the
-// matching FunctionResponse turn both appear in the conversation history, in
-// the same order. The agent package stores tool_use and tool_result on the
-// same Message, so we split them: text/tool_use go on a model turn, and the
-// matching tool_results become a user turn that immediately follows.
-func (p *genaiProvider) buildContents(messages []Message, toolResults []ToolResult) []*genai.Content {
-	contents := make([]*genai.Content, 0, len(messages)+len(toolResults))
-
-	// Track which tool_results have been emitted by a per-message tool_results
-	// block, so we don't double-emit the standalone toolResults slice.
+// buildContents converts api.Message slices plus standalone tool results into GenAI format.
+func (p *genaiProvider) buildContents(messages []Message, toolResults []ToolResult) []GenAIContent {
+	contents := make([]GenAIContent, 0, len(messages)+len(toolResults))
 	emittedStandalone := make(map[string]bool, len(toolResults))
 
 	for _, msg := range messages {
 		switch msg.Role {
 		case "user":
-			parts := make([]*genai.Part, 0, 1+len(msg.ToolResults))
+			parts := make([]GenAIPart, 0, 1+len(msg.ToolResults))
 			if msg.Content != "" {
-				parts = append(parts, genai.NewPartFromText(msg.Content))
+				parts = append(parts, GenAIPart{Text: msg.Content})
 			}
 			for _, tr := range msg.ToolResults {
 				parts = append(parts, functionResponsePart(ToolResult{
@@ -435,17 +469,16 @@ func (p *genaiProvider) buildContents(messages []Message, toolResults []ToolResu
 			if len(parts) == 0 {
 				continue
 			}
-			contents = append(contents, genai.NewContentFromParts(parts, genai.RoleUser))
+			contents = append(contents, GenAIContent{Role: "user", Parts: parts})
 
 		case "assistant":
-			parts := make([]*genai.Part, 0, 1+len(msg.ToolUse))
+			parts := make([]GenAIPart, 0, 1+len(msg.ToolUse))
 			if msg.Content != "" {
-				parts = append(parts, genai.NewPartFromText(msg.Content))
+				parts = append(parts, GenAIPart{Text: msg.Content})
 			}
 			for _, tu := range msg.ToolUse {
-				parts = append(parts, &genai.Part{
-					FunctionCall: &genai.FunctionCall{
-						ID:   tu.ID,
+				parts = append(parts, GenAIPart{
+					FunctionCall: &GenAIFunctionCall{
 						Name: tu.Name,
 						Args: tu.Input,
 					},
@@ -454,17 +487,11 @@ func (p *genaiProvider) buildContents(messages []Message, toolResults []ToolResu
 			if len(parts) == 0 {
 				continue
 			}
-			contents = append(contents, genai.NewContentFromParts(parts, genai.RoleModel))
-
-		case "system":
-			// System prompts are routed through GenerateContentConfig.SystemInstruction
-			// rather than as a turn in the conversation; skip if seen here.
-			continue
+			contents = append(contents, GenAIContent{Role: "model", Parts: parts})
 		}
 	}
 
-	// Standalone tool results (those not already attached to a message).
-	pending := make([]*genai.Part, 0, len(toolResults))
+	pending := make([]GenAIPart, 0, len(toolResults))
 	for _, tr := range toolResults {
 		if emittedStandalone[tr.ToolUseID] {
 			continue
@@ -473,14 +500,14 @@ func (p *genaiProvider) buildContents(messages []Message, toolResults []ToolResu
 		pending = append(pending, functionResponsePart(tr))
 	}
 	if len(pending) > 0 {
-		contents = append(contents, genai.NewContentFromParts(pending, genai.RoleUser))
+		contents = append(contents, GenAIContent{Role: "user", Parts: pending})
 	}
 
 	return contents
 }
 
 // functionResponsePart builds a Part carrying a function response.
-func functionResponsePart(tr ToolResult) *genai.Part {
+func functionResponsePart(tr ToolResult) GenAIPart {
 	response := map[string]any{}
 	if tr.Content != "" {
 		var parsed any
@@ -493,173 +520,56 @@ func functionResponsePart(tr ToolResult) *genai.Part {
 	if tr.IsError {
 		response["error"] = tr.Content
 	}
-	return &genai.Part{
-		FunctionResponse: &genai.FunctionResponse{
-			ID:       tr.ToolUseID,
+	return GenAIPart{
+		FunctionResponse: &GenAIFunctionResponse{
 			Name:     toolNameFromID(tr.ToolUseID),
 			Response: response,
 		},
 	}
 }
 
-// toolNameFromID returns a placeholder function name. The SDK requires
-// FunctionResponse.Name to be set, but the actual name is already associated
-// with the FunctionCall part above. The provider's caller doesn't carry
-// (id→name) mapping here, so we default to a sentinel; in practice the
-// function response is matched by ID by the model server.
+// toolNameFromID returns a placeholder function name.
 func toolNameFromID(id string) string {
-	if id == "" {
-		return "tool"
-	}
 	return "tool"
 }
 
-// buildConfig assembles a GenerateContentConfig for a request.
-func (p *genaiProvider) buildConfig(systemPrompt string, systemPromptSuffix string, tools []ToolParam) *genai.GenerateContentConfig {
-	cfg := &genai.GenerateContentConfig{
-		MaxOutputTokens: int32(p.maxTokens),
-	}
-
-	fullSystem := systemPrompt
-	if systemPromptSuffix != "" {
-		if fullSystem != "" {
-			fullSystem += "\n\n"
-		}
-		fullSystem += systemPromptSuffix
-	}
-	if fullSystem != "" {
-		cfg.SystemInstruction = genai.NewContentFromText(fullSystem, genai.RoleUser)
-	}
-
-	if len(tools) > 0 {
-		cfg.Tools = []*genai.Tool{{
-			FunctionDeclarations: p.buildTools(tools),
-		}}
-	}
-
-	return cfg
-}
-
-// buildTools converts api.ToolParam slices to *genai.FunctionDeclaration.
-func (p *genaiProvider) buildTools(tools []ToolParam) []*genai.FunctionDeclaration {
-	decls := make([]*genai.FunctionDeclaration, 0, len(tools))
+// buildTools converts api.ToolParam slices to GenAI format.
+func (p *genaiProvider) buildTools(tools []ToolParam) []GenAIFunctionDeclaration {
+	decls := make([]GenAIFunctionDeclaration, 0, len(tools))
 	for _, t := range tools {
-		decl := &genai.FunctionDeclaration{
+		decl := GenAIFunctionDeclaration{
 			Name:        t.Name,
 			Description: t.Description,
-			Parameters:  schemaFromToolParam(t.InputSchema),
+			Parameters:  p.buildInputSchema(t.InputSchema),
 		}
 		decls = append(decls, decl)
 	}
 	return decls
 }
 
-// schemaFromToolParam converts our JSON-Schema-ish ToolInputSchema into a
-// *genai.Schema, recursively.
-func schemaFromToolParam(in ToolInputSchema) *genai.Schema {
-	if in.Type == "" {
-		in.Type = "object"
-	}
-	out := &genai.Schema{
-		Required: in.Required,
-	}
-	switch strings.ToLower(in.Type) {
-	case "object":
-		out.Type = genai.TypeObject
-	case "string":
-		out.Type = genai.TypeString
-	case "number":
-		out.Type = genai.TypeNumber
-	case "integer":
-		out.Type = genai.TypeInteger
-	case "boolean":
-		out.Type = genai.TypeBoolean
-	case "array":
-		out.Type = genai.TypeArray
-	default:
-		out.Type = genai.TypeUnspecified
+// buildInputSchema converts our JSON-Schema-ish ToolInputSchema into Gemini parameters format.
+func (p *genaiProvider) buildInputSchema(schema ToolInputSchema) map[string]any {
+	result := map[string]any{
+		"type": "object",
 	}
 
-	if len(in.Properties) > 0 {
-		out.Properties = make(map[string]*genai.Schema, len(in.Properties))
-		for k, v := range in.Properties {
-			child, ok := v.(map[string]any)
-			if !ok {
-				continue
-			}
-			out.Properties[k] = schemaFromMap(child)
-		}
+	if len(schema.Properties) > 0 {
+		result["properties"] = schema.Properties
 	}
 
-	// Carry over anything we don't model explicitly.
-	for k, v := range in.ExtraFields {
-		if out.Properties == nil {
-			out.Properties = map[string]*genai.Schema{}
-		}
-		// Best-effort: stash under the schema's "Description" or skip.
-		// We avoid overwriting typed fields; only used for $defs etc.
-		_ = k
-		_ = v
+	if len(schema.Required) > 0 {
+		result["required"] = schema.Required
 	}
 
-	return out
+	for k, v := range schema.ExtraFields {
+		result[k] = v
+	}
+
+	return result
 }
 
-// schemaFromMap builds a Schema from a generic map (the property entries we
-// see on the agent side).
-func schemaFromMap(m map[string]any) *genai.Schema {
-	s := &genai.Schema{}
-	if desc, ok := m["description"].(string); ok {
-		s.Description = desc
-	}
-	if t, ok := m["type"].(string); ok {
-		switch strings.ToLower(t) {
-		case "object":
-			s.Type = genai.TypeObject
-		case "string":
-			s.Type = genai.TypeString
-		case "number":
-			s.Type = genai.TypeNumber
-		case "integer":
-			s.Type = genai.TypeInteger
-		case "boolean":
-			s.Type = genai.TypeBoolean
-		case "array":
-			s.Type = genai.TypeArray
-		default:
-			s.Type = genai.TypeUnspecified
-		}
-	}
-	if enum, ok := m["enum"].([]any); ok {
-		for _, e := range enum {
-			if str, ok := e.(string); ok {
-				s.Enum = append(s.Enum, str)
-			}
-		}
-	}
-	if req, ok := m["required"].([]any); ok {
-		for _, r := range req {
-			if str, ok := r.(string); ok {
-				s.Required = append(s.Required, str)
-			}
-		}
-	}
-	if props, ok := m["properties"].(map[string]any); ok {
-		s.Properties = make(map[string]*genai.Schema, len(props))
-		for k, v := range props {
-			if child, ok := v.(map[string]any); ok {
-				s.Properties[k] = schemaFromMap(child)
-			}
-		}
-	}
-	if items, ok := m["items"].(map[string]any); ok {
-		s.Items = schemaFromMap(items)
-	}
-	return s
-}
-
-// parseResponse converts a *genai.GenerateContentResponse to *api.Response.
-func (p *genaiProvider) parseResponse(resp *genai.GenerateContentResponse) (*Response, error) {
+// parseResponse converts a GenAIResponse to *api.Response.
+func (p *genaiProvider) parseResponse(resp *GenAIResponse) (*Response, error) {
 	if resp == nil {
 		return &Response{}, nil
 	}
@@ -678,28 +588,21 @@ func (p *genaiProvider) parseResponse(resp *genai.GenerateContentResponse) (*Res
 
 	cand := resp.Candidates[0]
 	switch cand.FinishReason {
-	case genai.FinishReasonStop:
+	case "STOP":
 		response.StopReason = StopReasonEndTurn
-	case genai.FinishReasonMaxTokens:
+	case "MAX_TOKENS":
 		response.StopReason = StopReasonMaxTokens
-	case genai.FinishReasonSafety, genai.FinishReasonBlocklist, genai.FinishReasonProhibitedContent, genai.FinishReasonSPII:
+	case "SAFETY", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII":
 		response.StopReason = StopReasonStopSeq
 	default:
-		if cand.FinishReason != "" && cand.FinishReason != genai.FinishReasonUnspecified {
+		if cand.FinishReason != "" && cand.FinishReason != "FINISH_REASON_UNSPECIFIED" {
 			response.StopReason = StopReason(cand.FinishReason)
 		} else {
 			response.StopReason = StopReasonEndTurn
 		}
 	}
 
-	if cand.Content == nil {
-		return response, nil
-	}
-
 	for _, part := range cand.Content.Parts {
-		if part == nil {
-			continue
-		}
 		if part.Thought && part.Text != "" {
 			response.Content = append(response.Content, ContentBlock{
 				Type:     "thinking",
@@ -716,7 +619,7 @@ func (p *genaiProvider) parseResponse(resp *genai.GenerateContentResponse) (*Res
 		if part.FunctionCall != nil {
 			response.Content = append(response.Content, ContentBlock{
 				Type:      "tool_use",
-				ToolID:    part.FunctionCall.ID,
+				ToolID:    "", // Gemini REST API function calls don't always have IDs in the same way
 				ToolName:  part.FunctionCall.Name,
 				ToolInput: part.FunctionCall.Args,
 			})
@@ -726,70 +629,20 @@ func (p *genaiProvider) parseResponse(resp *genai.GenerateContentResponse) (*Res
 	return response, nil
 }
 
-// mapUsage converts genai.GenerateContentResponseUsageMetadata to api.Usage.
-// ThoughtsTokenCount is folded into OutputTokens so the existing cost-tracking
-// math (which treats thinking as part of the output budget) keeps working.
-func mapUsage(u *genai.GenerateContentResponseUsageMetadata) Usage {
+// mapUsage converts GenAIUsage to api.Usage.
+func mapUsage(u *GenAIUsage) Usage {
 	if u == nil {
 		return Usage{}
 	}
 	out := Usage{
-		InputTokens:          int(u.PromptTokenCount),
-		OutputTokens:         int(u.CandidatesTokenCount),
-		CacheReadInputTokens: int(u.CachedContentTokenCount),
+		InputTokens:          u.PromptTokenCount,
+		OutputTokens:         u.CandidatesTokenCount,
+		CacheReadInputTokens: u.CachedContentTokenCount,
 	}
 	if u.ThoughtsTokenCount > 0 {
-		out.OutputTokens += int(u.ThoughtsTokenCount)
+		out.OutputTokens += u.ThoughtsTokenCount
 	}
 	return out
-}
-
-// asAPIError extracts a genai.APIError (a value type) from err, supporting
-// both pointer and value forms since the SDK returns it as a value.
-func asAPIError(err error) (genai.APIError, bool) {
-	if err == nil {
-		return genai.APIError{}, false
-	}
-	var apiErr genai.APIError
-	if errors.As(err, &apiErr) {
-		return apiErr, true
-	}
-	return genai.APIError{}, false
-}
-
-// wrapGenAIError maps a genai error to a *RetryableHTTPError when possible.
-// Returns nil if the error doesn't carry a status code (e.g. network error).
-func wrapGenAIError(err error) error {
-	if err == nil {
-		return nil
-	}
-	apiErr, ok := asAPIError(err)
-	if ok {
-		isPermanent := apiErr.Code >= 400 && apiErr.Code < 500 &&
-			apiErr.Code != 429 && apiErr.Code != 408 && apiErr.Code != 409
-		return &RetryableHTTPError{
-			StatusCode:  apiErr.Code,
-			Message:     err.Error(),
-			IsPermanent: isPermanent,
-		}
-	}
-	return nil
-}
-
-// isPromptTooLongGenAI returns true for prompt-too-long / context-exhausted
-// errors that should trigger a fallback or compaction.
-func isPromptTooLongGenAI(err error) bool {
-	if err == nil {
-		return false
-	}
-	apiErr, ok := asAPIError(err)
-	if ok && apiErr.Code == 400 {
-		msg := strings.ToLower(err.Error())
-		if strings.Contains(msg, "context") || strings.Contains(msg, "too long") || strings.Contains(msg, "exceeds") {
-			return true
-		}
-	}
-	return false
 }
 
 // ---------------------------------------------------------------------------
@@ -800,11 +653,11 @@ type genAIStreamAccumulator struct {
 	content    string
 	thinking   string
 	stopReason StopReason
-	funcCalls  map[int]*genai.FunctionCall
+	funcCalls  map[int]*GenAIFunctionCall
 }
 
 func newGenAIStreamAccumulator() *genAIStreamAccumulator {
-	return &genAIStreamAccumulator{funcCalls: make(map[int]*genai.FunctionCall)}
+	return &genAIStreamAccumulator{funcCalls: make(map[int]*GenAIFunctionCall)}
 }
 
 func (acc *genAIStreamAccumulator) appendContent(s string) { acc.content += s }
@@ -819,7 +672,7 @@ func (acc *genAIStreamAccumulator) setStopReason(r StopReason) {
 	}
 }
 
-func (acc *genAIStreamAccumulator) appendFunctionCall(fc *genai.FunctionCall) {
+func (acc *genAIStreamAccumulator) appendFunctionCall(fc *GenAIFunctionCall) {
 	idx := len(acc.funcCalls)
 	acc.funcCalls[idx] = fc
 }
@@ -835,7 +688,7 @@ func (acc *genAIStreamAccumulator) getFunctionCallBlock() *ContentBlock {
 	}
 	return &ContentBlock{
 		Type:      "tool_use",
-		ToolID:    fc.ID,
+		ToolID:    "",
 		ToolName:  fc.Name,
 		ToolInput: fc.Args,
 	}
@@ -853,7 +706,7 @@ func (acc *genAIStreamAccumulator) finalize() []ContentBlock {
 		if fc, ok := acc.funcCalls[i]; ok && fc != nil {
 			blocks = append(blocks, ContentBlock{
 				Type:      "tool_use",
-				ToolID:    fc.ID,
+				ToolID:    "",
 				ToolName:  fc.Name,
 				ToolInput: fc.Args,
 			})

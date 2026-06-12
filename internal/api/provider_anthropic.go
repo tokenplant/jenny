@@ -5,20 +5,18 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
-	"github.com/anthropics/anthropic-sdk-go"
-	"github.com/anthropics/anthropic-sdk-go/option"
-	"github.com/anthropics/anthropic-sdk-go/shared/constant"
 	"github.com/ipy/jenny/internal/log"
 )
 
-// anthropicProvider implements the Provider interface using the Anthropic SDK.
+// anthropicProvider implements the Provider interface using a lightweight HTTP client.
 type anthropicProvider struct {
-	client       anthropic.Client
+	client       *HTTPClient
 	model        string
 	maxTokens    int
 	retryConfig  RetryConfig
@@ -27,7 +25,6 @@ type anthropicProvider struct {
 
 // newAnthropicProvider creates a new Anthropic provider.
 func newAnthropicProvider(model string) (*anthropicProvider, error) {
-	// Read model from environment if not provided
 	if model == "" {
 		model = os.Getenv("ANTHROPIC_MODEL")
 	}
@@ -35,96 +32,16 @@ func newAnthropicProvider(model string) (*anthropicProvider, error) {
 		model = defaultModel
 	}
 
-	// Build client options: beta headers + request timeout
-	opts := []option.RequestOption{}
-
-	// Default prompt-caching beta header
-	opts = append(opts, option.WithHeader("anthropic-beta", string(anthropic.AnthropicBetaPromptCaching2024_07_31)))
-
-	// Additional beta headers from ANTHROPIC_BETAS env var
-	betas := os.Getenv("ANTHROPIC_BETAS")
-	if betas != "" {
-		for beta := range strings.SplitSeq(betas, ",") {
-			beta = strings.TrimSpace(beta)
-			if beta != "" {
-				opts = append(opts, option.WithHeaderAdd("anthropic-beta", beta))
-			}
-		}
+	timeout := ResolveTimeout(os.Getenv("API_TIMEOUT_MS"))
+	if timeout <= 0 {
+		timeout = 120 * time.Second
 	}
 
-	// Request timeout from API_TIMEOUT_MS env var
-	timeout := ResolveTimeout(os.Getenv("API_TIMEOUT_MS"))
-	opts = append(opts, option.WithRequestTimeout(timeout))
-
-	// SDK's NewClient already reads ANTHROPIC_BASE_URL and ANTHROPIC_AUTH_TOKEN.
-	client := anthropic.NewClient(opts...)
-
 	return &anthropicProvider{
-		client:      client,
+		client:      NewHTTPClient(timeout),
 		model:       model,
 		retryConfig: DefaultRetryConfig(),
 	}, nil
-}
-
-// buildSDKMessagesJSON converts messages and tool results to a format suitable
-// for JSON serialization with flattened tool_result content (DeepSeek compatibility).
-func (p *anthropicProvider) buildSDKMessagesJSON(messages []Message, toolResults []ToolResult) []any {
-	sdkMessages := make([]any, 0, len(messages)+len(toolResults))
-	for _, msg := range messages {
-		contentBlocks := make([]any, 0)
-
-		if msg.Content != "" {
-			contentBlocks = append(contentBlocks, map[string]any{
-				"type": "text",
-				"text": msg.Content,
-			})
-		}
-
-		for _, tu := range msg.ToolUse {
-			contentBlocks = append(contentBlocks, map[string]any{
-				"type":  "tool_use",
-				"id":    tu.ID,
-				"name":  tu.Name,
-				"input": tu.Input,
-			})
-		}
-
-		for _, tr := range msg.ToolResults {
-			// DeepSeek compatibility: tool_result content MUST be a plain string
-			block := map[string]any{
-				"type":        "tool_result",
-				"tool_use_id": tr.ToolUseID,
-				"content":     tr.Content,
-			}
-			if tr.IsError {
-				block["is_error"] = true
-			}
-			contentBlocks = append(contentBlocks, block)
-		}
-
-		sdkMessages = append(sdkMessages, map[string]any{
-			"role":    msg.Role,
-			"content": contentBlocks,
-		})
-	}
-
-	// Add standalone tool results as user messages
-	for _, tr := range toolResults {
-		block := map[string]any{
-			"type":        "tool_result",
-			"tool_use_id": tr.ToolUseID,
-			"content":     tr.Content,
-		}
-		if tr.IsError {
-			block["is_error"] = true
-		}
-		sdkMessages = append(sdkMessages, map[string]any{
-			"role":    "user",
-			"content": []any{block},
-		})
-	}
-
-	return sdkMessages
 }
 
 // Kind returns the provider kind.
@@ -159,7 +76,6 @@ func (p *anthropicProvider) SetRetryConfig(cfg RetryConfig) {
 
 // SendMessage sends a non-streaming message.
 func (p *anthropicProvider) SendMessage(ctx context.Context, messages []Message, tools []ToolParam, toolResults []ToolResult, systemPrompt string, systemPromptSuffix string) (*Response, error) {
-	// Wrap with retry
 	return p.sendWithRetry(ctx, func(ctx context.Context) (*Response, error) {
 		return p.doSendMessage(ctx, messages, tools, toolResults, systemPrompt, systemPromptSuffix)
 	}, p.isBackground)
@@ -179,9 +95,9 @@ func (p *anthropicProvider) sendWithRetry(ctx context.Context, fn func(context.C
 		resp, err := fn(ctx)
 
 		if err != nil {
-			var retryableErr *RetryableHTTPError
-			if errors.As(err, &retryableErr) && retryableErr != nil {
-				statusCode := retryableErr.StatusCode
+			var httpErr *HTTPError
+			if errors.As(err, &httpErr) {
+				statusCode := httpErr.StatusCode
 
 				if isBackground && statusCode == StatusProxyError {
 					return nil, &CannotRetryError{
@@ -202,36 +118,37 @@ func (p *anthropicProvider) sendWithRetry(ctx context.Context, fn func(context.C
 					consecutive529 = 0
 				}
 
-				if retryableErr.IsPermanent || !isRetryable(statusCode, nil) {
-					return nil, err
+				isPermanent := statusCode >= 400 && statusCode < 500 &&
+					statusCode != 429 && statusCode != 408 && statusCode != 409
+				
+				retryableErr := &RetryableHTTPError{
+					StatusCode:  statusCode,
+					Message:     err.Error(),
+					IsPermanent: isPermanent,
 				}
 
-				lastErr = err
+				if retryableErr.IsPermanent || !isRetryable(statusCode, nil) {
+					return nil, retryableErr
+				}
+
+				lastErr = retryableErr
 			} else {
 				if !isRetryable(0, err) {
 					return nil, err
 				}
 				lastErr = err
 			}
-		} else if resp != nil && resp.Error != "" {
-			return resp, nil
 		} else {
 			return resp, nil
 		}
 
 		if attempt < cfg.MaxRetries {
-			var retryAfter *time.Duration
-			if retryableErr, ok := lastErr.(*RetryableHTTPError); ok {
-				retryAfter = retryableErr.RetryAfter
-			}
-
-			delay := computeBackoff(attempt, cfg, retryAfter)
+			delay := computeBackoff(attempt, cfg, nil)
 
 			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			case <-time.After(delay):
-				// Continue
 			}
 		}
 	}
@@ -244,134 +161,150 @@ func (p *anthropicProvider) sendWithRetry(ctx context.Context, fn func(context.C
 
 // doSendMessage performs the actual message sending.
 func (p *anthropicProvider) doSendMessage(ctx context.Context, messages []Message, tools []ToolParam, toolResults []ToolResult, systemPrompt string, systemPromptSuffix string) (*Response, error) {
-	log.Debug("Sending message", "model", p.model)
+	log.Debug("Anthropic provider sending message", "model", p.model)
 
-	// Validate media before sending
 	if err := ValidateMessagesMedia(messages); err != nil {
 		return nil, err
 	}
 
-	// Universal normalization gateway
 	messages, tools, _ = NormalizeMessages(messages, tools, Capabilities{SupportsPromptCaching: true})
 
-	// Convert messages to SDK format (for baseline)
-	sdkMessages := make([]anthropic.MessageParam, 0, len(messages))
-	for _, msg := range messages {
-		contentBlocks := make([]anthropic.ContentBlockParamUnion, 0)
+	sdkMessages := p.buildMessages(messages, toolResults)
+	sdkTools := p.buildTools(tools)
 
-		if msg.Content != "" {
-			contentBlocks = append(contentBlocks, anthropic.ContentBlockParamUnion{
-				OfText: &anthropic.TextBlockParam{Text: msg.Content},
-			})
-		}
-
-		for _, tu := range msg.ToolUse {
-			contentBlocks = append(contentBlocks, anthropic.ContentBlockParamUnion{
-				OfToolUse: &anthropic.ToolUseBlockParam{
-					ID:    tu.ID,
-					Name:  tu.Name,
-					Input: tu.Input,
-				},
-			})
-		}
-
-		for _, tr := range msg.ToolResults {
-			contentBlocks = append(contentBlocks, anthropic.ContentBlockParamUnion{
-				OfToolResult: &anthropic.ToolResultBlockParam{
-					ToolUseID: tr.ToolUseID,
-					Content: []anthropic.ToolResultBlockParamContentUnion{
-						{OfText: &anthropic.TextBlockParam{Text: tr.Content}},
-					},
-					Type: "tool_result",
-				},
-			})
-		}
-
-		sdkMessages = append(sdkMessages, anthropic.MessageParam{
-			Role:    anthropic.MessageParamRole(msg.Role),
-			Content: contentBlocks,
-		})
-	}
-
-	// Add standalone tool results as user messages
-	for _, tr := range toolResults {
-		sdkMessages = append(sdkMessages, anthropic.MessageParam{
-			Role: "user",
-			Content: []anthropic.ContentBlockParamUnion{
-				{
-					OfToolResult: &anthropic.ToolResultBlockParam{
-						ToolUseID: tr.ToolUseID,
-						Content: []anthropic.ToolResultBlockParamContentUnion{
-							{OfText: &anthropic.TextBlockParam{Text: tr.Content}},
-						},
-						Type: "tool_result",
-					},
-				},
-			},
-		})
-	}
-
-	// Build JSON-compatible messages for DeepSeek override
-	sdkMessagesJSON := p.buildSDKMessagesJSON(messages, toolResults)
-
-	// Convert tools to SDK format
-	sdkTools := make([]anthropic.ToolUnionParam, 0, len(tools))
-	for i, t := range tools {
-		sdkTools = append(sdkTools, toolToSDK(t, i == len(tools)-1))
-	}
-
-	// Build request
 	maxTokens := p.maxTokens
 	if maxTokens == 0 {
 		maxTokens = 64000
 	}
-	body := anthropic.MessageNewParams{
-		Model:     anthropic.Model(p.model),
-		MaxTokens: int64(maxTokens),
+
+	reqBody := AnthropicRequest{
+		Model:     p.model,
+		Messages:  sdkMessages,
+		MaxTokens: maxTokens,
+		Tools:     sdkTools,
 	}
-	body.Messages = sdkMessages
+
 	if systemPrompt != "" || systemPromptSuffix != "" {
-		body.System = []anthropic.TextBlockParam{}
 		if systemPrompt != "" {
-			body.System = append(body.System, anthropic.TextBlockParam{
+			reqBody.System = append(reqBody.System, AnthropicContentBlock{
+				Type:         "text",
 				Text:         systemPrompt,
-				CacheControl: anthropic.NewCacheControlEphemeralParam(),
+				CacheControl: &AnthropicCacheControl{Type: "ephemeral"},
 			})
 		}
 		if systemPromptSuffix != "" {
-			body.System = append(body.System, anthropic.TextBlockParam{
+			reqBody.System = append(reqBody.System, AnthropicContentBlock{
+				Type: "text",
 				Text: systemPromptSuffix,
 			})
 		}
 	}
-	if len(sdkTools) > 0 {
-		body.Tools = sdkTools
+
+	url := fmt.Sprintf("%s/v1/messages", os.Getenv("ANTHROPIC_BASE_URL"))
+	headers := p.buildHeaders()
+
+	var anthropicResp AnthropicResponse
+	if err := p.client.Request(ctx, "POST", url, headers, reqBody, &anthropicResp); err != nil {
+		return nil, err
 	}
 
-	// Send request with JSON override for messages to ensure tool_result content is a string
-	resp, err := p.client.Messages.New(ctx, body, option.WithJSONSet("messages", sdkMessagesJSON))
-	if err != nil {
-		wrappedErr := wrapSDKError(err)
-		return nil, wrappedErr
+	return p.parseResponse(&anthropicResp)
+}
+
+// buildMessages converts api.Message slices to Anthropic format.
+func (p *anthropicProvider) buildMessages(messages []Message, toolResults []ToolResult) []AnthropicMessage {
+	sdkMessages := make([]AnthropicMessage, 0, len(messages)+len(toolResults))
+	for _, msg := range messages {
+		contentBlocks := make([]AnthropicContentBlock, 0)
+
+		if msg.Content != "" {
+			contentBlocks = append(contentBlocks, AnthropicContentBlock{
+				Type: "text",
+				Text: msg.Content,
+			})
+		}
+
+		for _, tu := range msg.ToolUse {
+			contentBlocks = append(contentBlocks, AnthropicContentBlock{
+				Type:  "tool_use",
+				ID:    tu.ID,
+				Name:  tu.Name,
+				Input: tu.Input,
+			})
+		}
+
+		for _, tr := range msg.ToolResults {
+			block := AnthropicContentBlock{
+				Type:      "tool_result",
+				ToolUseID: tr.ToolUseID,
+			}
+			block.SetContent(tr.Content)
+			if tr.IsError {
+				block.IsError = true
+			}
+			contentBlocks = append(contentBlocks, block)
+		}
+
+		sdkMessages = append(sdkMessages, AnthropicMessage{
+			Role:    msg.Role,
+			Content: contentBlocks,
+		})
 	}
 
-	// Convert response
+	for _, tr := range toolResults {
+		block := AnthropicContentBlock{
+			Type:      "tool_result",
+			ToolUseID: tr.ToolUseID,
+		}
+		block.SetContent(tr.Content)
+		if tr.IsError {
+			block.IsError = true
+		}
+		sdkMessages = append(sdkMessages, AnthropicMessage{
+			Role:    "user",
+			Content: []AnthropicContentBlock{block},
+		})
+	}
+
+	return sdkMessages
+}
+
+// buildTools converts api.ToolParam slices to Anthropic format.
+func (p *anthropicProvider) buildTools(tools []ToolParam) []AnthropicTool {
+	sdkTools := make([]AnthropicTool, 0, len(tools))
+	for i, t := range tools {
+		sdkTools = append(sdkTools, toolToSDK(t, i == len(tools)-1))
+	}
+	return sdkTools
+}
+
+// buildHeaders builds common Anthropic headers.
+func (p *anthropicProvider) buildHeaders() http.Header {
+	headers := http.Header{}
+	token := os.Getenv("ANTHROPIC_AUTH_TOKEN")
+	headers.Set("x-api-key", token)
+	headers.Set("Authorization", "Bearer "+token)
+	headers.Set("anthropic-version", "2023-06-01")
+	headers.Add("anthropic-beta", "prompt-caching-2024-07-31")
+
+	betas := os.Getenv("ANTHROPIC_BETAS")
+	if betas != "" {
+		for _, beta := range strings.Split(betas, ",") {
+			beta = strings.TrimSpace(beta)
+			if beta != "" {
+				headers.Add("anthropic-beta", beta)
+			}
+		}
+	}
+
+	return headers
+}
+
+// parseResponse converts an Anthropic response to api.Response.
+func (p *anthropicProvider) parseResponse(resp *AnthropicResponse) (*Response, error) {
 	response := &Response{
-		Model:      string(resp.Model),
-		StopReason: StopReason(string(resp.StopReason)),
-	}
-
-	if resp.Usage.InputTokens > 0 {
-		response.Usage.InputTokens = int(resp.Usage.InputTokens)
-	}
-	if resp.Usage.OutputTokens > 0 {
-		response.Usage.OutputTokens = int(resp.Usage.OutputTokens)
-	}
-	if resp.Usage.CacheReadInputTokens > 0 {
-		response.Usage.CacheReadInputTokens = int(resp.Usage.CacheReadInputTokens)
-	}
-	if resp.Usage.CacheCreationInputTokens > 0 {
-		response.Usage.CacheCreationInputTokens = int(resp.Usage.CacheCreationInputTokens)
+		Model:      resp.Model,
+		StopReason: StopReason(resp.StopReason),
 	}
 
 	for _, block := range resp.Content {
@@ -389,7 +322,9 @@ func (p *anthropicProvider) doSendMessage(ctx context.Context, messages []Messag
 			})
 		case "tool_use":
 			var input map[string]any
-			if err := json.Unmarshal(block.Input, &input); err != nil {
+			if inputVal, ok := block.Input.(map[string]any); ok {
+				input = inputVal
+			} else {
 				input = make(map[string]any)
 			}
 			response.Content = append(response.Content, ContentBlock{
@@ -398,23 +333,24 @@ func (p *anthropicProvider) doSendMessage(ctx context.Context, messages []Messag
 				ToolName:  block.Name,
 				ToolInput: input,
 			})
-		case "web_search_tool_result":
-			webSearchData := &WebSearchResultData{
-				ToolUseID: block.ToolUseID,
-			}
-			errResult := block.Content.AsResponseWebSearchToolResultError()
-			if errResult.ErrorCode != "" {
-				webSearchData.IsError = true
-				webSearchData.ErrorCode = string(errResult.ErrorCode)
-			}
-			response.Content = append(response.Content, ContentBlock{
-				Type:            "web_search_tool_result",
-				WebSearchResult: webSearchData,
-			})
 		}
 	}
 
+	response.Usage.InputTokens = resp.Usage.InputTokens
+	response.Usage.OutputTokens = resp.Usage.OutputTokens
+	response.Usage.CacheReadInputTokens = resp.Usage.CacheReadInputTokens
+	response.Usage.CacheCreationInputTokens = resp.Usage.CacheCreationInputTokens
+
 	return response, nil
+}
+
+// isPromptTooLongAnthropic returns true if the error indicates prompt too long.
+func isPromptTooLongAnthropic(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "prompt_too_long") || strings.Contains(msg, "context window exceeds limit")
 }
 
 // SendMessageStream sends a streaming message.
@@ -425,140 +361,74 @@ func (p *anthropicProvider) SendMessageStream(ctx context.Context, messages []Me
 	go func() {
 		defer close(blocksChan)
 
-		// Validate media before sending
+		log.Debug("Anthropic provider streaming message", "model", p.model)
+
 		if err := ValidateMessagesMedia(messages); err != nil {
 			result.Error = err.Error()
 			return
 		}
 
-		// Universal normalization gateway
 		messages, tools, _ = NormalizeMessages(messages, tools, Capabilities{SupportsPromptCaching: true})
 
-		// Convert messages to SDK format
-		sdkMessages := make([]anthropic.MessageParam, 0, len(messages))
-		for _, msg := range messages {
-			contentBlocks := make([]anthropic.ContentBlockParamUnion, 0)
+		sdkMessages := p.buildMessages(messages, toolResults)
+		sdkTools := p.buildTools(tools)
 
-			if msg.Content != "" {
-				contentBlocks = append(contentBlocks, anthropic.ContentBlockParamUnion{
-					OfText: &anthropic.TextBlockParam{Text: msg.Content},
-				})
-			}
-
-			for _, tu := range msg.ToolUse {
-				contentBlocks = append(contentBlocks, anthropic.ContentBlockParamUnion{
-					OfToolUse: &anthropic.ToolUseBlockParam{
-						ID:    tu.ID,
-						Name:  tu.Name,
-						Input: tu.Input,
-					},
-				})
-			}
-
-			for _, tr := range msg.ToolResults {
-				contentBlocks = append(contentBlocks, anthropic.ContentBlockParamUnion{
-					OfToolResult: &anthropic.ToolResultBlockParam{
-						ToolUseID: tr.ToolUseID,
-						Content: []anthropic.ToolResultBlockParamContentUnion{
-							{OfText: &anthropic.TextBlockParam{Text: tr.Content}},
-						},
-						Type: "tool_result",
-					},
-				})
-			}
-
-			sdkMessages = append(sdkMessages, anthropic.MessageParam{
-				Role:    anthropic.MessageParamRole(msg.Role),
-				Content: contentBlocks,
-			})
-		}
-
-		// Add standalone tool results as user messages
-		for _, tr := range toolResults {
-			sdkMessages = append(sdkMessages, anthropic.MessageParam{
-				Role: "user",
-				Content: []anthropic.ContentBlockParamUnion{
-					{
-						OfToolResult: &anthropic.ToolResultBlockParam{
-							ToolUseID: tr.ToolUseID,
-							Content: []anthropic.ToolResultBlockParamContentUnion{
-								{OfText: &anthropic.TextBlockParam{Text: tr.Content}},
-							},
-							Type: "tool_result",
-						},
-					},
-				},
-			})
-		}
-
-		// Build JSON-compatible messages for DeepSeek override
-		sdkMessagesJSON := p.buildSDKMessagesJSON(messages, toolResults)
-
-		// Convert tools to SDK format
-		sdkTools := make([]anthropic.ToolUnionParam, 0, len(tools))
-		for i, t := range tools {
-			sdkTools = append(sdkTools, toolToSDK(t, i == len(tools)-1))
-		}
-
-		// Build request
 		maxTokens := p.maxTokens
 		if maxTokens == 0 {
 			maxTokens = 64000
 		}
-		body := anthropic.MessageNewParams{
-			Model:     anthropic.Model(p.model),
-			MaxTokens: int64(maxTokens),
+
+		reqBody := AnthropicRequest{
+			Model:     p.model,
+			Messages:  sdkMessages,
+			MaxTokens: maxTokens,
+			Tools:     sdkTools,
+			Stream:    true,
 		}
-		body.Messages = sdkMessages
+
 		if systemPrompt != "" || systemPromptSuffix != "" {
-			body.System = []anthropic.TextBlockParam{}
 			if systemPrompt != "" {
-				body.System = append(body.System, anthropic.TextBlockParam{
+				reqBody.System = append(reqBody.System, AnthropicContentBlock{
+					Type:         "text",
 					Text:         systemPrompt,
-					CacheControl: anthropic.NewCacheControlEphemeralParam(),
+					CacheControl: &AnthropicCacheControl{Type: "ephemeral"},
 				})
 			}
 			if systemPromptSuffix != "" {
-				body.System = append(body.System, anthropic.TextBlockParam{
+				reqBody.System = append(reqBody.System, AnthropicContentBlock{
+					Type: "text",
 					Text: systemPromptSuffix,
 				})
 			}
 		}
-		if len(sdkTools) > 0 {
-			body.Tools = sdkTools
-		}
 
-		log.Debug("Starting streaming request", "model", p.model)
+		url := fmt.Sprintf("%s/v1/messages", os.Getenv("ANTHROPIC_BASE_URL"))
+		headers := p.buildHeaders()
 
 		if idleTimeout <= 0 {
 			idleTimeout = DefaultIdleTimeout
 		}
 
-		// Create stream
-		streamCtx, cancel := context.WithCancel(ctx)
-		defer cancel()
-
-		// Send request with JSON override for messages to ensure tool_result content is a string
-		stream := p.client.Messages.NewStreaming(streamCtx, body, option.WithJSONSet("messages", sdkMessagesJSON))
-
-		// Check for pre-stream error
-		if stream.Err() != nil {
-			preStreamErr := wrapSDKError(stream.Err())
-			log.Warn("Stream pre-error detected, falling back", "error", preStreamErr)
-			if isPromptTooLongError(preStreamErr) {
+		body, err := p.client.StreamRequest(ctx, "POST", url, headers, reqBody)
+		if err != nil {
+			var httpErr *HTTPError
+			if errors.As(err, &httpErr) {
+				result.IsPermanent = httpErr.StatusCode >= 400 && httpErr.StatusCode < 500 &&
+					httpErr.StatusCode != 429 && httpErr.StatusCode != 408 && httpErr.StatusCode != 409
+			}
+			result.Error = err.Error()
+			if isPromptTooLongAnthropic(err) {
 				result.ContextRejected = true
-				result.MaxTokensErr = categorizeMaxTokensError(p.model, 0, true)
+				result.MaxTokensErr = categorizeMaxTokensError(p.model, result.Usage.OutputTokens, true)
 			}
-			if retryableErr, ok := preStreamErr.(*RetryableHTTPError); ok {
-				result.IsPermanent = retryableErr.IsPermanent
-			}
-			result.Error = preStreamErr.Error()
 			return
 		}
+		defer body.Close()
 
 		acc := newStreamAccumulator()
 		hasMessageStart := false
 		hasMessageStop := false
+		scanner := NewSSEScanner(body)
 
 		idleTimer := time.NewTimer(idleTimeout)
 		defer idleTimer.Stop()
@@ -569,23 +439,19 @@ func (p *anthropicProvider) SendMessageStream(ctx context.Context, messages []Me
 		go func() {
 			select {
 			case <-idleTimer.C:
-				log.Warn("Idle timeout reached")
+				log.Warn("Anthropic: Idle timeout reached")
 				result.Error = "idle timeout"
-				cancel() // Cancel the stream context
+				body.Close()
 			case <-watchdogCtx.Done():
-				// Watchdog finished normally
 			}
 		}()
 
-	streamLoop:
 		for {
-			streamReady := stream.Next()
-
-			if !streamReady {
-				break streamLoop
+			data, ok := scanner.Next()
+			if !ok {
+				break
 			}
 
-			// Reset idle timer on every event
 			if !idleTimer.Stop() {
 				select {
 				case <-idleTimer.C:
@@ -594,184 +460,130 @@ func (p *anthropicProvider) SendMessageStream(ctx context.Context, messages []Me
 			}
 			idleTimer.Reset(idleTimeout)
 
-			event := stream.Current()
+			var event AnthropicStreamEvent
+			if err := json.Unmarshal([]byte(data), &event); err != nil {
+				log.Error("Anthropic: failed to unmarshal event", "error", err, "data", data)
+				continue
+			}
 
-			// Passthrough raw event
 			blocksChan <- StreamContentBlock{
 				Type:     "stream_event",
-				RawEvent: event.AsAny(),
+				RawEvent: event,
 			}
 
-			variant := event.AsAny()
-			switch e := variant.(type) {
-			case anthropic.MessageStartEvent:
+			switch event.Type {
+			case "message_start":
 				hasMessageStart = true
-				acc.setModel(string(e.Message.Model))
-				if e.Message.Usage.InputTokens > 0 {
+				if event.Message != nil {
+					acc.setModel(event.Message.Model)
 					acc.setUsage(Usage{
-						InputTokens:              int(e.Message.Usage.InputTokens),
-						CacheReadInputTokens:     int(e.Message.Usage.CacheReadInputTokens),
-						CacheCreationInputTokens: int(e.Message.Usage.CacheCreationInputTokens),
+						InputTokens:              event.Message.Usage.InputTokens,
+						CacheReadInputTokens:     event.Message.Usage.CacheReadInputTokens,
+						CacheCreationInputTokens: event.Message.Usage.CacheCreationInputTokens,
 					})
 				}
-				log.Debug("Stream: message_start")
 
-			case anthropic.ContentBlockStartEvent:
-				index := int(e.Index)
-				log.Debug("Stream: content_block_start", "index", index, "type", e.ContentBlock.Type)
-				switch e.ContentBlock.Type {
-				case "text":
-					acc.setBlockType(index, "text")
-				case "tool_use":
-					acc.setBlockType(index, "tool_use")
-					acc.blocks[index].ToolID = e.ContentBlock.ID
-					acc.blocks[index].ToolName = e.ContentBlock.Name
-				default:
-					acc.setBlockType(index, e.ContentBlock.Type)
+			case "content_block_start":
+				index := event.Index
+				if event.ContentBlock != nil {
+					acc.setBlockType(index, event.ContentBlock.Type)
+					if event.ContentBlock.Type == "tool_use" {
+						acc.blocks[index].ToolID = event.ContentBlock.ID
+						acc.blocks[index].ToolName = event.ContentBlock.Name
+					}
+					if event.ContentBlock.Type == "thinking" {
+						acc.setBlockType(index, "thinking")
+						acc.appendThinking(index, event.ContentBlock.Thinking)
+					}
 				}
 
-			case anthropic.ContentBlockDeltaEvent:
-				index := int(e.Index)
-				delta := e.Delta
-				if delta.Text != "" && acc.blocks[index].Type == "text" {
-					acc.appendText(index, delta.Text)
+			case "content_block_delta":
+				index := event.Index
+				if event.Delta != nil {
+					if event.Delta.Text != "" {
+						acc.appendText(index, event.Delta.Text)
+					}
+					if event.Delta.Thinking != "" {
+						acc.setBlockType(index, "thinking")
+						acc.appendThinking(index, event.Delta.Thinking)
+					}
+					if event.Delta.Signature != "" {
+						acc.appendSignature(index, event.Delta.Signature)
+					}
+					if event.Delta.PartialJSON != "" {
+						acc.appendToolInputJSON(index, event.Delta.PartialJSON)
+					}
 				}
-				if delta.Thinking != "" {
-					acc.appendThinking(index, delta.Thinking)
-				}
-				if delta.Signature != "" {
-					acc.appendSignature(index, delta.Signature)
-				}
-				if delta.PartialJSON != "" {
-					acc.appendToolInputJSON(index, delta.PartialJSON)
-					acc.finalizeToolInput(index)
-				}
-				log.Debug("Stream: content_block_delta", "index", index, "text", delta.Text)
 
-			case anthropic.ContentBlockStopEvent:
-				index := int(e.Index)
-				log.Debug("Stream: content_block_stop", "index", index)
+			case "content_block_stop":
+				index := event.Index
 				acc.finalizeToolInput(index)
 				acc.ensureBlock(index)
-				// Emit the completed block immediately to the channel for incremental processing
 				blocksChan <- StreamContentBlock{Block: acc.blocks[index]}
 
-			case anthropic.MessageDeltaEvent:
-				if e.Usage.InputTokens > 0 || e.Usage.OutputTokens > 0 {
+			case "message_delta":
+				if event.Usage != nil {
 					acc.setUsage(Usage{
-						InputTokens:              int(e.Usage.InputTokens),
-						OutputTokens:             int(e.Usage.OutputTokens),
-						CacheReadInputTokens:     int(e.Usage.CacheReadInputTokens),
-						CacheCreationInputTokens: int(e.Usage.CacheCreationInputTokens),
+						InputTokens:              event.Usage.InputTokens,
+						OutputTokens:             event.Usage.OutputTokens,
+						CacheReadInputTokens:     event.Usage.CacheReadInputTokens,
+						CacheCreationInputTokens: event.Usage.CacheCreationInputTokens,
 					})
 				}
-				if e.Delta.StopReason != "" {
-					acc.setStopReason(StopReason(e.Delta.StopReason))
+				if event.Delta != nil && event.Delta.StopReason != "" {
+					acc.setStopReason(StopReason(event.Delta.StopReason))
 				}
-				log.Debug("Stream: message_delta")
 
-			case anthropic.MessageStopEvent:
+			case "message_stop":
 				hasMessageStop = true
-				result.StreamComplete = true
-				log.Debug("Stream: message_stop")
 			}
 		}
 
-		// Check for stream errors
-		if stream.Err() != nil {
-			log.Warn("Stream error", "error", stream.Err())
-			if result.Error == "" {
-				result.Error = stream.Err().Error()
-			}
-			if isPromptTooLongError(stream.Err()) {
-				result.ContextRejected = true
-			}
+		if scanner.Err() != nil && result.Error == "" {
+			result.Error = scanner.Err().Error()
 		}
 
-		// Check if we need fallback
+		if isPromptTooLongAnthropic(errors.New(result.Error)) {
+			result.ContextRejected = true
+		}
+
 		shouldFallback := !hasMessageStart || !hasMessageStop || result.Error != ""
 		if shouldFallback {
-			log.Warn("Stream incomplete, triggering fallback", "hasMessageStart", hasMessageStart, "hasMessageStop", hasMessageStop, "error", result.Error)
+			log.Warn("Anthropic: stream incomplete, triggering fallback", "hasMessageStart", hasMessageStart, "hasMessageStop", hasMessageStop, "error", result.Error)
 		}
 
+		result.StreamComplete = hasMessageStop
 		result.Blocks = acc.getBlocks()
 		result.StopReason = acc.stopReason
 		result.Usage = acc.usage
 		result.Model = acc.getModel()
 
-		// Detect and categorize max_tokens scenarios
-		if result.StopReason == StopReasonMaxTokens && result.Error == "" {
+		if (result.StopReason == StopReasonMaxTokens || result.ContextRejected) && result.MaxTokensErr == nil {
 			result.MaxTokensErr = categorizeMaxTokensError(result.Model, result.Usage.OutputTokens, result.ContextRejected)
-		} else if result.ContextRejected && result.Error != "" {
-			result.MaxTokensErr = categorizeMaxTokensError(result.Model, 0, true)
 		}
 	}()
 
 	return blocksChan, result
 }
 
-// wrapSDKError wraps SDK errors to extract HTTP status code for retry logic.
-func wrapSDKError(err error) error {
-	if err == nil {
-		return nil
+// toolToSDK converts a ToolParam to an Anthropic tool definition.
+func toolToSDK(t ToolParam, isLast bool) AnthropicTool {
+	inputSchema := AnthropicInputSchema{
+		Type:        "object",
+		Properties:  t.InputSchema.Properties,
+		Required:    t.InputSchema.Required,
+		ExtraFields: t.InputSchema.ExtraFields,
 	}
 
-	var apiErr *anthropic.Error
-	if errors.As(err, &apiErr); apiErr != nil {
-		var retryAfter *time.Duration
-		if apiErr.Response != nil {
-			if retryAfterStr := apiErr.Response.Header.Get("Retry-After"); retryAfterStr != "" {
-				if seconds, parseErr := strconv.ParseFloat(retryAfterStr, 64); parseErr == nil {
-					ms := int64(seconds * 1000)
-					d := time.Duration(ms) * time.Millisecond
-					retryAfter = &d
-				}
-			}
-		}
-
-		isPermanent := apiErr.StatusCode >= 400 && apiErr.StatusCode < 500 &&
-			apiErr.StatusCode != 429 && apiErr.StatusCode != 408 && apiErr.StatusCode != 409
-		return &RetryableHTTPError{
-			StatusCode:  apiErr.StatusCode,
-			Message:     err.Error(),
-			IsPermanent: isPermanent,
-			RetryAfter:  retryAfter,
-		}
-	}
-
-	return err
-}
-
-// toolToSDK converts a ToolParam to an SDK ToolUnionParam.
-func toolToSDK(t ToolParam, isLast bool) anthropic.ToolUnionParam {
-	props := t.InputSchema.Properties
-	if props == nil {
-		props = make(map[string]any)
-	}
-	required := t.InputSchema.Required
-	if required == nil {
-		required = []string{}
-	}
-
-	inputSchema := anthropic.ToolInputSchemaParam{
-		Type:       constant.Object("object"),
-		Properties: props,
-		Required:   required,
-	}
-
-	if len(t.InputSchema.ExtraFields) > 0 {
-		inputSchema.ExtraFields = t.InputSchema.ExtraFields
-	}
-
-	tool := &anthropic.ToolParam{
+	tool := AnthropicTool{
 		Name:        t.Name,
-		Description: anthropic.String(t.Description),
+		Description: t.Description,
 		InputSchema: inputSchema,
 	}
 	if isLast {
-		tool.CacheControl = anthropic.NewCacheControlEphemeralParam()
+		tool.CacheControl = &AnthropicCacheControl{Type: "ephemeral"}
 	}
-	return anthropic.ToolUnionParam{OfTool: tool}
+	return tool
 }
 
 // modelMaxOutputTokens returns the max output tokens for a given model.
@@ -787,54 +599,8 @@ func modelMaxOutputTokens(model string) int {
 // categorizeMaxTokensError creates a MaxTokensError from streaming results.
 func categorizeMaxTokensError(model string, outputTokens int, contextRejected bool) *MaxTokensError {
 	maxOutputTokens := modelMaxOutputTokens(model)
-
 	if contextRejected {
-		return &MaxTokensError{
-			Category:        CategoryContextExhausted,
-			Model:           model,
-			OutputTokens:    outputTokens,
-			MaxOutputTokens: 0,
-		}
+		return &MaxTokensError{Category: CategoryContextExhausted, Model: model, OutputTokens: outputTokens}
 	}
-
-	if outputTokens >= maxOutputTokens {
-		return &MaxTokensError{
-			Category:        CategoryOutputCapHit,
-			Model:           model,
-			OutputTokens:    outputTokens,
-			MaxOutputTokens: maxOutputTokens,
-		}
-	}
-
-	return &MaxTokensError{
-		Category:        CategoryOutputCapHit,
-		Model:           model,
-		OutputTokens:    outputTokens,
-		MaxOutputTokens: maxOutputTokens,
-	}
-}
-
-// isPromptTooLongError checks if the given error indicates a context exhaustion.
-func isPromptTooLongError(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	var apiErr *anthropic.Error
-	if errors.As(err, &apiErr) && apiErr.StatusCode == 400 {
-		errMsg := strings.ToLower(err.Error())
-		if strings.Contains(errMsg, "prompt_too_long") || strings.Contains(errMsg, "context window exceeds limit") {
-			return true
-		}
-	}
-
-	var retryErr *RetryableHTTPError
-	if errors.As(err, &retryErr) && retryErr.StatusCode == 400 {
-		errMsg := strings.ToLower(retryErr.Message)
-		if strings.Contains(errMsg, "prompt_too_long") || strings.Contains(errMsg, "context window exceeds limit") {
-			return true
-		}
-	}
-
-	return false
+	return &MaxTokensError{Category: CategoryOutputCapHit, Model: model, OutputTokens: outputTokens, MaxOutputTokens: maxOutputTokens}
 }

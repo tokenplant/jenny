@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	anthropic "github.com/anthropics/anthropic-sdk-go"
 	"github.com/ipy/jenny/internal/api"
 	"github.com/ipy/jenny/internal/git"
 	"github.com/ipy/jenny/internal/log"
@@ -358,20 +357,20 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 			// Handle raw stream_event passthrough
 			if block.Type == "stream_event" && e.streamCfg.Enabled && e.streamCfg.IncludePartial {
 				// Capture message ID from MessageStartEvent
-				if msgStart, ok := block.RawEvent.(anthropic.MessageStartEvent); ok {
-					e.currentMessageID = string(msgStart.Message.ID)
+				if msgStart, ok := block.RawEvent.(api.AnthropicStreamEvent); ok && msgStart.Type == "message_start" && msgStart.Message != nil {
+					e.currentMessageID = msgStart.Message.ID
 					e.currentUsage = api.Usage{
-						InputTokens:              int(msgStart.Message.Usage.InputTokens),
-						CacheReadInputTokens:     int(msgStart.Message.Usage.CacheReadInputTokens),
-						CacheCreationInputTokens: int(msgStart.Message.Usage.CacheCreationInputTokens),
+						InputTokens:              msgStart.Message.Usage.InputTokens,
+						CacheReadInputTokens:     msgStart.Message.Usage.CacheReadInputTokens,
+						CacheCreationInputTokens: msgStart.Message.Usage.CacheCreationInputTokens,
 					}
 				}
 				// Capture stop_reason and usage from MessageDeltaEvent
-				if msgDelta, ok := block.RawEvent.(anthropic.MessageDeltaEvent); ok {
-					e.currentStopReason = string(msgDelta.Delta.StopReason)
+				if msgDelta, ok := block.RawEvent.(api.AnthropicStreamEvent); ok && msgDelta.Type == "message_delta" && msgDelta.Delta != nil {
+					e.currentStopReason = msgDelta.Delta.StopReason
 					e.currentStopSequence = msgDelta.Delta.StopSequence
-					if msgDelta.Usage.OutputTokens > 0 {
-						e.currentUsage.OutputTokens = int(msgDelta.Usage.OutputTokens)
+					if msgDelta.Usage != nil && msgDelta.Usage.OutputTokens > 0 {
+						e.currentUsage.OutputTokens = msgDelta.Usage.OutputTokens
 					}
 				}
 				// Transform SDK event to minimal representation (AC1: no bloated zero-value fields)

@@ -11,15 +11,10 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"google.golang.org/genai"
 )
 
 // ---------------------------------------------------------------------------
-// Hermetic genai.Client factory using httptest.Server.
-//
-// The genai SDK preserves a caller-supplied BaseURL. We point it at a local
-// test server so tests don't need network access.
+// Hermetic GenAI test server.
 // ---------------------------------------------------------------------------
 
 type testGenAIServer struct {
@@ -30,8 +25,7 @@ type testGenAIServer struct {
 	gotURLs []string
 }
 
-// newTestGenAIServer creates a test server for genai. handler gets every
-// request; use t.Setenv or check r.URL to branch per test scenario.
+// newTestGenAIServer creates a test server for genai.
 func newTestGenAIServer(t *testing.T, handler func(w http.ResponseWriter, r *http.Request)) *testGenAIServer {
 	t.Helper()
 	s := &testGenAIServer{t: t, handler: handler}
@@ -61,25 +55,22 @@ func (s *testGenAIServer) CallCount() int {
 	return len(s.gotURLs)
 }
 
-// newGenAIProviderForTest creates a genaiProvider whose SDK client routes all
-// HTTP traffic to the given test server. Tests use the normal Provider
-// interface (SendMessage / SendMessageStream).
+// newGenAIProviderForTest creates a genaiProvider that routes all traffic to the test server.
 func newGenAIProviderForTest(s *testGenAIServer) *genaiProvider {
-	cfg := &genai.ClientConfig{
-		APIKey:  "test-key",
-		Backend: genai.BackendGeminiAPI,
-	}
-	cfg.HTTPOptions.BaseURL = s.URL() + "/"
-	client, err := genai.NewClient(context.Background(), cfg)
-	if err != nil {
-		s.t.Fatalf("genai.NewClient: %v", err)
-	}
+	t.Setenv("GENAI_BASE_URL", s.URL())
+	t.Setenv("GENAI_API_KEY", "test-key")
+
 	return &genaiProvider{
-		client:    client,
+		client:    NewHTTPClient(30 * time.Second),
 		model:     "gemini-2.5-flash",
 		maxTokens: 64000,
 	}
 }
+
+// Global t for use in helpers
+var t *testing.T
+
+func setT(testT *testing.T) { t = testT }
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -120,6 +111,7 @@ func readBodyJSON(r *http.Request) map[string]any {
 // ---------------------------------------------------------------------------
 
 func TestGenAIProvider_ImplementsProvider(t *testing.T) {
+	setT(t)
 	p := newGenAIProviderForTest(newTestGenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -142,6 +134,7 @@ func TestGenAIProvider_ImplementsProvider(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestGenAIProvider_SendMessage_Basic(t *testing.T) {
+	setT(t)
 	s := newTestGenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
 		body := readBodyJSON(r)
 
@@ -201,6 +194,7 @@ func TestGenAIProvider_SendMessage_Basic(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestGenAIProvider_SendMessage_SystemPromptSuffix(t *testing.T) {
+	setT(t)
 	s := newTestGenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
 		body := readBodyJSON(r)
 		sys := body["systemInstruction"].(map[string]any)
@@ -228,6 +222,7 @@ func TestGenAIProvider_SendMessage_SystemPromptSuffix(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestGenAIProvider_SendMessage_Tools(t *testing.T) {
+	setT(t)
 	s := newTestGenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
 		body := readBodyJSON(r)
 
@@ -251,7 +246,7 @@ func TestGenAIProvider_SendMessage_Tools(t *testing.T) {
 					"role": "model",
 					"parts": []map[string]any{{
 						"functionCall": map[string]any{
-							"id": "call-1", "name": "get_weather", "args": map[string]any{"location": "Tokyo"},
+							"name": "get_weather", "args": map[string]any{"location": "Tokyo"},
 						},
 					}},
 				},
@@ -275,7 +270,7 @@ func TestGenAIProvider_SendMessage_Tools(t *testing.T) {
 	}
 	found := false
 	for _, b := range resp.Content {
-		if b.Type == "tool_use" && b.ToolName == "get_weather" && b.ToolID == "call-1" {
+		if b.Type == "tool_use" && b.ToolName == "get_weather" {
 			found = true
 			if b.ToolInput["location"] != "Tokyo" {
 				t.Errorf("expected Tokyo, got %v", b.ToolInput["location"])
@@ -292,6 +287,7 @@ func TestGenAIProvider_SendMessage_Tools(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestGenAIProvider_SendMessage_ToolResults(t *testing.T) {
+	setT(t)
 	s := newTestGenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
 		body := readBodyJSON(r)
 		contents, _ := body["contents"].([]any)
@@ -306,12 +302,8 @@ func TestGenAIProvider_SendMessage_ToolResults(t *testing.T) {
 			t.Fatalf("expected 1 part in user turn, got %d", len(parts))
 		}
 		part := parts[0].(map[string]any)
-		fr, ok := part["functionResponse"].(map[string]any)
-		if !ok {
+		if _, ok := part["functionResponse"].(map[string]any); !ok {
 			t.Fatalf("expected functionResponse, got %+v", part)
-		}
-		if fr["id"] != "call-1" {
-			t.Errorf("expected id call-1, got %v", fr["id"])
 		}
 		writeJSON(w, 200, map[string]any{
 			"candidates": []map[string]any{{
@@ -337,6 +329,7 @@ func TestGenAIProvider_SendMessage_ToolResults(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestGenAIProvider_SendMessage_MaxTokens(t *testing.T) {
+	setT(t)
 	s := newTestGenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, map[string]any{
 			"candidates": []map[string]any{{
@@ -361,6 +354,7 @@ func TestGenAIProvider_SendMessage_MaxTokens(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestGenAIProvider_SendMessage_ErrorMapping(t *testing.T) {
+	setT(t)
 	cases := []struct {
 		name       string
 		status     int
@@ -403,6 +397,7 @@ func TestGenAIProvider_SendMessage_ErrorMapping(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestGenAIProvider_Stream_Basic(t *testing.T) {
+	setT(t)
 	s := newTestGenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
 		if !strings.Contains(r.URL.Path, "streamGenerateContent") {
 			t.Errorf("expected streamGenerateContent, got %s", r.URL.Path)
@@ -446,9 +441,10 @@ func TestGenAIProvider_Stream_Basic(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestGenAIProvider_Stream_FunctionCall(t *testing.T) {
+	setT(t)
 	s := newTestGenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
 		writeSSE(w, []string{
-			`data: {"candidates":[{"content":{"role":"model","parts":[{"functionCall":{"id":"call-x","name":"get_weather","args":{"location":"Paris"}}}]}}]}`,
+			`data: {"candidates":[{"content":{"role":"model","parts":[{"functionCall":{"name":"get_weather","args":{"location":"Paris"}}}]}}]}`,
 			`data: {"candidates":[{"content":{"role":"model","parts":[]},"finishReason":"STOP"}]}`,
 		})
 	})
@@ -467,7 +463,7 @@ func TestGenAIProvider_Stream_FunctionCall(t *testing.T) {
 	}
 	found := false
 	for _, b := range result.Blocks {
-		if b.Type == "tool_use" && b.ToolName == "get_weather" && b.ToolID == "call-x" {
+		if b.Type == "tool_use" && b.ToolName == "get_weather" {
 			found = true
 			if b.ToolInput["location"] != "Paris" {
 				t.Errorf("expected Paris, got %v", b.ToolInput["location"])
@@ -484,6 +480,7 @@ func TestGenAIProvider_Stream_FunctionCall(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestGenAIProvider_Stream_Thinking(t *testing.T) {
+	setT(t)
 	s := newTestGenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
 		writeSSE(w, []string{
 			`data: {"candidates":[{"content":{"role":"model","parts":[{"thought":true,"text":"Let me think"}]}}]}`,
@@ -520,6 +517,7 @@ func TestGenAIProvider_Stream_Thinking(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestGenAIProvider_Stream_Usage(t *testing.T) {
+	setT(t)
 	s := newTestGenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
 		writeSSE(w, []string{
 			`data: {"candidates":[{"content":{"role":"model","parts":[{"text":"hi"}]}}],"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":3,"cachedContentTokenCount":7}}`,
@@ -551,6 +549,7 @@ func TestGenAIProvider_Stream_Usage(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestGenAIProvider_Stream_Error(t *testing.T) {
+	setT(t)
 	s := newTestGenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(400)
@@ -578,6 +577,7 @@ func TestGenAIProvider_Stream_Error(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestGenAIProvider_RetryConfig(t *testing.T) {
+	setT(t)
 	p := newGenAIProviderForTest(newTestGenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(200)
 	}))

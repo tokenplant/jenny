@@ -208,13 +208,8 @@ func TestToolToSDK_WebSearchMaxUses(t *testing.T) {
 
 	sdkTool := toolToSDK(webSearchTool, false)
 
-	// Verify it uses OfTool variant (universal path for web_search)
-	if sdkTool.OfTool == nil {
-		t.Fatal("expected OfTool to be non-nil for web_search")
-	}
-
 	// Verify input_schema is present
-	if sdkTool.OfTool.InputSchema.Properties == nil {
+	if sdkTool.InputSchema.Properties == nil {
 		t.Fatal("expected input_schema.Properties to be non-nil")
 	}
 }
@@ -233,12 +228,9 @@ func TestToolToSDK_GenericTool(t *testing.T) {
 
 	sdkTool := toolToSDK(tool, false)
 
-	// Verify it uses OfTool variant
-	if sdkTool.OfTool == nil {
-		t.Fatal("expected OfTool to be non-nil for generic tool")
-	}
-	if sdkTool.OfWebSearchTool20250305 != nil {
-		t.Error("expected OfWebSearchTool20250305 to be nil for generic tool")
+	// Verify name and description
+	if sdkTool.Name != "read" {
+		t.Errorf("expected name 'read', got %q", sdkTool.Name)
 	}
 }
 
@@ -257,12 +249,9 @@ func TestToolToSDK_WebSearchWithoutMaxUses(t *testing.T) {
 
 	sdkTool := toolToSDK(tool, false)
 
-	// Verify it uses OfTool variant (not OfWebSearchTool20250305)
-	if sdkTool.OfTool == nil {
-		t.Fatal("expected OfTool to be non-nil for web_search without MaxUses")
-	}
-	if sdkTool.OfWebSearchTool20250305 != nil {
-		t.Error("expected OfWebSearchTool20250305 to be nil for web_search without MaxUses")
+	// Verify input_schema is present
+	if sdkTool.InputSchema.Properties == nil {
+		t.Fatal("expected input_schema.Properties to be non-nil")
 	}
 }
 
@@ -994,21 +983,17 @@ func TestToolToSDK_ExtraFields(t *testing.T) {
 
 	sdkTool := toolToSDK(tool, false)
 
-	if sdkTool.OfTool == nil {
-		t.Fatal("expected OfTool to be non-nil")
-	}
-
 	// Verify ExtraFields are populated on the SDK param
-	if len(sdkTool.OfTool.InputSchema.ExtraFields) != 2 {
-		t.Errorf("expected 2 extra fields, got %d", len(sdkTool.OfTool.InputSchema.ExtraFields))
+	if len(sdkTool.InputSchema.ExtraFields) != 2 {
+		t.Errorf("expected 2 extra fields, got %d", len(sdkTool.InputSchema.ExtraFields))
 	}
 
-	if _, ok := sdkTool.OfTool.InputSchema.ExtraFields["$defs"]; !ok {
+	if _, ok := sdkTool.InputSchema.ExtraFields["$defs"]; !ok {
 		t.Error("expected $defs to be present in ExtraFields")
 	}
 
 	// Marshal to JSON to ensure it's serialized correctly
-	data, err := json.Marshal(sdkTool.OfTool)
+	data, err := json.Marshal(sdkTool)
 	if err != nil {
 		t.Fatalf("failed to marshal tool: %v", err)
 	}
@@ -1047,11 +1032,7 @@ func TestToolToSDK_EmptyProperties(t *testing.T) {
 
 	sdkTool := toolToSDK(tool, false)
 
-	if sdkTool.OfTool == nil {
-		t.Fatal("expected OfTool to be non-nil")
-	}
-
-	data, err := json.Marshal(sdkTool.OfTool)
+	data, err := json.Marshal(sdkTool)
 	if err != nil {
 		t.Fatalf("failed to marshal tool: %v", err)
 	}

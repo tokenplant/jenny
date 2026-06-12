@@ -5,22 +5,20 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"maps"
+	"fmt"
+	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/ipy/jenny/internal/log"
-	"github.com/openai/openai-go/v3"
-	"github.com/openai/openai-go/v3/option"
-	"github.com/openai/openai-go/v3/packages/param"
-	"github.com/openai/openai-go/v3/shared"
 )
 
-// openAIProvider implements the Provider interface using the OpenAI Go SDK.
+// openAIProvider implements the Provider interface using a lightweight HTTP client.
 type openAIProvider struct {
-	client openai.Client
-	model string
-	maxTokens  int
+	client      *HTTPClient
+	model       string
+	maxTokens   int
 	retryConfig RetryConfig
 }
 
@@ -44,28 +42,17 @@ func newOpenAIProvider(model string) (*openAIProvider, error) {
 	}
 
 	wireAPI := os.Getenv("OPENAI_WIRE_API")
-	if wireAPI == "" {
-		wireAPI = "chat"
-	}
 	if wireAPI == "responses" {
 		return nil, errors.New("OpenAI Responses API not yet supported; use OPENAI_WIRE_API=chat or unset")
 	}
 
-	opts := []option.RequestOption{
-		option.WithBaseURL(baseURL),
-		option.WithAPIKey(apiKey),
-		// Disable SDK-level retry — we handle retries via sendWithRetry like Anthropic
-		option.WithMaxRetries(0),
+	timeout := ResolveTimeout(os.Getenv("API_TIMEOUT_MS"))
+	if timeout <= 0 {
+		timeout = 120 * time.Second
 	}
-
-	if timeout := ResolveTimeout(os.Getenv("API_TIMEOUT_MS")); timeout > 0 {
-		opts = append(opts, option.WithRequestTimeout(timeout))
-	}
-
-	client := openai.NewClient(opts...)
 
 	return &openAIProvider{
-		client:      client,
+		client:      NewHTTPClient(timeout),
 		model:       model,
 		maxTokens:   64000,
 		retryConfig: DefaultRetryConfig(),
@@ -118,9 +105,9 @@ func (p *openAIProvider) sendWithRetry(ctx context.Context, fn func(context.Cont
 		resp, err := fn(ctx)
 
 		if err != nil {
-			var apiErr *openai.Error
-			if errors.As(err, &apiErr); apiErr != nil {
-				statusCode := apiErr.StatusCode
+			var httpErr *HTTPError
+			if errors.As(err, &httpErr) {
+				statusCode := httpErr.StatusCode
 
 				if isBackground && statusCode == StatusProxyError {
 					return nil, &CannotRetryError{
@@ -141,10 +128,10 @@ func (p *openAIProvider) sendWithRetry(ctx context.Context, fn func(context.Cont
 					consecutive529 = 0
 				}
 
-				isPermanent := apiErr.StatusCode >= 400 && apiErr.StatusCode < 500 &&
-					apiErr.StatusCode != 429 && apiErr.StatusCode != 408 && apiErr.StatusCode != 409
+				isPermanent := statusCode >= 400 && statusCode < 500 &&
+					statusCode != 429 && statusCode != 408 && statusCode != 409
 				retryableErr := &RetryableHTTPError{
-					StatusCode:  apiErr.StatusCode,
+					StatusCode:  statusCode,
 					Message:     err.Error(),
 					IsPermanent: isPermanent,
 				}
@@ -187,114 +174,115 @@ func (p *openAIProvider) doSendMessage(ctx context.Context, messages []Message, 
 
 	messages, tools, _ = NormalizeMessages(messages, tools, Capabilities{SupportsPromptCaching: false})
 
-	// Concatenate both system prompt parts for OpenAI (no separate cache control)
 	fullSystemPrompt := systemPrompt
 	if systemPromptSuffix != "" {
 		fullSystemPrompt = systemPrompt + "\n\n" + systemPromptSuffix
 	}
 	sdkMessages := p.buildMessages(messages, toolResults, fullSystemPrompt)
 
-	var sdkTools []openai.ChatCompletionToolUnionParam
+	var sdkTools []OpenAITool
 	if len(tools) > 0 {
 		sdkTools = p.buildTools(tools)
 	}
 
-	maxTokens := p.maxTokens
+	maxTokens := int64(p.maxTokens)
 	if maxTokens == 0 {
 		maxTokens = 64000
 	}
 
-	params := openai.ChatCompletionNewParams{
-		Model:               shared.ChatModel(p.model),
+	reqBody := OpenAIRequest{
+		Model:               p.model,
 		Messages:            sdkMessages,
-		MaxCompletionTokens: param.NewOpt(int64(maxTokens)),
+		MaxCompletionTokens: &maxTokens,
+		Tools:               sdkTools,
 	}
 
-	if len(sdkTools) > 0 {
-		params.Tools = sdkTools
-	}
+	url := fmt.Sprintf("%s/chat/completions", os.Getenv("OPENAI_BASE_URL"))
+	headers := http.Header{}
+	headers.Set("Authorization", fmt.Sprintf("Bearer %s", os.Getenv("OPENAI_API_KEY")))
 
-	resp, err := p.client.Chat.Completions.New(ctx, params)
-	if err != nil {
+	var openAIResp OpenAIResponse
+	if err := p.client.Request(ctx, "POST", url, headers, reqBody, &openAIResp); err != nil {
 		return nil, err
 	}
 
-	return p.parseResponse(resp)
+	return p.parseResponse(&openAIResp)
 }
 
-// buildMessages converts api.Message slices to OpenAI SDK message format.
-func (p *openAIProvider) buildMessages(messages []Message, toolResults []ToolResult, systemPrompt string) []openai.ChatCompletionMessageParamUnion {
-	var sdkMessages []openai.ChatCompletionMessageParamUnion
+// buildMessages converts api.Message slices to OpenAI format.
+func (p *openAIProvider) buildMessages(messages []Message, toolResults []ToolResult, systemPrompt string) []OpenAIMessage {
+	var sdkMessages []OpenAIMessage
 
 	if systemPrompt != "" {
-		sdkMessages = append(sdkMessages, openai.SystemMessage(systemPrompt))
+		sdkMsg := OpenAIMessage{Role: "system"}
+		sdkMsg.SetContent(systemPrompt)
+		sdkMessages = append(sdkMessages, sdkMsg)
 	}
 
 	for _, msg := range messages {
 		switch msg.Role {
 		case "user":
 			if msg.Content != "" {
-				sdkMessages = append(sdkMessages, openai.UserMessage(msg.Content))
+				sdkMsg := OpenAIMessage{Role: "user"}
+				sdkMsg.SetContent(msg.Content)
+				sdkMessages = append(sdkMessages, sdkMsg)
 			}
 
 		case "assistant":
+			sdkMsg := OpenAIMessage{Role: "assistant"}
+			sdkMsg.SetContent(msg.Content)
 			if len(msg.ToolUse) > 0 {
-				var msg2 openai.ChatCompletionAssistantMessageParam
-				msg2.Role = "assistant"
-				msg2.ToolCalls = make([]openai.ChatCompletionMessageToolCallUnionParam, 0, len(msg.ToolUse))
+				sdkMsg.ToolCalls = make([]OpenAIToolCall, 0, len(msg.ToolUse))
 				for _, tu := range msg.ToolUse {
 					inputJSON, _ := json.Marshal(tu.Input)
-					msg2.ToolCalls = append(msg2.ToolCalls, openai.ChatCompletionMessageToolCallUnionParam{
-						OfFunction: &openai.ChatCompletionMessageFunctionToolCallParam{
-							ID: tu.ID,
-							Function: openai.ChatCompletionMessageFunctionToolCallFunctionParam{
-								Name:      tu.Name,
-								Arguments: string(inputJSON),
-							},
+					sdkMsg.ToolCalls = append(sdkMsg.ToolCalls, OpenAIToolCall{
+						ID:   tu.ID,
+						Type: "function",
+						Function: OpenAIFunctionCall{
+							Name:      tu.Name,
+							Arguments: string(inputJSON),
 						},
 					})
 				}
-				sdkMessages = append(sdkMessages, openai.ChatCompletionMessageParamUnion{
-					OfAssistant: &msg2,
-				})
-			} else if msg.Content != "" {
-				sdkMessages = append(sdkMessages, openai.AssistantMessage(msg.Content))
 			}
+			sdkMessages = append(sdkMessages, sdkMsg)
 		}
 	}
 
 	for _, tr := range toolResults {
-		sdkMessages = append(sdkMessages, openai.ToolMessage(tr.Content, tr.ToolUseID))
+		sdkMsg := OpenAIMessage{Role: "tool", ToolCallID: tr.ToolUseID}
+		sdkMsg.SetContent(tr.Content)
+		sdkMessages = append(sdkMessages, sdkMsg)
 	}
 
 	for _, msg := range messages {
 		for _, tr := range msg.ToolResults {
-			sdkMessages = append(sdkMessages, openai.ToolMessage(tr.Content, tr.ToolUseID))
+			sdkMsg := OpenAIMessage{Role: "tool", ToolCallID: tr.ToolUseID}
+			sdkMsg.SetContent(tr.Content)
+			sdkMessages = append(sdkMessages, sdkMsg)
 		}
 	}
 
 	return sdkMessages
 }
 
-// buildTools converts api.ToolParam slices to OpenAI SDK tools format.
-func (p *openAIProvider) buildTools(tools []ToolParam) []openai.ChatCompletionToolUnionParam {
-	sdkTools := make([]openai.ChatCompletionToolUnionParam, 0, len(tools))
+// buildTools converts api.ToolParam slices to OpenAI format.
+func (p *openAIProvider) buildTools(tools []ToolParam) []OpenAITool {
+	sdkTools := make([]OpenAITool, 0, len(tools))
 	for _, t := range tools {
-		schema := p.buildInputSchema(t.InputSchema)
-		sdkTools = append(sdkTools, openai.ChatCompletionToolUnionParam{
-			OfFunction: &openai.ChatCompletionFunctionToolParam{
-				Function: openai.FunctionDefinitionParam{
-					Name:        t.Name,
-					Description: param.NewOpt(t.Description),
-					Parameters:  schema,
-				},
+		sdkTools = append(sdkTools, OpenAITool{
+			Type: "function",
+			Function: OpenAIFunction{
+				Name:        t.Name,
+				Description: t.Description,
+				Parameters:  p.buildInputSchema(t.InputSchema),
 			},
 		})
 	}
 	return sdkTools
 }
 
-// buildInputSchema converts ToolInputSchema to OpenAI SDK parameters format.
+// buildInputSchema converts ToolInputSchema to OpenAI parameters format.
 func (p *openAIProvider) buildInputSchema(schema ToolInputSchema) map[string]any {
 	result := map[string]any{
 		"type": "object",
@@ -308,13 +296,15 @@ func (p *openAIProvider) buildInputSchema(schema ToolInputSchema) map[string]any
 		result["required"] = schema.Required
 	}
 
-	maps.Copy(result, schema.ExtraFields)
+	for k, v := range schema.ExtraFields {
+		result[k] = v
+	}
 
 	return result
 }
 
-// parseResponse converts an OpenAI SDK response to api.Response.
-func (p *openAIProvider) parseResponse(resp *openai.ChatCompletion) (*Response, error) {
+// parseResponse converts an OpenAI response to api.Response.
+func (p *openAIProvider) parseResponse(resp *OpenAIResponse) (*Response, error) {
 	response := &Response{
 		Model: resp.Model,
 	}
@@ -336,46 +326,47 @@ func (p *openAIProvider) parseResponse(resp *openai.ChatCompletion) (*Response, 
 		response.StopReason = StopReason(choice.FinishReason)
 	}
 
-	// Extract reasoning_content from raw JSON (not in SDK types)
-	if reasoning := extractReasoningFromJSON(choice.Message.RawJSON()); reasoning != "" {
+	if choice.Message.ReasoningContent != "" {
 		response.Content = append(response.Content, ContentBlock{
 			Type:     "thinking",
-			Thinking: reasoning,
+			Thinking: choice.Message.ReasoningContent,
 		})
 	}
 
-	if choice.Message.Content != "" && choice.Message.Content != "null" {
+	if content := choice.Message.GetContent(); content != "" {
 		response.Content = append(response.Content, ContentBlock{
 			Type: "text",
-			Text: choice.Message.Content,
+			Text: content,
 		})
 	}
 
 	for _, tc := range choice.Message.ToolCalls {
-		fn := tc.AsFunction()
 		var input map[string]any
-		if fn.Function.Arguments != "" {
-			json.Unmarshal([]byte(fn.Function.Arguments), &input)
+		if tc.Function.Arguments != "" {
+			json.Unmarshal([]byte(tc.Function.Arguments), &input)
 		}
 		response.Content = append(response.Content, ContentBlock{
 			Type:      "tool_use",
 			ToolID:    tc.ID,
-			ToolName:  fn.Function.Name,
+			ToolName:  tc.Function.Name,
 			ToolInput: input,
 		})
 	}
 
-	if resp.Usage.PromptTokens > 0 {
-		response.Usage.InputTokens = int(resp.Usage.PromptTokens)
-	}
-	if resp.Usage.CompletionTokens > 0 {
-		response.Usage.OutputTokens = int(resp.Usage.CompletionTokens)
-	}
-	if resp.Usage.PromptTokensDetails.CachedTokens > 0 {
-		response.Usage.CacheReadInputTokens = int(resp.Usage.PromptTokensDetails.CachedTokens)
-	}
+	response.Usage.InputTokens = resp.Usage.PromptTokens
+	response.Usage.OutputTokens = resp.Usage.CompletionTokens
+	response.Usage.CacheReadInputTokens = resp.Usage.PromptTokensDetails.CachedTokens
 
 	return response, nil
+}
+
+// isPromptTooLongOpenAI returns true if the error indicates prompt too long.
+func isPromptTooLongOpenAI(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "prompt_too_long") || strings.Contains(msg, "context window exceeds limit")
 }
 
 // SendMessageStream sends a streaming message.
@@ -396,45 +387,56 @@ func (p *openAIProvider) SendMessageStream(ctx context.Context, messages []Messa
 		}
 		sdkMessages := p.buildMessages(messages, toolResults, fullSystemPrompt)
 
-		var sdkTools []openai.ChatCompletionToolUnionParam
+		var sdkTools []OpenAITool
 		if len(tools) > 0 {
 			sdkTools = p.buildTools(tools)
 		}
 
-		maxTokens := p.maxTokens
+		maxTokens := int64(p.maxTokens)
 		if maxTokens == 0 {
 			maxTokens = 64000
 		}
 
-		params := openai.ChatCompletionNewParams{
-			Model:               shared.ChatModel(p.model),
+		reqBody := OpenAIRequest{
+			Model:               p.model,
 			Messages:            sdkMessages,
-			MaxCompletionTokens: param.NewOpt(int64(maxTokens)),
-			StreamOptions: openai.ChatCompletionStreamOptionsParam{
-				IncludeUsage: param.NewOpt(true),
-			},
+			MaxCompletionTokens: &maxTokens,
+			Tools:               sdkTools,
+			Stream:              true,
+			StreamOptions:       &OpenAIStreamOptions{IncludeUsage: true},
 		}
 
-		if len(sdkTools) > 0 {
-			params.Tools = sdkTools
-		}
+		url := fmt.Sprintf("%s/chat/completions", os.Getenv("OPENAI_BASE_URL"))
+		headers := http.Header{}
+		headers.Set("Authorization", fmt.Sprintf("Bearer %s", os.Getenv("OPENAI_API_KEY")))
 
 		if idleTimeout <= 0 {
 			idleTimeout = DefaultIdleTimeout
 		}
 
-		streamCtx, cancel := context.WithCancel(ctx)
-		defer cancel()
-
-		stream := p.client.Chat.Completions.NewStreaming(streamCtx, params)
-
-		if stream.Err() != nil {
-			result.Error = stream.Err().Error()
+		body, err := p.client.StreamRequest(ctx, "POST", url, headers, reqBody)
+		if err != nil {
+			var httpErr *HTTPError
+			if errors.As(err, &httpErr) {
+				result.IsPermanent = httpErr.StatusCode >= 400 && httpErr.StatusCode < 500 &&
+					httpErr.StatusCode != 429 && httpErr.StatusCode != 408 && httpErr.StatusCode != 409
+			}
+			result.Error = err.Error()
+			if isPromptTooLongOpenAI(err) {
+				result.ContextRejected = true
+				result.MaxTokensErr = &MaxTokensError{
+					Category:     CategoryContextExhausted,
+					Model:        p.model,
+					OutputTokens: result.Usage.OutputTokens,
+				}
+			}
 			return
 		}
+		defer body.Close()
 
 		acc := newOpenAIStreamAccumulator()
 		hasStopReason := false
+		scanner := NewSSEScanner(body)
 
 		idleTimer := time.NewTimer(idleTimeout)
 		defer idleTimer.Stop()
@@ -447,19 +449,16 @@ func (p *openAIProvider) SendMessageStream(ctx context.Context, messages []Messa
 			case <-idleTimer.C:
 				log.Warn("OpenAI: Idle timeout reached")
 				result.Error = "idle timeout"
-				cancel()
+				body.Close()
 			case <-watchdogCtx.Done():
 			}
 		}()
 
 		for {
-			streamReady := stream.Next()
-
-			if !streamReady {
+			data, ok := scanner.Next()
+			if !ok {
 				break
 			}
-
-			chunk := stream.Current()
 
 			if !idleTimer.Stop() {
 				select {
@@ -469,15 +468,36 @@ func (p *openAIProvider) SendMessageStream(ctx context.Context, messages []Messa
 			}
 			idleTimer.Reset(idleTimeout)
 
-			hasStopReason = p.processStreamChunk(chunk, acc, blocksChan, result) || hasStopReason
+			var chunk OpenAIStreamChunk
+			if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+				log.Error("OpenAI: failed to unmarshal chunk", "error", err, "data", data)
+				continue
+			}
+
+			hasStopReason = p.processStreamChunk(&chunk, acc, blocksChan, result) || hasStopReason
 		}
 
-		if stream.Err() != nil && result.Error == "" {
-			result.Error = stream.Err().Error()
+		if scanner.Err() != nil && result.Error == "" {
+			result.Error = scanner.Err().Error()
+		}
+
+		if isPromptTooLongOpenAI(errors.New(result.Error)) {
+			result.ContextRejected = true
 		}
 
 		if !hasStopReason && result.Error == "" {
 			result.Error = "stream incomplete: no stop reason"
+		}
+
+		if (result.StopReason == StopReasonMaxTokens || result.ContextRejected) && result.MaxTokensErr == nil {
+			result.MaxTokensErr = &MaxTokensError{
+				Category:     CategoryOutputCapHit,
+				Model:        p.model,
+				OutputTokens: result.Usage.OutputTokens,
+			}
+			if result.ContextRejected {
+				result.MaxTokensErr.Category = CategoryContextExhausted
+			}
 		}
 
 		result.StreamComplete = hasStopReason
@@ -490,10 +510,15 @@ func (p *openAIProvider) SendMessageStream(ctx context.Context, messages []Messa
 }
 
 // processStreamChunk processes a single OpenAI stream chunk.
-// Returns true if a stop reason was set.
-func (p *openAIProvider) processStreamChunk(chunk openai.ChatCompletionChunk, acc *openAIStreamAccumulator, blocksChan chan<- StreamContentBlock, result *StreamResult) bool {
+func (p *openAIProvider) processStreamChunk(chunk *OpenAIStreamChunk, acc *openAIStreamAccumulator, blocksChan chan<- StreamContentBlock, result *StreamResult) bool {
 	if chunk.Model != "" {
 		result.Model = chunk.Model
+	}
+
+	if chunk.Usage != nil {
+		result.Usage.InputTokens = chunk.Usage.PromptTokens
+		result.Usage.OutputTokens = chunk.Usage.CompletionTokens
+		result.Usage.CacheReadInputTokens = chunk.Usage.PromptTokensDetails.CachedTokens
 	}
 
 	if len(chunk.Choices) == 0 {
@@ -514,7 +539,7 @@ func (p *openAIProvider) processStreamChunk(chunk openai.ChatCompletionChunk, ac
 
 	delta := choice.Delta
 
-	if delta.Content != "" && delta.Content != "null" {
+	if delta.Content != "" {
 		acc.appendContent(delta.Content)
 		blocksChan <- StreamContentBlock{
 			Block: ContentBlock{
@@ -524,10 +549,8 @@ func (p *openAIProvider) processStreamChunk(chunk openai.ChatCompletionChunk, ac
 		}
 	}
 
-	// Extract reasoning_content delta from raw JSON (not in SDK Delta type)
-	reasoningDelta := extractReasoningFromJSON(choice.Delta.RawJSON())
-	if reasoningDelta != "" {
-		acc.appendThinking(reasoningDelta)
+	if delta.ReasoningContent != "" {
+		acc.appendThinking(delta.ReasoningContent)
 		blocksChan <- StreamContentBlock{
 			Block: ContentBlock{
 				Type:     "thinking",
@@ -537,23 +560,12 @@ func (p *openAIProvider) processStreamChunk(chunk openai.ChatCompletionChunk, ac
 	}
 
 	for _, tc := range delta.ToolCalls {
-		acc.appendToolCall(int(tc.Index), tc.ID, tc.Function.Name, tc.Function.Arguments)
-		if toolBlock := acc.getToolUseBlock(int(tc.Index)); toolBlock != nil {
+		acc.appendToolCall(tc.Index, tc.ID, tc.Function.Name, tc.Function.Arguments)
+		if toolBlock := acc.getToolUseBlock(tc.Index); toolBlock != nil {
 			blocksChan <- StreamContentBlock{
 				Block: *toolBlock,
 			}
 		}
-	}
-
-	// Usage is only non-zero on the last chunk when include_usage is set
-	if chunk.Usage.PromptTokens > 0 {
-		result.Usage.InputTokens = int(chunk.Usage.PromptTokens)
-	}
-	if chunk.Usage.CompletionTokens > 0 {
-		result.Usage.OutputTokens = int(chunk.Usage.CompletionTokens)
-	}
-	if chunk.Usage.PromptTokensDetails.CachedTokens > 0 {
-		result.Usage.CacheReadInputTokens = int(chunk.Usage.PromptTokensDetails.CachedTokens)
 	}
 
 	return hasStopReason
@@ -569,9 +581,9 @@ type openAIStreamAccumulator struct {
 
 // toolCallAccumulator accumulates tool call arguments.
 type toolCallAccumulator struct {
-	ID string
-	Name string
-	Args string
+	ID    string
+	Name  string
+	Args  string
 	Input map[string]any
 }
 
@@ -618,11 +630,9 @@ func (acc *openAIStreamAccumulator) appendToolCall(index int, id, name, args str
 	}
 	if args != "" {
 		tc.Args += args
-		if tc.Input == nil {
-			var input map[string]any
-			if err := json.Unmarshal([]byte(tc.Args), &input); err == nil {
-				tc.Input = input
-			}
+		var input map[string]any
+		if err := json.Unmarshal([]byte(tc.Args), &input); err == nil {
+			tc.Input = input
 		}
 	}
 }
@@ -668,19 +678,4 @@ func (acc *openAIStreamAccumulator) finalize() []ContentBlock {
 	}
 
 	return blocks
-}
-
-// extractReasoningFromJSON extracts reasoning_content from raw JSON.
-// The OpenAI SDK does not model reasoning_content on ChatCompletionMessage.
-func extractReasoningFromJSON(rawJSON string) string {
-	if rawJSON == "" {
-		return ""
-	}
-	var msg struct {
-		ReasoningContent string `json:"reasoning_content"`
-	}
-	if err := json.Unmarshal([]byte(rawJSON), &msg); err != nil {
-		return ""
-	}
-	return msg.ReasoningContent
 }

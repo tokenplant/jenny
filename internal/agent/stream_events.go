@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/anthropics/anthropic-sdk-go"
+	"github.com/ipy/jenny/internal/api"
 )
 
 // contentBlockStopEvent represents a content_block_stop stream event with minimal fields.
@@ -219,34 +219,35 @@ func joinMessageFields(fields []any) string {
 // TransformStreamEvent transforms an SDK stream event to a minimal JSON representation.
 // This ensures only relevant fields are serialized without zero-value padding.
 func TransformStreamEvent(event any) (json.RawMessage, error) {
-	switch e := event.(type) {
-	case anthropic.MessageStartEvent:
-		return transformMessageStart(e)
-	case anthropic.ContentBlockStartEvent:
-		return transformContentBlockStart(e)
-	case anthropic.ContentBlockDeltaEvent:
-		return transformContentBlockDelta(e)
-	case anthropic.ContentBlockStopEvent:
-		return transformContentBlockStop(e)
-	case anthropic.MessageDeltaEvent:
-		return transformMessageDelta(e)
-	case anthropic.MessageStopEvent:
-		return transformMessageStop(e)
-	default:
-		// Fallback: marshal as-is but this may include zero-value fields
-		return json.Marshal(e)
+	if anthropicEvent, ok := event.(api.AnthropicStreamEvent); ok {
+		switch anthropicEvent.Type {
+		case "message_start":
+			return transformMessageStart(anthropicEvent)
+		case "content_block_start":
+			return transformContentBlockStart(anthropicEvent)
+		case "content_block_delta":
+			return transformContentBlockDelta(anthropicEvent)
+		case "content_block_stop":
+			return transformContentBlockStop(anthropicEvent)
+		case "message_delta":
+			return transformMessageDelta(anthropicEvent)
+		case "message_stop":
+			return transformMessageStop(anthropicEvent)
+		}
 	}
+	// Fallback: marshal as-is but this may include zero-value fields
+	return json.Marshal(event)
 }
 
-func transformMessageStart(e anthropic.MessageStartEvent) (json.RawMessage, error) {
+func transformMessageStart(e api.AnthropicStreamEvent) (json.RawMessage, error) {
 	// Build minimal message using proper struct with MarshalJSON
 	// Always populate all usage fields (even with 0 values) per reference format
 	// Field order: input_tokens, cache_creation_input_tokens, cache_read_input_tokens, output_tokens
 	usage := &StreamUsage{
-		InputTokens:              int(e.Message.Usage.InputTokens),
-		CacheCreationInputTokens: int(e.Message.Usage.CacheCreationInputTokens),
-		CacheReadInputTokens:     int(e.Message.Usage.CacheReadInputTokens),
-		OutputTokens:             int(e.Message.Usage.OutputTokens),
+		InputTokens:              e.Message.Usage.InputTokens,
+		CacheCreationInputTokens: e.Message.Usage.CacheCreationInputTokens,
+		CacheReadInputTokens:     e.Message.Usage.CacheReadInputTokens,
+		OutputTokens:             e.Message.Usage.OutputTokens,
 		ServiceTier:              "standard",
 	}
 
@@ -256,18 +257,17 @@ func transformMessageStart(e anthropic.MessageStartEvent) (json.RawMessage, erro
 	}{
 		Type: "message_start",
 		Message: MinimalMessage{
-			ID:      string(e.Message.ID),
+			ID:      e.Message.ID,
 			Type:    "message",
 			Role:    "assistant",
-			Model:   string(e.Message.Model),
+			Model:   e.Message.Model,
 			Content: []any{},
 			Usage:   usage,
 		},
 	}
 	// Set StopReason as *string - nil means null, pointer means value
 	if e.Message.StopReason != "" {
-		sr := string(e.Message.StopReason)
-		msg.Message.StopReason = &sr
+		msg.Message.StopReason = &e.Message.StopReason
 	}
 	// Set StopSeq as *string - nil means null, pointer means value
 	if e.Message.StopSequence != "" {
@@ -276,9 +276,9 @@ func transformMessageStart(e anthropic.MessageStartEvent) (json.RawMessage, erro
 	return json.Marshal(msg)
 }
 
-func transformContentBlockStart(e anthropic.ContentBlockStartEvent) (json.RawMessage, error) {
+func transformContentBlockStart(e api.AnthropicStreamEvent) (json.RawMessage, error) {
 	// Build minimal content_block based on type using struct with custom MarshalJSON
-	cb := MinimalContentBlock{Type: string(e.ContentBlock.Type)}
+	cb := MinimalContentBlock{Type: e.ContentBlock.Type}
 
 	switch e.ContentBlock.Type {
 	case "thinking":
@@ -295,10 +295,6 @@ func transformContentBlockStart(e anthropic.ContentBlockStartEvent) (json.RawMes
 		if e.ContentBlock.Input != nil {
 			cb.Input = e.ContentBlock.Input
 		}
-	case "redacted_thinking":
-		if e.ContentBlock.Data != "" {
-			cb.Text = e.ContentBlock.Data
-		}
 	}
 
 	// Reference order: type, index, content_block
@@ -308,15 +304,15 @@ func transformContentBlockStart(e anthropic.ContentBlockStartEvent) (json.RawMes
 		ContentBlock MinimalContentBlock `json:"content_block"`
 	}{
 		Type:         "content_block_start",
-		Index:        int(e.Index),
+		Index:        e.Index,
 		ContentBlock: cb,
 	}
 	return json.Marshal(msg)
 }
 
-func transformContentBlockDelta(e anthropic.ContentBlockDeltaEvent) (json.RawMessage, error) {
+func transformContentBlockDelta(e api.AnthropicStreamEvent) (json.RawMessage, error) {
 	// Build minimal delta using struct with custom MarshalJSON
-	delta := MinimalDelta{Type: string(e.Delta.Type)}
+	delta := MinimalDelta{Type: e.Delta.Type}
 
 	switch e.Delta.Type {
 	case "thinking_delta":
@@ -346,25 +342,25 @@ func transformContentBlockDelta(e anthropic.ContentBlockDeltaEvent) (json.RawMes
 		Delta MinimalDelta `json:"delta"`
 	}{
 		Type:  "content_block_delta",
-		Index: int(e.Index),
+		Index: e.Index,
 		Delta: delta,
 	}
 	return json.Marshal(msg)
 }
 
-func transformContentBlockStop(e anthropic.ContentBlockStopEvent) (json.RawMessage, error) {
+func transformContentBlockStop(e api.AnthropicStreamEvent) (json.RawMessage, error) {
 	event := contentBlockStopEvent{
 		Type:  "content_block_stop",
-		Index: int(e.Index),
+		Index: e.Index,
 	}
 	return json.Marshal(event)
 }
 
-func transformMessageDelta(e anthropic.MessageDeltaEvent) (json.RawMessage, error) {
+func transformMessageDelta(e api.AnthropicStreamEvent) (json.RawMessage, error) {
 	// Always emit delta for message_delta (per reference format)
 	delta := MinimalDelta{Type: "message_delta"}
 	if e.Delta.StopReason != "" {
-		delta.StopReason = string(e.Delta.StopReason)
+		delta.StopReason = e.Delta.StopReason
 	}
 	// Use pointer for StopSeq so it marshals as null when empty
 	if e.Delta.StopSequence != "" {
@@ -382,13 +378,13 @@ func transformMessageDelta(e anthropic.MessageDeltaEvent) (json.RawMessage, erro
 
 	// Add usage if present
 	// Field order: input_tokens, cache_creation_input_tokens, cache_read_input_tokens, output_tokens
-	if e.Usage.InputTokens > 0 || e.Usage.OutputTokens > 0 ||
-		e.Usage.CacheReadInputTokens > 0 || e.Usage.CacheCreationInputTokens > 0 {
+	if e.Usage != nil && (e.Usage.InputTokens > 0 || e.Usage.OutputTokens > 0 ||
+		e.Usage.CacheReadInputTokens > 0 || e.Usage.CacheCreationInputTokens > 0) {
 		msg.Usage = &StreamUsage{
-			InputTokens:              int(e.Usage.InputTokens),
-			CacheCreationInputTokens: int(e.Usage.CacheCreationInputTokens),
-			CacheReadInputTokens:     int(e.Usage.CacheReadInputTokens),
-			OutputTokens:             int(e.Usage.OutputTokens),
+			InputTokens:              e.Usage.InputTokens,
+			CacheCreationInputTokens: e.Usage.CacheCreationInputTokens,
+			CacheReadInputTokens:     e.Usage.CacheReadInputTokens,
+			OutputTokens:             e.Usage.OutputTokens,
 			ServiceTier:              "standard",
 		}
 	}
@@ -396,7 +392,7 @@ func transformMessageDelta(e anthropic.MessageDeltaEvent) (json.RawMessage, erro
 	return json.Marshal(msg)
 }
 
-func transformMessageStop(e anthropic.MessageStopEvent) (json.RawMessage, error) {
+func transformMessageStop(e api.AnthropicStreamEvent) (json.RawMessage, error) {
 	event := messageStopEvent{
 		Type: "message_stop",
 	}
