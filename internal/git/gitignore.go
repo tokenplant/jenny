@@ -56,12 +56,11 @@ func IsIgnored(repoRoot, path string) (bool, error) {
 	}
 
 	// Also load patterns from parent directories up to repo root (excluding root).
-	// Use forward-slash relPath for comparison; dir is the native-separator
-	// form of the current traversal point.
+	// Both dir and resolvedRoot use forward slashes on all platforms, since
+	// filepath.Dir preserves the separator style of its input on Windows.
 	dir := filepath.Dir(path)
-	resolvedRootNative := filepath.FromSlash(resolvedRoot)
-	for dir != "" && dir != "." && dir != resolvedRootNative {
-		parentPatterns, err := loadGitignorePatterns(dir)
+	for dir != "" && dir != "." && dir != resolvedRoot {
+		parentPatterns, err := loadGitignorePatterns(filepath.FromSlash(dir))
 		if err == nil {
 			patterns = append(patterns, parentPatterns...)
 		}

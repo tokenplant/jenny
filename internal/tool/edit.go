@@ -683,7 +683,6 @@ func copyAndReplace(srcPath, dstPath string) error {
 	if err != nil {
 		return fmt.Errorf("opening src: %w", err)
 	}
-	defer src.Close()
 
 	// On Windows, retry once if dst is briefly held by an AV scanner.
 	dst, err := os.OpenFile(dstPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
@@ -693,14 +692,20 @@ func copyAndReplace(srcPath, dstPath string) error {
 			dst, err = os.OpenFile(dstPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
 		}
 		if err != nil {
+			src.Close()
 			return fmt.Errorf("opening dst: %w", err)
 		}
 	}
 	defer dst.Close()
 
 	if _, err := io.Copy(dst, src); err != nil {
+		src.Close()
 		return fmt.Errorf("copying contents: %w", err)
 	}
+
+	// Close source before removal — required on Windows where an open file
+	// handle prevents deletion.
+	src.Close()
 
 	// Best-effort cleanup of the temp file. A failure here does not
 	// affect the edit's correctness.
