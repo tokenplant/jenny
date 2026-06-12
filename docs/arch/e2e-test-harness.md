@@ -2,9 +2,9 @@
 title: E2E Test Harness
 slug: e2e-test-harness
 priority: P0
-status: complete
+status: done
 spec: complete
-code: complete
+code: done
 package: e2e
 depends_on:
   - cli.md

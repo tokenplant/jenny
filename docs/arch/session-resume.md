@@ -2,7 +2,7 @@
 title: Session Resume
 slug: session-resume
 priority: P0
-status: partial
+status: done
 spec: complete
 code: done
 package: internal/agent, internal/session

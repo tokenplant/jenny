@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -66,9 +67,10 @@ func TestAC1_SessionMemoryInitAt10KTokens(t *testing.T) {
 		t.Fatalf("Memory file should exist after Init: %v", err)
 	}
 
-	// Check file permissions (should be 0600)
+	// Check file permissions (should not be overly permissive)
+	// On Windows, Mode().Perm() might return 0666 even if created with 0600
 	perm := info.Mode().Perm()
-	if perm != 0600 {
+	if runtime.GOOS != "windows" && perm != 0600 {
 		t.Fatalf("File permissions should be 0600, got %o", perm)
 	}
 

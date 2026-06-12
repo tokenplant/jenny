@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -495,6 +496,9 @@ func TestReadTool_BlockDeviceGuard(t *testing.T) {
 
 // TestReadTool_SkipPermissions tests AC1: cwd bypass with skipPermissions flag
 func TestReadTool_SkipPermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping hardcoded absolute Unix path test on Windows")
+	}
 	tmpDir := t.TempDir()
 	tool := NewReadTool(false, nil)
 

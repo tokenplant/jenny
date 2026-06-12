@@ -2,7 +2,7 @@
 title: Core Agent Loop
 slug: agent-loop
 priority: P0
-status: partial
+status: done
 spec: complete
 code: done
 package: internal/agent

@@ -44,7 +44,7 @@ jobs:
         git config --global user.email "jenny-ci@users.noreply.github.com"
 
     - name: Test
-      run: go test -v ./...
+      run: go test ./...
 
     # Compute the version string once per run, then inject it into every platform build via -ldflags.
     - name: Determine Version

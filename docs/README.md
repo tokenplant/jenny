@@ -140,9 +140,9 @@ CLI → API → loop → persistence → resume → SSE → stream-json → cost
 |---|---------|------|--------|
 | 1 | CLI | [cli.md](./arch/cli.md) | done |
 | 2 | Anthropic API client | [anthropic-api-client.md](./arch/anthropic-api-client.md) | done |
-| 3 | Core agent loop | [agent-loop.md](./arch/agent-loop.md) | partial |
+| 3 | Core agent loop | [agent-loop.md](./arch/agent-loop.md) | done |
 | 4 | Session persistence | [session-persistence.md](./arch/session-persistence.md) | done |
-| 5 | Session resume | [session-resume.md](./arch/session-resume.md) | partial |
+| 5 | Session resume | [session-resume.md](./arch/session-resume.md) | done |
 | 6 | SSE streaming | [sse-streaming.md](./arch/sse-streaming.md) | done |
 | 7 | Stream-json | [stream-json.md](./arch/stream-json.md) | done |
 | 8 | Cost tracking | [cost-tracking.md](./arch/cost-tracking.md) | done |

@@ -1,7 +1,7 @@
 ---
 title: File I/O Robustness
 slug: file-io-robustness
-status: in-progress
+status: partial
 priority: P0
 spec: complete
 code: partial

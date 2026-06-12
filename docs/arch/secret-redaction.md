@@ -2,9 +2,9 @@
 title: Secret Redaction
 slug: secret-redaction
 priority: P3
-status: complete
+status: done
 spec: complete
-code: complete
+code: done
 package: internal/redact
 gaps: []
 ---

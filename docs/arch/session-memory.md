@@ -2,7 +2,7 @@
 title: Session Memory
 slug: session-memory
 priority: P3
-status: partial
+status: done
 spec: complete
 code: done
 package: internal/agent
