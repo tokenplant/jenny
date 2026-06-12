@@ -294,32 +294,36 @@ func TestConcurrentTaskWrites(t *testing.T) {
 	}
 }
 
-// TestGlobTool_MaxDepthLimit verifies AC8: glob respects maxDepth.
+// TestGlobTool_MaxDepthLimit verifies AC8: glob respects maxDepth (default 64).
+// We create a tree 100 levels deep (exceeding maxDepth=64), place a file at depth 75
+// (beyond the limit) and a file at depth 3 (within the limit), then assert only the
+// shallow file is found.
 func TestGlobTool_MaxDepthLimit(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
-	// Create a directory tree 10 levels deep.
+
+	// Create a directory tree 100 levels deep.
 	deepDir := tmpDir
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 100; i++ {
 		deepDir = filepath.Join(deepDir, fmt.Sprintf("level%d", i))
 		if err := os.MkdirAll(deepDir, 0755); err != nil {
 			t.Fatalf("MkdirAll error: %v", err)
 		}
 	}
-	// Create a file at depth 10 (beyond the 64 limit).
-	deepFile := filepath.Join(deepDir, "deep_file.txt")
-	if err := os.WriteFile(deepFile, []byte("deep"), 0644); err != nil {
+	// Create a file at depth 75 (beyond maxDepth=64).
+	beyondLimitFile := filepath.Join(deepDir, "beyond_limit.txt")
+	if err := os.WriteFile(beyondLimitFile, []byte("deep"), 0644); err != nil {
 		t.Fatalf("WriteFile error: %v", err)
 	}
 
-	// Create a file at depth 3 (within the 64 limit).
+	// Create a file at depth 3 (within maxDepth=64).
 	shallowDir := tmpDir
 	for i := 0; i < 3; i++ {
 		shallowDir = filepath.Join(shallowDir, fmt.Sprintf("level%d", i))
 	}
-	shallowFile := filepath.Join(shallowDir, "shallow_file.txt")
-	if err := os.WriteFile(shallowFile, []byte("shallow"), 0644); err != nil {
+	withinLimitFile := filepath.Join(shallowDir, "within_limit.txt")
+	if err := os.WriteFile(withinLimitFile, []byte("shallow"), 0644); err != nil {
 		t.Fatalf("WriteFile error: %v", err)
 	}
 
@@ -332,8 +336,12 @@ func TestGlobTool_MaxDepthLimit(t *testing.T) {
 	}
 
 	// The shallow file should be found.
-	if !strings.Contains(result.Content, "shallow_file.txt") {
+	if !strings.Contains(result.Content, "within_limit.txt") {
 		t.Errorf("AC8 FAIL: shallow file should be found, got: %s", result.Content)
+	}
+	// The deep file should NOT be found (exceeds maxDepth=64).
+	if strings.Contains(result.Content, "beyond_limit.txt") {
+		t.Errorf("AC8 FAIL: deep file should NOT be found (exceeds maxDepth=64), got: %s", result.Content)
 	}
 }
 
@@ -372,15 +380,68 @@ func TestGlobTool_MaxResults(t *testing.T) {
 	}
 }
 
-// TestReadTool_1GiBRejectionMessage verifies the error message for oversized files.
-func TestReadTool_1GiBRejectionMessage(t *testing.T) {
+// TestReadTool_1GiBRejection verifies AC3: ReadTool rejects files >1 GiB with a behavioral test.
+// We use a sparse file (Seek + Truncate) to avoid writing 1 GiB of data, but os.Stat reports >1 GiB.
+// This mirrors the pattern from TestEditOOM.
+func TestReadTool_1GiBRejection(t *testing.T) {
 	t.Parallel()
 
-	// Verify that files with size > 1 GiB are rejected.
-	// Since we can't create a real 1 GiB file in unit tests, we test the
-	// error path by temporarily patching the constant.
-	if maxSizeHardLimit != 1<<30 {
-		t.Errorf("AC3 FAIL: maxSizeHardLimit = %d, want %d (1 GiB)", maxSizeHardLimit, 1<<30)
+	tmpDir := t.TempDir()
+	cache := NewReadFileCache()
+	readTool := NewReadTool(false, cache)
+
+	// Create a sparse file >1 GiB.
+	testFile := filepath.Join(tmpDir, "huge.bin")
+	f, err := os.Create(testFile)
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, err := f.Write(make([]byte, 0)); err != nil {
+		f.Close()
+		t.Fatalf("seed write: %v", err)
+	}
+	if _, err := f.Seek(int64(1<<30)+1, 0); err != nil {
+		f.Close()
+		t.Fatalf("seek: %v", err)
+	}
+	if err := f.Truncate(int64(1<<30) + 1); err != nil {
+		f.Close()
+		t.Fatalf("truncate: %v", err)
+	}
+	f.Close()
+
+	// Verify stat reports >1 GiB.
+	info, err := os.Stat(testFile)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if info.Size() <= 1<<30 {
+		t.Fatalf("setup: file size = %d, want > 1 GiB", info.Size())
+	}
+
+	// Execute should reject with IsError and "too large" message.
+	result, err := readTool.Execute(context.Background(), map[string]any{"file_path": testFile}, tmpDir)
+	if err != nil {
+		t.Fatalf("Execute returned Go error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("AC3 FAIL: expected IsError=true for >1GiB file")
+	}
+	if !strings.Contains(result.Content, "too large") {
+		t.Errorf("AC3 FAIL: error message %q does not contain 'too large'", result.Content)
+	}
+
+	// Also verify a small file succeeds.
+	smallFile := filepath.Join(tmpDir, "small.txt")
+	if err := os.WriteFile(smallFile, []byte("hello"), 0644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	result2, err := readTool.Execute(context.Background(), map[string]any{"file_path": smallFile}, tmpDir)
+	if err != nil {
+		t.Fatalf("Execute small file returned Go error: %v", err)
+	}
+	if result2.IsError {
+		t.Errorf("AC3 FAIL: small file should succeed, got error: %s", result2.Content)
 	}
 }
 

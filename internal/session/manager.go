@@ -13,6 +13,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ipy/jenny/internal/constants"
 	"github.com/ipy/jenny/internal/log"
@@ -305,7 +306,8 @@ func (m *Manager) LoadTranscript(sessionID string) ([]TranscriptEntry, error) {
 
 // truncateForLog returns s truncated to at most max bytes using rune-aware
 // slicing, ensuring no multi-byte code points are split. Appends "..."
-// when truncation occurs.
+// when truncation occurs. Uses the same pattern as utf8SafeTruncate in
+// internal/tool/utf8.go.
 func truncateForLog(s string, max int) string {
 	if max <= 0 {
 		return ""
@@ -313,55 +315,13 @@ func truncateForLog(s string, max int) string {
 	if len(s) <= max {
 		return s
 	}
-	// Find the largest valid UTF-8 prefix within max bytes.
-	for i := max; i > 0; i-- {
-		if i < len(s) && (s[i]&0xC0) == 0x80 {
-			// s[i] is a continuation byte — keep scanning.
-			continue
-		}
-		// i is a rune start or i == 0. Check validity of prefix.
-		prefix := s[:i]
-		for len(prefix) > 0 {
-			_, size := decodeLastRune(prefix)
-			if size == 0 {
-				break
-			}
-			prefix = prefix[:len(prefix)-size]
-		}
-		if prefix == "" || len(prefix)+3 <= max {
-			if len(prefix) > 0 {
-				return prefix + "..."
-			}
-		}
-		// Fallback: scan for ASCII boundary.
-		boundary := max
-		for boundary > 0 && s[boundary-1]&0x80 != 0 {
-			boundary--
-		}
-		if boundary > 0 {
-			return s[:boundary] + "..."
-		}
-		return s[:max] + "..."
+	// Use stdlib utf8.ValidString to find a safe truncation boundary,
+	// same pattern as utf8SafeTruncate in internal/tool/utf8.go.
+	result := s[:max]
+	for !utf8.ValidString(result) {
+		result = result[:len(result)-1]
 	}
-	return s[:max] + "..."
-}
-
-// decodeLastRune decodes the last UTF-8 rune in s and returns (rune, size).
-func decodeLastRune(s string) (rune, int) {
-	if len(s) == 0 {
-		return 0, 0
-	}
-	// Find the start of the last rune by scanning backward.
-	i := len(s) - 1
-	for i >= 0 && s[i]&0xC0 == 0x80 {
-		i--
-	}
-	if i < 0 {
-		return 0, 0
-	}
-	r := rune(s[i])
-	size := len(s) - i
-	return r, size
+	return result + "..."
 }
 
 // LoadCompactFailCount loads the most recent compactFailCount from the transcript.
