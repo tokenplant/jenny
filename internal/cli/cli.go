@@ -33,6 +33,7 @@ type Flags struct {
 	MaxIterations          int               // --max-iterations: maximum loop iterations (0 = unlimited)
 	MaxTurns               int               // --max-turns: maximum number of turns (0 = unlimited)
 	MaxBudgetUsd           float64           // --max-budget-usd: budget limit in USD (0.0 = no limit)
+	Effort                 string            // --effort: reasoning effort level (low, medium, high)
 	FeatureFlags           map[string]string // --feature-flags / -ff: feature flags in key=value format
 }
 
@@ -152,6 +153,9 @@ func Parse() (*Flags, error) {
 	var maxBudget float64
 	flags.Float64Var(&maxBudget, "max-budget-usd", 0, "Budget limit in USD (0.0 = no limit)")
 
+	var effort string
+	flags.StringVar(&effort, "effort", "", "Reasoning effort level (low, medium, high) for OpenAI o-series and DeepSeek models")
+
 	var featureFlags FeatureFlagValue
 	flags.Var(&featureFlags, "feature-flags", "Feature flags in key=value format (can be specified multiple times)")
 	flags.Var(&featureFlags, "ff", "Feature flags in key=value format (alias for --feature-flags)")
@@ -198,6 +202,7 @@ func Parse() (*Flags, error) {
 			MaxIterations:          maxIter,
 			MaxTurns:               maxTurns,
 			MaxBudgetUsd:           maxBudget,
+			Effort:                 effort,
 			FeatureFlags:           featureFlags,
 		}, nil
 	}
@@ -246,6 +251,7 @@ func Parse() (*Flags, error) {
 		MaxIterations:          maxIter,
 		MaxTurns:               maxTurns,
 		MaxBudgetUsd:           maxBudget,
+		Effort:                 effort,
 		FeatureFlags:           featureFlags,
 	}, nil
 }

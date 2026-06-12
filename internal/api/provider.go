@@ -10,8 +10,9 @@ import (
 type ProviderKind string
 
 const (
-	ProviderAnthropic ProviderKind = "anthropic"
-	ProviderOpenAI    ProviderKind = "openai"
+	ProviderAnthropic        ProviderKind = "anthropic"
+	ProviderOpenAI           ProviderKind = "openai"
+	ProviderOpenAIResponses  ProviderKind = "openai_responses"
 )
 
 // Provider defines the interface for AI backend providers.
@@ -34,4 +35,16 @@ type Provider interface {
 type ProviderWithRetryConfig interface {
 	Provider
 	SetRetryConfig(cfg RetryConfig)
+}
+
+// ProviderWithThinkingConfig allows providers to receive thinking/reasoning configuration.
+type ProviderWithThinkingConfig interface {
+	Provider
+	SetThinkingConfig(cfg ThinkingConfig)
+}
+
+// ThinkingConfig holds thinking/reasoning configuration for API providers.
+type ThinkingConfig struct {
+	BudgetTokens int    // For Anthropic thinking.budget_tokens
+	Effort       string // For OpenAI reasoning_config.effort (low/medium/high)
 }

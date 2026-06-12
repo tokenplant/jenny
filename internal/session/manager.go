@@ -42,6 +42,10 @@ type TranscriptEntry struct {
 	// Compaction boundary fields
 	Subtype         string            `json:"subtype,omitempty"`
 	CompactMetadata *CompactMetadata `json:"compact_metadata,omitempty"`
+
+	// Thinking fields - for reasoning/thinking block persistence
+	Thinking  string `json:"thinking,omitempty"`
+	Signature string `json:"signature,omitempty"`
 }
 
 // CompactMetadata holds metadata about a compaction boundary.

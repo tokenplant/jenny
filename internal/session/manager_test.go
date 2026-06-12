@@ -1266,3 +1266,106 @@ func TestAC4_CompactionBoundaryMetadata(t *testing.T) {
 		t.Error("PreservedSegment is 0")
 	}
 }
+
+func TestTranscriptEntry_ThinkingPersistence(t *testing.T) {
+	// Test that thinking and signature fields are correctly serialized/deserialized
+	entry := TranscriptEntry{
+		Type:      "assistant",
+		Content:   "I need to think about this",
+		Thinking:  "Let me analyze the problem step by step...",
+		Signature: "sig_abc123",
+	}
+
+	data, err := json.Marshal(entry)
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+
+	var parsed TranscriptEntry
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+
+	if parsed.Type != entry.Type {
+		t.Errorf("parsed.Type = %v, want %v", parsed.Type, entry.Type)
+	}
+	if parsed.Content != entry.Content {
+		t.Errorf("parsed.Content = %v, want %v", parsed.Content, entry.Content)
+	}
+	if parsed.Thinking != entry.Thinking {
+		t.Errorf("parsed.Thinking = %v, want %v", parsed.Thinking, entry.Thinking)
+	}
+	if parsed.Signature != entry.Signature {
+		t.Errorf("parsed.Signature = %v, want %v", parsed.Signature, entry.Signature)
+	}
+}
+
+func TestTranscriptEntry_ThinkingOptional(t *testing.T) {
+	// Test backward compatibility: entries without thinking/signature should work
+	entry := TranscriptEntry{
+		Type:    "user",
+		Content: "Hello",
+	}
+
+	data, err := json.Marshal(entry)
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+
+	var parsed TranscriptEntry
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+
+	// Thinking and Signature should be empty strings (not panic or error)
+	if parsed.Thinking != "" {
+		t.Errorf("parsed.Thinking = %v, want empty", parsed.Thinking)
+	}
+	if parsed.Signature != "" {
+		t.Errorf("parsed.Signature = %v, want empty", parsed.Signature)
+	}
+}
+
+func TestManager_AppendAndLoadWithThinking(t *testing.T) {
+	// Create temp directory
+	tmpDir, err := os.MkdirTemp("", "jenny-test-*")
+	if err != nil {
+		t.Fatalf("MkdirTemp() error = %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	m, err := NewManager(tmpDir, false)
+	if err != nil {
+		t.Fatalf("NewManager() error = %v", err)
+	}
+
+	sessionID := "sess_thinking_test"
+
+	// Append entry with thinking
+	entry := TranscriptEntry{
+		Type:      "assistant",
+		Content:   "I solved the problem",
+		Thinking:  "My reasoning process...",
+		Signature: "sig_def456",
+	}
+	if err := m.AppendEntry(sessionID, entry); err != nil {
+		t.Fatalf("AppendEntry() error = %v", err)
+	}
+
+	// Load transcript
+	entries, err := m.LoadTranscript(sessionID)
+	if err != nil {
+		t.Fatalf("LoadTranscript() error = %v", err)
+	}
+
+	if len(entries) != 1 {
+		t.Errorf("LoadTranscript() returned %d entries, want 1", len(entries))
+	}
+
+	if entries[0].Thinking != "My reasoning process..." {
+		t.Errorf("entries[0].Thinking = %v, want %v", entries[0].Thinking, "My reasoning process...")
+	}
+	if entries[0].Signature != "sig_def456" {
+		t.Errorf("entries[0].Signature = %v, want %v", entries[0].Signature, "sig_def456")
+	}
+}

@@ -41,11 +41,6 @@ func newOpenAIProvider(model string) (*openAIProvider, error) {
 		return nil, errors.New("OPENAI_DEFAULT_MODEL is required when using OpenAI provider")
 	}
 
-	wireAPI := os.Getenv("OPENAI_WIRE_API")
-	if wireAPI == "responses" {
-		return nil, errors.New("OpenAI Responses API not yet supported; use OPENAI_WIRE_API=chat or unset")
-	}
-
 	timeout := ResolveTimeout(os.Getenv("API_TIMEOUT_MS"))
 	if timeout <= 0 {
 		timeout = 120 * time.Second

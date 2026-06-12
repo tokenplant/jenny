@@ -80,9 +80,23 @@ func NewClient() (*Client, error) {
 // NewClientWithModel creates a new API client with an optional model override.
 // If model is empty, reads from environment variables.
 // Provider selection order: OpenAI > GenAI (Gemini / Vertex AI) > Anthropic.
+// For OpenAI, if OPENAI_WIRE_API=responses, uses the Responses API provider.
 func NewClientWithModel(model string) (*Client, error) {
 	// OpenAI provider takes precedence
 	if os.Getenv("OPENAI_BASE_URL") != "" {
+		// Check wire API selection
+		wireAPI := os.Getenv("OPENAI_WIRE_API")
+		if wireAPI == "responses" {
+			provider, err := newOpenAIResponsesProvider(model)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create OpenAI Responses API provider: %w", err)
+			}
+			return &Client{
+				provider:    provider,
+				retryConfig: DefaultRetryConfig(),
+			}, nil
+		}
+
 		provider, err := newOpenAIProvider(model)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create OpenAI provider: %w", err)
