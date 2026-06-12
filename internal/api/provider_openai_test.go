@@ -1131,3 +1131,82 @@ func TestOpenAIProvider_ReasoningEffortChat(t *testing.T) {
 		t.Errorf("expected stop reason 'end_turn', got %q", resp.StopReason)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// TestOpenAIProvider_DeepSeekThinking tests DeepSeek-specific thinking mode
+// AC2: DeepSeek models get extra_body: {"thinking": {"type": "enabled"}}
+// ---------------------------------------------------------------------------
+
+func TestOpenAIProvider_DeepSeekThinking(t *testing.T) {
+	ms := mockapi.NewMockServer()
+	ms.SetPathHandler("POST /chat/completions", func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		r.Body.Close()
+		var req map[string]any
+		if err := json.Unmarshal(body, &req); err != nil {
+			t.Fatalf("failed to parse request: %v", err)
+		}
+
+		// Verify extra_body.thinking.type is "enabled"
+		extraBody, ok := req["extra_body"].(map[string]any)
+		if !ok {
+			t.Fatal("expected extra_body in request")
+		}
+		thinking, ok := extraBody["thinking"].(map[string]any)
+		if !ok {
+			t.Fatal("expected extra_body.thinking in request")
+		}
+		if thinking["type"] != "enabled" {
+			t.Errorf("expected thinking.type 'enabled', got %v", thinking["type"])
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		resp := `{
+			"id": "chat-123",
+			"model": "deepseek-reasoner",
+			"choices": [{
+				"index": 0,
+				"message": {
+					"role": "assistant",
+					"reasoning_content": "Thinking hard...",
+					"content": "The result is ready."
+				},
+				"finish_reason": "stop"
+			}],
+			"usage": {"prompt_tokens": 10, "completion_tokens": 15}
+		}`
+		w.Write([]byte(resp))
+	})
+	defer ms.Close()
+
+	t.Setenv("OPENAI_BASE_URL", ms.URL())
+	t.Setenv("OPENAI_API_KEY", "test-key")
+	t.Setenv("OPENAI_DEFAULT_MODEL", "deepseek-reasoner")
+
+	client, err := NewClientWithModel("")
+	if err != nil {
+		t.Fatalf("NewClientWithModel error = %v", err)
+	}
+
+	// Set thinking config with effort to trigger DeepSeek thinking mode
+	client.SetThinkingConfig(ThinkingConfig{Effort: "medium"})
+
+	resp, err := client.SendMessage(context.Background(), []Message{{Role: "user", Content: "Plan it."}}, nil, nil, "", "")
+	if err != nil {
+		t.Fatalf("SendMessage error = %v", err)
+	}
+
+	// Verify reasoning content was captured
+	foundThinking := false
+	for _, b := range resp.Content {
+		if b.Type == "thinking" && b.Thinking == "Thinking hard..." {
+			foundThinking = true
+			break
+		}
+	}
+	if !foundThinking {
+		t.Error("reasoning_content was not correctly parsed into a thinking block")
+	}
+}
+

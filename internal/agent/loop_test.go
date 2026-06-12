@@ -392,6 +392,30 @@ func TestRebuildMessages(t *testing.T) {
 			},
 			wantLen: 4,
 		},
+		{
+			name: "assistant with thinking and signature",
+			entries: []session.TranscriptEntry{
+				{Type: "user", Content: "Plan a trip"},
+				{
+					Type:      "assistant",
+					Content:   "I can help with that.",
+					Thinking:  "Thinking about destinations...",
+					Signature: "sign_123",
+				},
+			},
+			wantLen: 2,
+			validate: func(t *testing.T, msgs []api.Message) {
+				if msgs[1].Role != "assistant" {
+					t.Errorf("expected assistant role, got %s", msgs[1].Role)
+				}
+				if msgs[1].Thinking != "Thinking about destinations..." {
+					t.Errorf("expected Thinking 'Thinking about destinations...', got %q", msgs[1].Thinking)
+				}
+				if msgs[1].Signature != "sign_123" {
+					t.Errorf("expected Signature 'sign_123', got %q", msgs[1].Signature)
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {

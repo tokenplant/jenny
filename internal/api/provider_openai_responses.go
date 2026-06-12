@@ -249,6 +249,16 @@ func (p *openAIResponsesProvider) buildInput(messages []Message, toolResults []T
 
 		case "assistant":
 			content := []map[string]any{}
+			// Include reasoning (thinking) block if present for round-trip continuity
+			if msg.Thinking != "" {
+				input = append(input, map[string]any{
+					"type": "reasoning",
+					"summary": map[string]any{
+						"type": "text",
+						"text": msg.Thinking,
+					},
+				})
+			}
 			if msg.Content != "" {
 				content = append(content, map[string]any{
 					"type": "output_text",

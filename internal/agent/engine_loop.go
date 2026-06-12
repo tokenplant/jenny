@@ -598,15 +598,26 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 			AccumulateUsage(e.costState, resp.Model, resp.Usage)
 		}
 
-		// Build and append assistant message with text and tool_use blocks
+		// Build and append assistant message with text, tool_use, and thinking blocks
 		assistantMsg := api.Message{
 			Role:    "assistant",
 			Content: textOutput.String(),
 		}
+		if len(thinkingBlocks) > 0 {
+			var thinkingText strings.Builder
+			for _, tb := range thinkingBlocks {
+				thinkingText.WriteString(tb.Text)
+			}
+			assistantMsg.Thinking = thinkingText.String()
+			// Use signature from last thinking block if present
+			if thinkingBlocks[len(thinkingBlocks)-1].Signature != "" {
+				assistantMsg.Signature = thinkingBlocks[len(thinkingBlocks)-1].Signature
+			}
+		}
 		if len(toolUseBlocks) > 0 {
 			assistantMsg.ToolUse = toolUseBlocks
 		}
-		if textOutput.String() != "" || len(toolUseBlocks) > 0 {
+		if textOutput.String() != "" || len(toolUseBlocks) > 0 || len(thinkingBlocks) > 0 {
 			messages = append(messages, assistantMsg)
 		}
 

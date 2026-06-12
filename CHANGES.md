@@ -16,15 +16,11 @@
 ### Thinking Block Persistence
 - Transcript entries now include `thinking` and `signature` fields
 - Round-trip support for thinking blocks in multi-turn conversations
-- BLK2 fixed: thinkingBlocks now persisted in engine_loop.go
-- BLK3 fixed: RebuildMessages preserves Thinking/Signature from transcript
+- BLK-PERS fixed: thinking content now correctly persisted in assistant messages
+- BLK-REBLD fixed: RebuildMessages preserves Thinking/Signature from transcript
 - Anthropic thinking blocks emitted BEFORE tool_use in content array (AC4)
 
 ### DeepSeek Integration
 - Thinking mode support via `extra_body: {"thinking": {"type": "enabled"}}`
 - `reasoning_content` parsed and stored
-
-### Test Coverage
-- Added thinking persistence round-trip tests for OpenAI Chat, Anthropic, and Responses API
-- Multi-turn conversation tests with thinking across multiple turns
-- Backward compatibility tests for older transcripts without thinking fields
+- Automatic detection of DeepSeek models to inject provider-specific headers

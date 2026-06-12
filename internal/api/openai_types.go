@@ -11,6 +11,7 @@ type OpenAIRequest struct {
 	Stream              bool                 `json:"stream,omitempty"`
 	StreamOptions       *OpenAIStreamOptions `json:"stream_options,omitempty"`
 	ReasoningEffort     string               `json:"reasoning_effort,omitempty"`
+	ExtraBody           map[string]any       `json:"extra_body,omitempty"`
 }
 
 // OpenAIMessage represents a message in the OpenAI chat format.
