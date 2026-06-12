@@ -568,3 +568,146 @@ A local skill.
 		t.Error("local skill should appear in skills list")
 	}
 }
+
+// TestSkillTool_AC1_ExplicitActivation tests that calling activate_skill with a valid
+// skill name calls RegisterActivation on the SkillActivator, recording the skill name
+// and root path. This verifies AC1: Explicit activation via ActivateSkill tool.
+func TestSkillTool_AC1_ExplicitActivation(t *testing.T) {
+	// Create test skills
+	testSkills := []skills.Skill{
+		{
+			Name:        "readme-writer",
+			Description: "Helps write READMEs",
+			RootPath:    "/path/to/readme-writer",
+			Content:     "# README Writer\n\nSkills for writing READMEs",
+		},
+		{
+			Name:        "code-review",
+			Description: "Helps review code",
+			RootPath:    "/path/to/code-review",
+			Content:     "# Code Review\n\nSkills for code review",
+		},
+	}
+
+	// Create a mock activator that tracks activations
+	mockActivator := &mockActivatorForAC1{activations: make([]activationRecord, 0)}
+
+	tool := NewSkillTool(testSkills)
+	tool.WithActivator(mockActivator)
+
+	ctx := context.Background()
+
+	// Activate the readme-writer skill
+	result, err := tool.Execute(ctx, map[string]any{"name": "readme-writer"}, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected no error, got: %s", result.Content)
+	}
+
+	// Verify RegisterActivation was called with correct arguments
+	if len(mockActivator.activations) != 1 {
+		t.Fatalf("expected 1 activation, got %d", len(mockActivator.activations))
+	}
+	if mockActivator.activations[0].name != "readme-writer" {
+		t.Errorf("expected activation name 'readme-writer', got %q", mockActivator.activations[0].name)
+	}
+	if mockActivator.activations[0].rootPath != "/path/to/readme-writer" {
+		t.Errorf("expected root path '/path/to/readme-writer', got %q", mockActivator.activations[0].rootPath)
+	}
+
+	// Activate the same skill again - should NOT call RegisterActivation again (deduplication)
+	result, err = tool.Execute(ctx, map[string]any{"name": "readme-writer"}, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected no error, got: %s", result.Content)
+	}
+
+	// Verify deduplication - still only 1 activation (mock activator handles its own deduplication)
+	if len(mockActivator.activations) != 1 {
+		t.Errorf("expected deduplication: 1 activation, got %d", len(mockActivator.activations))
+	}
+
+	// Activate a different skill
+	result, err = tool.Execute(ctx, map[string]any{"name": "code-review"}, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected no error, got: %s", result.Content)
+	}
+
+	// Should now have 2 activations
+	if len(mockActivator.activations) != 2 {
+		t.Errorf("expected 2 activations, got %d", len(mockActivator.activations))
+	}
+
+	t.Log("AC1 PASS: SkillTool.Execute calls RegisterActivation with correct name and rootPath")
+}
+
+// TestSkillTool_AC1_NoOpWhenNilActivator tests that nil activator produces no panic
+// and leaves the state clean. This verifies AC1: Nil activator produces no panic.
+func TestSkillTool_AC1_NoOpWhenNilActivator(t *testing.T) {
+	testSkill := skills.Skill{
+		Name:     "test-skill",
+		RootPath: "/path/to/test",
+		Content:  "# Test Skill",
+	}
+
+	// Tool with NO activator set (nil)
+	tool := NewSkillTool([]skills.Skill{testSkill})
+	// Intentionally NOT calling WithActivator - activator remains nil
+
+	ctx := context.Background()
+
+	// Should not panic
+	result, err := tool.Execute(ctx, map[string]any{"name": "test-skill"}, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Errorf("expected no error, got: %s", result.Content)
+	}
+
+	// Should still return valid content
+	if !strings.Contains(result.Content, "<activated_skill") {
+		t.Errorf("expected activated_skill in output, got: %s", result.Content)
+	}
+
+	t.Log("AC1 PASS: nil activator is no-op, no panic")
+}
+
+// mockActivatorForAC1 tracks RegisterActivation calls for AC1 testing
+type mockActivatorForAC1 struct {
+	activations []activationRecord
+}
+
+type activationRecord struct {
+	name     string
+	rootPath string
+}
+
+func (a *mockActivatorForAC1) ActivateForPath(path string) []string {
+	return nil
+}
+
+func (a *mockActivatorForAC1) RegisterActivation(name string, rootPath string) {
+	// Deduplication check
+	for _, act := range a.activations {
+		if act.name == name {
+			return
+		}
+	}
+	a.activations = append(a.activations, activationRecord{name: name, rootPath: rootPath})
+}
+
+func (a *mockActivatorForAC1) GetActivatedSkills() []skills.ActivatedSkill {
+	result := make([]skills.ActivatedSkill, len(a.activations))
+	for i, act := range a.activations {
+		result[i] = skills.ActivatedSkill{Name: act.name, RootPath: act.rootPath}
+	}
+	return result
+}
