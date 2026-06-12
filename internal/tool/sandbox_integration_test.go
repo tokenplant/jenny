@@ -239,6 +239,7 @@ func TestGrepTool_AC3_SandboxedRipgrepPathUsed(t *testing.T) {
 }
 
 func TestGrepTool_AC3_NoSandboxFallsBackToHostRg(t *testing.T) {
+	skipIfNoRg(t)
 	// When no sandbox configured, Grep uses host rg
 	grep := NewGrepTool()
 
@@ -263,6 +264,7 @@ func TestGrepTool_AC3_NoSandboxFallsBackToHostRg(t *testing.T) {
 }
 
 func TestGrepTool_AC3_InactiveSandboxFallsBackToHostRg(t *testing.T) {
+	skipIfNoRg(t)
 	// When sandbox is inactive, Grep uses host rg even if sandbox is configured
 	sb := sandbox.NewMockSandboxManager()
 	if err := sb.Initialize(context.Background(), sandbox.Config{

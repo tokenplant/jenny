@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -12,7 +13,18 @@ import (
 	"github.com/ipy/jenny/internal/tool"
 )
 
+// skipIfNoRg skips the test when ripgrep is not on PATH.
+// CI on Windows runners does not install ripgrep, so tests that shell out
+// to `rg` would otherwise fail there.
+func skipIfNoRg(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("rg"); err != nil {
+		t.Skip("ripgrep (rg) not on PATH; skipping GrepTool test")
+	}
+}
+
 func TestBlackBox_AC1_HeadLimit(t *testing.T) {
+	skipIfNoRg(t)
 	tmpDir := t.TempDir()
 
 	// Create 310 files with matching content
@@ -63,6 +75,7 @@ func TestBlackBox_AC1_HeadLimit(t *testing.T) {
 }
 
 func TestBlackBox_AC2_DashPattern(t *testing.T) {
+	skipIfNoRg(t)
 	tmpDir := t.TempDir()
 
 	// Create file with literal "-foo"
@@ -98,6 +111,7 @@ func TestBlackBox_AC2_DashPattern(t *testing.T) {
 }
 
 func TestBlackBox_AC3_Timeout(t *testing.T) {
+	skipIfNoRg(t)
 	tools := tool.NewGrepTool()
 
 	// Test 1: timeout=0 (as float64) with a search that requires scanning many files.
@@ -130,6 +144,7 @@ func TestBlackBox_AC3_Timeout(t *testing.T) {
 }
 
 func TestBlackBox_AC4_OutputCap(t *testing.T) {
+	skipIfNoRg(t)
 	tmpDir := t.TempDir()
 
 	// Single file with many lines that match, exceeding 20K chars
@@ -169,6 +184,7 @@ func TestBlackBox_AC4_OutputCap(t *testing.T) {
 }
 
 func TestBlackBox_AC5_VCSExcluded(t *testing.T) {
+	skipIfNoRg(t)
 	tmpDir := t.TempDir()
 
 	// .git/objects tree with matching content

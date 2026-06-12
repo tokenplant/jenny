@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -11,6 +12,7 @@ import (
 )
 
 func TestGrepTool_Execute(t *testing.T) {
+	skipIfNoRg(t)
 	// Create temp directory structure
 	tmpDir := t.TempDir()
 
@@ -176,6 +178,7 @@ func TestGrepTool_Execute(t *testing.T) {
 
 // AC1: Default head_limit is 250; head_limit=0 means unlimited
 func TestGrepTool_AC1_HeadLimit(t *testing.T) {
+	skipIfNoRg(t)
 	tmpDir := t.TempDir()
 
 	// Create 300 files with matching content in top-level directories
@@ -233,6 +236,7 @@ func TestGrepTool_AC1_HeadLimit(t *testing.T) {
 
 // AC2: Pattern starting with `-` uses `-e` flag
 func TestGrepTool_AC2_DashPattern(t *testing.T) {
+	skipIfNoRg(t)
 	tmpDir := t.TempDir()
 
 	// Create a file containing the literal string "-foo"
@@ -270,6 +274,7 @@ func TestGrepTool_AC2_DashPattern(t *testing.T) {
 
 // AC3: Timeout returns error
 func TestGrepTool_AC3_Timeout(t *testing.T) {
+	skipIfNoRg(t)
 	tmpDir := t.TempDir()
 
 	// Create a file with content
@@ -300,6 +305,7 @@ func TestGrepTool_AC3_Timeout(t *testing.T) {
 
 // AC4: Output capped at ~20K characters
 func TestGrepTool_AC4_OutputCap(t *testing.T) {
+	skipIfNoRg(t)
 	tmpDir := t.TempDir()
 
 	// Create a file with large content that will exceed 20K when searched
@@ -341,6 +347,7 @@ func TestGrepTool_AC4_OutputCap(t *testing.T) {
 
 // AC5: VCS directories excluded by default
 func TestGrepTool_AC5_VCSExcluded(t *testing.T) {
+	skipIfNoRg(t)
 	tmpDir := t.TempDir()
 
 	// Create a .git/objects tree with a file containing matching content
@@ -432,7 +439,18 @@ func TestGrepTool_RipgrepNotFound(t *testing.T) {
 	t.Skip("ripgrep is installed on this system")
 }
 
+// skipIfNoRg skips the test when ripgrep is not on PATH.
+// CI on Windows runners does not install ripgrep, so tests that shell out
+// to `rg` would otherwise fail there.
+func skipIfNoRg(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("rg"); err != nil {
+		t.Skip("ripgrep (rg) not on PATH; skipping GrepTool test")
+	}
+}
+
 func TestGrepTool_ConcurrencySafe(t *testing.T) {
+	skipIfNoRg(t)
 	tmpDir := t.TempDir()
 
 	// Create some files
