@@ -10,6 +10,7 @@ import (
 
 	"github.com/ipy/jenny/internal/testutil/mockapi"
 )
+
 // ---------------------------------------------------------------------------
 // TestOpenAIProvider_ChatBasic tests basic Chat API response
 // AC3: OpenAI Chat backend is selectable
@@ -791,7 +792,7 @@ func TestOpenAIProvider_ReasoningContentRoundTrip(t *testing.T) {
 		{Role: "user", Content: "What's the answer?"},
 		{Role: "assistant", Content: "I need to analyze this",
 			Thinking: "Previous thinking process...",
-			ToolUse: []ToolUseBlock{{ID: "call_prev", Name: "analyze", Input: map[string]any{"data": "test"}}}},
+			ToolUse:  []ToolUseBlock{{ID: "call_prev", Name: "analyze", Input: map[string]any{"data": "test"}}}},
 	}
 	toolResults := []ToolResult{
 		{ToolUseID: "call_prev", Content: "Analysis complete"},

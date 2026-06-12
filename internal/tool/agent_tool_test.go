@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/ipy/jenny/internal/api"
 	"github.com/ipy/jenny/internal/agent"
+	"github.com/ipy/jenny/internal/api"
 	"github.com/ipy/jenny/internal/tool"
 )
 

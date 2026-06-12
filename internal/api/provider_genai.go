@@ -118,7 +118,7 @@ func (p *genaiProvider) sendWithRetry(ctx context.Context, fn func(context.Conte
 
 				isPermanent := statusCode >= 400 && statusCode < 500 &&
 					statusCode != 429 && statusCode != 408 && statusCode != 409
-				
+
 				retryableErr := &RetryableHTTPError{
 					StatusCode:  statusCode,
 					Message:     err.Error(),
@@ -661,11 +661,11 @@ func newGenAIStreamAccumulator() *genAIStreamAccumulator {
 }
 
 func (acc *genAIStreamAccumulator) appendContent(s string) { acc.content += s }
-func (acc *genAIStreamAccumulator) getContent() string    { return acc.content }
+func (acc *genAIStreamAccumulator) getContent() string     { return acc.content }
 func (acc *genAIStreamAccumulator) appendThinking(s string) {
 	acc.thinking += s
 }
-func (acc *genAIStreamAccumulator) getThinking() string    { return acc.thinking }
+func (acc *genAIStreamAccumulator) getThinking() string { return acc.thinking }
 func (acc *genAIStreamAccumulator) setStopReason(r StopReason) {
 	if acc.stopReason == "" {
 		acc.stopReason = r

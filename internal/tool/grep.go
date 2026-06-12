@@ -353,17 +353,17 @@ func (t *GrepTool) executeInProcess(ctx context.Context, input map[string]any, p
 	}
 
 	opts := grepinproc.Options{
-		Pattern:        pattern,
-		Path:           path,
-		Cwd:            cwd,
-		Glob:           stringVal(input, "glob"),
-		OutputMode:     stringVal(input, "output_mode"),
-		IgnoreCase:     boolVal(input, "i"),
-		Multiline:      boolVal(input, "multiline"),
-		Hidden:         true, // matches the rg path's --hidden
-		FileType:       stringVal(input, "type"),
-		ContextBefore:  intValOrZero(input, "B"),
-		ContextAfter:   intValOrZero(input, "A"),
+		Pattern:       pattern,
+		Path:          path,
+		Cwd:           cwd,
+		Glob:          stringVal(input, "glob"),
+		OutputMode:    stringVal(input, "output_mode"),
+		IgnoreCase:    boolVal(input, "i"),
+		Multiline:     boolVal(input, "multiline"),
+		Hidden:        true, // matches the rg path's --hidden
+		FileType:      stringVal(input, "type"),
+		ContextBefore: intValOrZero(input, "B"),
+		ContextAfter:  intValOrZero(input, "A"),
 	}
 	if c, ok := input["C"].(float64); ok && c > 0 {
 		// -C overrides -A/-B if both set

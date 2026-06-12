@@ -84,11 +84,11 @@ func RebuildMessages(entries []session.TranscriptEntry) []api.Message {
 				})
 			}
 			currentAssistant = &api.Message{
-				Role:        "assistant",
-				Content:     entry.Content,
-				ToolUse:     toolUseBlocks,
-				Thinking:    entry.Thinking,
-				Signature:   entry.Signature,
+				Role:      "assistant",
+				Content:   entry.Content,
+				ToolUse:   toolUseBlocks,
+				Thinking:  entry.Thinking,
+				Signature: entry.Signature,
 			}
 
 		case "tool_result":

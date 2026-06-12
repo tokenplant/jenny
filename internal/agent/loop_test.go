@@ -1608,7 +1608,7 @@ func TestAC3_RebuildMessages_PreservesSystemBoundary(t *testing.T) {
 			Content: "[Context boundary: earlier conversation summarized]",
 			CompactMetadata: &session.CompactMetadata{
 				Trigger:          "auto",
-				PreTokens:       5000,
+				PreTokens:        5000,
 				PreservedSegment: 10,
 			},
 		},

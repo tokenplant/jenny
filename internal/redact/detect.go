@@ -144,7 +144,7 @@ func DefaultDetector() *Detector {
 //     a. If the rule has keywords, skip unless at least one is present.
 //     b. Run rule.Regex.FindAllStringSubmatchIndex on content.
 //     c. For each match, extract the secret (full match or capture group),
-//        compute entropy, apply gates (entropy, allowlist).
+//     compute entropy, apply gates (entropy, allowlist).
 //     d. Append Finding to results.
 func (d *Detector) Detect(content string) []Finding {
 	if len(d.rules) == 0 {

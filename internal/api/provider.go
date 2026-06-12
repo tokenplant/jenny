@@ -10,9 +10,9 @@ import (
 type ProviderKind string
 
 const (
-	ProviderAnthropic        ProviderKind = "anthropic"
-	ProviderOpenAI           ProviderKind = "openai"
-	ProviderOpenAIResponses  ProviderKind = "openai_responses"
+	ProviderAnthropic       ProviderKind = "anthropic"
+	ProviderOpenAI          ProviderKind = "openai"
+	ProviderOpenAIResponses ProviderKind = "openai_responses"
 )
 
 // Provider defines the interface for AI backend providers.

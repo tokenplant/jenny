@@ -434,7 +434,6 @@ func TestGrepTool_RipgrepNotFound(t *testing.T) {
 	t.Skip("ripgrep is installed on this system")
 }
 
-
 func TestGrepTool_ConcurrencySafe(t *testing.T) {
 	tmpDir := t.TempDir()
 

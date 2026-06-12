@@ -280,7 +280,7 @@ func (p *openAIResponsesProvider) buildInput(messages []Message, toolResults []T
 			"role": "user",
 			"content": []map[string]any{
 				{
-					"type": "function_call_output",
+					"type":    "function_call_output",
 					"call_id": tr.ToolUseID,
 					"output":  tr.Content,
 				},
@@ -296,7 +296,7 @@ func (p *openAIResponsesProvider) buildInput(messages []Message, toolResults []T
 				"role": "user",
 				"content": []map[string]any{
 					{
-						"type": "function_call_output",
+						"type":    "function_call_output",
 						"call_id": tr.ToolUseID,
 						"output":  tr.Content,
 					},

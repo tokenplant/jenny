@@ -111,7 +111,7 @@ func (t *PowerShellTool) Execute(ctx context.Context, input map[string]any, cwd 
 
 	// Prepend UTF-8 encoding command
 	fullCommand := "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new(); " + command
-	
+
 	cmd := exec.CommandContext(cmdCtx, "powershell.exe", "-NoProfile", "-NonInteractive", "-Command", fullCommand)
 	cmd.Dir = t.commandCwd
 

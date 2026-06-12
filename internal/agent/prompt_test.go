@@ -409,7 +409,7 @@ func TestBuildSystemPrompt_ContainsAllSections(t *testing.T) {
 	initTestGitRepo(t, tmpDir)
 
 	cfg := StreamConfig{
-		MemoryContent:    "session memory content",
+		MemoryContent:      "session memory content",
 		AppendSystemPrompt: "extra appended section",
 	}
 	tools := []tool.Tool{

@@ -65,15 +65,15 @@ func TestDeepSeekToolResultFormat(t *testing.T) {
 	// Message history with tool results
 	messages := []Message{
 		{
-			Role: "user",
+			Role:    "user",
 			Content: "Hello",
 		},
 		{
 			Role: "assistant",
 			ToolUse: []ToolUseBlock{
 				{
-					ID: "call_1",
-					Name: "test_tool",
+					ID:    "call_1",
+					Name:  "test_tool",
 					Input: map[string]any{"arg": "val"},
 				},
 			},
@@ -83,7 +83,7 @@ func TestDeepSeekToolResultFormat(t *testing.T) {
 			ToolResults: []ToolResultBlock{
 				{
 					ToolUseID: "call_1",
-					Content: "Tool output",
+					Content:   "Tool output",
 				},
 			},
 		},
@@ -174,7 +174,7 @@ func TestToolResultContentFlattenScope(t *testing.T) {
 
 	messages := []Message{
 		{
-			Role: "user",
+			Role:    "user",
 			Content: "Run tool",
 		},
 	}

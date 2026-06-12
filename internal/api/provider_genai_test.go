@@ -154,7 +154,7 @@ func TestGenAIProvider_SendMessage_Basic(t *testing.T) {
 
 		writeJSON(w, 200, map[string]any{
 			"candidates": []map[string]any{{
-				"content": map[string]any{"role": "model", "parts": []map[string]any{{"text": "Hi there!"}}},
+				"content":      map[string]any{"role": "model", "parts": []map[string]any{{"text": "Hi there!"}}},
 				"finishReason": "STOP",
 			}},
 			"usageMetadata": map[string]any{
@@ -356,10 +356,10 @@ func TestGenAIProvider_SendMessage_MaxTokens(t *testing.T) {
 func TestGenAIProvider_SendMessage_ErrorMapping(t *testing.T) {
 	setT(t)
 	cases := []struct {
-		name       string
-		status     int
-		body       string
-		isPerm     bool
+		name   string
+		status int
+		body   string
+		isPerm bool
 	}{
 		{"429", 429, `{"error":{"code":429,"message":"rate limit","status":"RESOURCE_EXHAUSTED"}}`, false},
 		{"503", 503, `{"error":{"code":503,"message":"unavailable","status":"UNAVAILABLE"}}`, false},

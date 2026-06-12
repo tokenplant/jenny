@@ -2,10 +2,10 @@ package api
 
 // GenAIRequest represents a request to the Gemini API.
 type GenAIRequest struct {
-	Contents          []GenAIContent    `json:"contents"`
-	Tools             []GenAITool       `json:"tools,omitempty"`
+	Contents          []GenAIContent         `json:"contents"`
+	Tools             []GenAITool            `json:"tools,omitempty"`
 	GenerationConfig  *GenAIGenerationConfig `json:"generationConfig,omitempty"`
-	SystemInstruction *GenAIContent     `json:"systemInstruction,omitempty"`
+	SystemInstruction *GenAIContent          `json:"systemInstruction,omitempty"`
 }
 
 // GenAIContent represents a content object in the Gemini API.
@@ -16,11 +16,11 @@ type GenAIContent struct {
 
 // GenAIPart represents a part of a content object.
 type GenAIPart struct {
-	Text             string                `json:"text,omitempty"`
-	InlineData       *GenAIBlob            `json:"inlineData,omitempty"`
-	FunctionCall     *GenAIFunctionCall    `json:"functionCall,omitempty"`
+	Text             string                 `json:"text,omitempty"`
+	InlineData       *GenAIBlob             `json:"inlineData,omitempty"`
+	FunctionCall     *GenAIFunctionCall     `json:"functionCall,omitempty"`
 	FunctionResponse *GenAIFunctionResponse `json:"functionResponse,omitempty"`
-	Thought          bool                  `json:"thought,omitempty"` // For thinking/reasoning
+	Thought          bool                   `json:"thought,omitempty"` // For thinking/reasoning
 }
 
 // GenAIBlob represents inline data (e.g. images).
@@ -64,16 +64,16 @@ type GenAIGenerationConfig struct {
 
 // GenAIResponse represents a response from the Gemini API.
 type GenAIResponse struct {
-	Candidates     []GenAICandidate `json:"candidates"`
-	UsageMetadata  *GenAIUsage      `json:"usageMetadata,omitempty"`
-	ModelVersion   string           `json:"modelVersion"`
+	Candidates    []GenAICandidate `json:"candidates"`
+	UsageMetadata *GenAIUsage      `json:"usageMetadata,omitempty"`
+	ModelVersion  string           `json:"modelVersion"`
 }
 
 // GenAICandidate represents a candidate in the response.
 type GenAICandidate struct {
-	Content       GenAIContent       `json:"content"`
-	FinishReason  string             `json:"finishReason"`
-	Index         int                `json:"index"`
+	Content       GenAIContent        `json:"content"`
+	FinishReason  string              `json:"finishReason"`
+	Index         int                 `json:"index"`
 	SafetyRatings []GenAISafetyRating `json:"safetyRatings,omitempty"`
 }
 
@@ -85,11 +85,11 @@ type GenAISafetyRating struct {
 
 // GenAIUsage represents usage metadata.
 type GenAIUsage struct {
-	PromptTokenCount         int `json:"promptTokenCount"`
-	CandidatesTokenCount     int `json:"candidatesTokenCount"`
-	TotalTokenCount          int `json:"totalTokenCount"`
-	CachedContentTokenCount  int `json:"cachedContentTokenCount,omitempty"`
-	ThoughtsTokenCount       int `json:"thoughtsTokenCount,omitempty"`
+	PromptTokenCount        int `json:"promptTokenCount"`
+	CandidatesTokenCount    int `json:"candidatesTokenCount"`
+	TotalTokenCount         int `json:"totalTokenCount"`
+	CachedContentTokenCount int `json:"cachedContentTokenCount,omitempty"`
+	ThoughtsTokenCount      int `json:"thoughtsTokenCount,omitempty"`
 }
 
 // GenAIStreamResponse represents a chunk in a streaming response.

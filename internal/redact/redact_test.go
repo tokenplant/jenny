@@ -44,7 +44,6 @@ func TestParseRedactMode(t *testing.T) {
 	}
 }
 
-
 func TestRedact_ReplacesOpenAIKey(t *testing.T) {
 	redactor := NewSecretRedactor(ModeRecover)
 	// Use valid OpenAI pattern: sk-{20}T3BlbkFJ{20}

@@ -20,7 +20,7 @@ import (
 
 // TranscriptEntry represents a single turn in the conversation transcript.
 type TranscriptEntry struct {
-	Type string    `json:"type"`
+	Type      string    `json:"type"`
 	Timestamp time.Time `json:"timestamp"`
 	SessionID string    `json:"session_id"`
 	UUID      string    `json:"uuid"`
@@ -40,7 +40,7 @@ type TranscriptEntry struct {
 	WorktreeCWD    string `json:"worktree_cwd,omitempty"`
 
 	// Compaction boundary fields
-	Subtype         string            `json:"subtype,omitempty"`
+	Subtype         string           `json:"subtype,omitempty"`
 	CompactMetadata *CompactMetadata `json:"compact_metadata,omitempty"`
 
 	// Thinking fields - for reasoning/thinking block persistence
@@ -51,7 +51,7 @@ type TranscriptEntry struct {
 // CompactMetadata holds metadata about a compaction boundary.
 type CompactMetadata struct {
 	Trigger          string `json:"trigger"`
-	PreTokens       int    `json:"pre_tokens"`
+	PreTokens        int    `json:"pre_tokens"`
 	PreservedSegment int    `json:"preserved_segment"`
 }
 

@@ -4,22 +4,22 @@ import "encoding/json"
 
 // OpenAIRequest represents a chat completion request.
 type OpenAIRequest struct {
-	Model               string                       `json:"model"`
-	Messages            []OpenAIMessage              `json:"messages"`
-	Tools               []OpenAITool                 `json:"tools,omitempty"`
-	MaxCompletionTokens *int64                       `json:"max_completion_tokens,omitempty"`
-	Stream              bool                         `json:"stream,omitempty"`
-	StreamOptions       *OpenAIStreamOptions         `json:"stream_options,omitempty"`
-	ReasoningEffort     string                       `json:"reasoning_effort,omitempty"`
+	Model               string               `json:"model"`
+	Messages            []OpenAIMessage      `json:"messages"`
+	Tools               []OpenAITool         `json:"tools,omitempty"`
+	MaxCompletionTokens *int64               `json:"max_completion_tokens,omitempty"`
+	Stream              bool                 `json:"stream,omitempty"`
+	StreamOptions       *OpenAIStreamOptions `json:"stream_options,omitempty"`
+	ReasoningEffort     string               `json:"reasoning_effort,omitempty"`
 }
 
 // OpenAIMessage represents a message in the OpenAI chat format.
 type OpenAIMessage struct {
-	Role             string               `json:"role"`
-	Content          json.RawMessage      `json:"content,omitempty"`
-	ReasoningContent string               `json:"reasoning_content,omitempty"`
-	ToolCalls        []OpenAIToolCall     `json:"tool_calls,omitempty"`
-	ToolCallID       string               `json:"tool_call_id,omitempty"`
+	Role             string           `json:"role"`
+	Content          json.RawMessage  `json:"content,omitempty"`
+	ReasoningContent string           `json:"reasoning_content,omitempty"`
+	ToolCalls        []OpenAIToolCall `json:"tool_calls,omitempty"`
+	ToolCallID       string           `json:"tool_call_id,omitempty"`
 }
 
 // GetContent returns the content as a string, handling both string and array formats.
@@ -66,8 +66,8 @@ type OpenAIFunction struct {
 
 // OpenAIToolCall represents a tool call in a message.
 type OpenAIToolCall struct {
-	ID       string         `json:"id"`
-	Type     string         `json:"type"`
+	ID       string             `json:"id"`
+	Type     string             `json:"type"`
 	Function OpenAIFunctionCall `json:"function"`
 }
 
@@ -92,16 +92,16 @@ type OpenAIResponse struct {
 
 // OpenAIChoice represents a single choice in the response.
 type OpenAIChoice struct {
-	Index        int            `json:"index"`
-	Message      OpenAIMessage  `json:"message"`
-	FinishReason string         `json:"finish_reason"`
+	Index        int           `json:"index"`
+	Message      OpenAIMessage `json:"message"`
+	FinishReason string        `json:"finish_reason"`
 }
 
 // OpenAIUsage represents token usage in the response.
 type OpenAIUsage struct {
-	PromptTokens     int `json:"prompt_tokens"`
-	CompletionTokens int `json:"completion_tokens"`
-	TotalTokens      int `json:"total_tokens"`
+	PromptTokens        int `json:"prompt_tokens"`
+	CompletionTokens    int `json:"completion_tokens"`
+	TotalTokens         int `json:"total_tokens"`
 	PromptTokensDetails struct {
 		CachedTokens int `json:"cached_tokens"`
 	} `json:"prompt_tokens_details"`
@@ -109,32 +109,32 @@ type OpenAIUsage struct {
 
 // OpenAIStreamChunk represents a single chunk in a streaming response.
 type OpenAIStreamChunk struct {
-	ID      string              `json:"id"`
-	Model   string              `json:"model"`
+	ID      string               `json:"id"`
+	Model   string               `json:"model"`
 	Choices []OpenAIStreamChoice `json:"choices"`
-	Usage   *OpenAIUsage        `json:"usage,omitempty"`
+	Usage   *OpenAIUsage         `json:"usage,omitempty"`
 }
 
 // OpenAIStreamChoice represents a single choice in a stream chunk.
 type OpenAIStreamChoice struct {
-	Index        int                 `json:"index"`
-	Delta        OpenAIStreamDelta   `json:"delta"`
-	FinishReason string              `json:"finish_reason"`
+	Index        int               `json:"index"`
+	Delta        OpenAIStreamDelta `json:"delta"`
+	FinishReason string            `json:"finish_reason"`
 }
 
 // OpenAIStreamDelta represents the change in the message in a stream chunk.
 type OpenAIStreamDelta struct {
-	Role             string               `json:"role,omitempty"`
-	Content          string               `json:"content,omitempty"`
-	ReasoningContent string               `json:"reasoning_content,omitempty"`
+	Role             string                 `json:"role,omitempty"`
+	Content          string                 `json:"content,omitempty"`
+	ReasoningContent string                 `json:"reasoning_content,omitempty"`
 	ToolCalls        []OpenAIStreamToolCall `json:"tool_calls,omitempty"`
 }
 
 // OpenAIStreamToolCall represents a tool call delta in a stream chunk.
 type OpenAIStreamToolCall struct {
-	Index    int                `json:"index"`
-	ID       string             `json:"id,omitempty"`
-	Type     string             `json:"type,omitempty"`
+	Index    int                  `json:"index"`
+	ID       string               `json:"id,omitempty"`
+	Type     string               `json:"type,omitempty"`
 	Function OpenAIStreamFunction `json:"function,omitempty"`
 }
 

@@ -349,7 +349,7 @@ func (e *QueryEngine) persistCompactBoundary(preTokens int, preservedCount int, 
 		Subtype: "compact_boundary",
 		CompactMetadata: &session.CompactMetadata{
 			Trigger:          trigger,
-			PreTokens:       preTokens,
+			PreTokens:        preTokens,
 			PreservedSegment: preservedCount,
 		},
 		CWD: e.cwd,

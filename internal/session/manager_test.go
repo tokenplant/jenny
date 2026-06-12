@@ -1012,7 +1012,6 @@ func TestConcurrency(t *testing.T) {
 	}
 }
 
-
 // TestAC2_LoadPostBoundaryMessages tests that LoadPostBoundaryMessages correctly
 // filters entries after a compaction boundary.
 func TestAC2_LoadPostBoundaryMessages(t *testing.T) {
@@ -1048,7 +1047,7 @@ func TestAC2_LoadPostBoundaryMessages(t *testing.T) {
 		Subtype: "compact_boundary",
 		CompactMetadata: &CompactMetadata{
 			Trigger:          "auto",
-			PreTokens:       5000,
+			PreTokens:        5000,
 			PreservedSegment: 3,
 		},
 	}
@@ -1233,7 +1232,7 @@ func TestAC4_CompactionBoundaryMetadata(t *testing.T) {
 		Subtype: "compact_boundary",
 		CompactMetadata: &CompactMetadata{
 			Trigger:          "manual",
-			PreTokens:       7500,
+			PreTokens:        7500,
 			PreservedSegment: 5,
 		},
 	}

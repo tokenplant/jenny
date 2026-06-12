@@ -27,10 +27,10 @@ func TestThinkingPersistenceRoundTrip_OpenAIChat(t *testing.T) {
 
 	// Simulate an assistant entry with thinking from OpenAI Chat API
 	entry := TranscriptEntry{
-		Type:      "assistant",
-		Content:   "The answer is 42.",
-		Thinking:  "Let me think about this: 2 * 21 = 42",
-		ToolUse:   []ToolUse{{ID: "call_123", Name: "calculate", Input: map[string]any{"expr": "2*21"}}},
+		Type:     "assistant",
+		Content:  "The answer is 42.",
+		Thinking: "Let me think about this: 2 * 21 = 42",
+		ToolUse:  []ToolUse{{ID: "call_123", Name: "calculate", Input: map[string]any{"expr": "2*21"}}},
 	}
 
 	if err := m.AppendEntry(sessionID, entry); err != nil {
@@ -123,10 +123,10 @@ func TestThinkingPersistenceRoundTrip_ResponsesAPI(t *testing.T) {
 
 	// Simulate an assistant entry with thinking from Responses API
 	entry := TranscriptEntry{
-		Type:      "assistant",
-		Content:   "Based on my analysis, the solution is clear.",
-		Thinking:  "I analyzed the problem step by step and arrived at the conclusion.",
-		ToolUse:   []ToolUse{{ID: "call_resp_123", Name: "analyze_data", Input: map[string]any{"data": "sample"}}},
+		Type:     "assistant",
+		Content:  "Based on my analysis, the solution is clear.",
+		Thinking: "I analyzed the problem step by step and arrived at the conclusion.",
+		ToolUse:  []ToolUse{{ID: "call_resp_123", Name: "analyze_data", Input: map[string]any{"data": "sample"}}},
 	}
 
 	if err := m.AppendEntry(sessionID, entry); err != nil {

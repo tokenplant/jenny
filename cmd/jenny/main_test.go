@@ -714,7 +714,7 @@ func TestLoadEnvFiles_DoesNotOverwriteExisting(t *testing.T) {
 // AC9: missing .env is not an error.
 func TestLoadEnvFiles_MissingIsFine(t *testing.T) {
 	dir := t.TempDir() // empty
-	loadEnvFiles(dir) // must not panic / error
+	loadEnvFiles(dir)  // must not panic / error
 }
 
 // AC9: loadEnvFiles also picks up .jenny/.env.

@@ -65,7 +65,7 @@ func TestPowerShellToolBackground(t *testing.T) {
 	ctx := context.Background()
 
 	input := map[string]any{
-		"command":          "echo background",
+		"command":           "echo background",
 		"run_in_background": true,
 	}
 	result, err := tool.Execute(ctx, input, "C:\\")

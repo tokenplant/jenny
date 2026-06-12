@@ -17,9 +17,9 @@ import (
 // openAIProvider implements the Provider interface using a lightweight HTTP client.
 type openAIProvider struct {
 	client         *HTTPClient
-	model         string
-	maxTokens     int
-	retryConfig   RetryConfig
+	model          string
+	maxTokens      int
+	retryConfig    RetryConfig
 	thinkingEffort string
 }
 
@@ -412,7 +412,7 @@ func (p *openAIProvider) SendMessageStream(ctx context.Context, messages []Messa
 			Tools:               sdkTools,
 			Stream:              true,
 			StreamOptions:       &OpenAIStreamOptions{IncludeUsage: true},
-				ReasoningEffort:     p.thinkingEffort,
+			ReasoningEffort:     p.thinkingEffort,
 		}
 
 		url := fmt.Sprintf("%s/chat/completions", os.Getenv("OPENAI_BASE_URL"))

@@ -25,10 +25,10 @@ type Flags struct {
 	StrictMCP              bool
 	DeniedTools            []string
 	Bare                   bool
-	SwarmsEnabled          bool   // When true, enables named agent delegation (swarm mode)
-	Version                bool   // --version / -v: print version and exit
-	PrintSystemPrompt      bool   // --print-system-prompt: print the assembled system prompt and exit
-	CustomSystemPrompt     string // --system-prompt: replaces default system prompt entirely
+	SwarmsEnabled          bool              // When true, enables named agent delegation (swarm mode)
+	Version                bool              // --version / -v: print version and exit
+	PrintSystemPrompt      bool              // --print-system-prompt: print the assembled system prompt and exit
+	CustomSystemPrompt     string            // --system-prompt: replaces default system prompt entirely
 	AppendSystemPrompt     string            // --append-system-prompt: appended after assembled system prompt
 	MaxIterations          int               // --max-iterations: maximum loop iterations (0 = unlimited)
 	MaxTurns               int               // --max-turns: maximum number of turns (0 = unlimited)

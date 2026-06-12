@@ -4,16 +4,16 @@ import "encoding/json"
 
 // AnthropicRequest represents a request to the Anthropic Messages API.
 type AnthropicRequest struct {
-	Model             string                  `json:"model"`
-	Messages          []AnthropicMessage      `json:"messages"`
-	System            []AnthropicContentBlock `json:"system,omitempty"`
-	MaxTokens         int                     `json:"max_tokens"`
-	StopSequences     []string                `json:"stop_sequences,omitempty"`
-	Stream            bool                    `json:"stream,omitempty"`
-	Temperature       *float64                `json:"temperature,omitempty"`
-	TopP              *float64                `json:"top_p,omitempty"`
-	TopK              *int                    `json:"top_k,omitempty"`
-	Tools             []AnthropicTool         `json:"tools,omitempty"`
+	Model         string                  `json:"model"`
+	Messages      []AnthropicMessage      `json:"messages"`
+	System        []AnthropicContentBlock `json:"system,omitempty"`
+	MaxTokens     int                     `json:"max_tokens"`
+	StopSequences []string                `json:"stop_sequences,omitempty"`
+	Stream        bool                    `json:"stream,omitempty"`
+	Temperature   *float64                `json:"temperature,omitempty"`
+	TopP          *float64                `json:"top_p,omitempty"`
+	TopK          *int                    `json:"top_k,omitempty"`
+	Tools         []AnthropicTool         `json:"tools,omitempty"`
 }
 
 // AnthropicMessage represents a message in the Anthropic Messages API.
@@ -24,16 +24,16 @@ type AnthropicMessage struct {
 
 // AnthropicContentBlock represents a content block in an Anthropic message.
 type AnthropicContentBlock struct {
-	Type         string                `json:"type"`
-	Text         string                `json:"text,omitempty"`
-	Thinking     string                `json:"thinking,omitempty"`     // For thinking
-	Signature    string                `json:"signature,omitempty"`    // For thinking
-	ID           string                `json:"id,omitempty"`           // For tool_use
-	Name         string                `json:"name,omitempty"`         // For tool_use
-	Input        any                   `json:"input,omitempty"`        // For tool_use
-	ToolUseID    string                `json:"tool_use_id,omitempty"`  // For tool_result
-	Content      json.RawMessage       `json:"content,omitempty"`      // For tool_result (Polymorphic: string or array)
-	IsError      bool                  `json:"is_error,omitempty"`     // For tool_result
+	Type         string                 `json:"type"`
+	Text         string                 `json:"text,omitempty"`
+	Thinking     string                 `json:"thinking,omitempty"`    // For thinking
+	Signature    string                 `json:"signature,omitempty"`   // For thinking
+	ID           string                 `json:"id,omitempty"`          // For tool_use
+	Name         string                 `json:"name,omitempty"`        // For tool_use
+	Input        any                    `json:"input,omitempty"`       // For tool_use
+	ToolUseID    string                 `json:"tool_use_id,omitempty"` // For tool_result
+	Content      json.RawMessage        `json:"content,omitempty"`     // For tool_result (Polymorphic: string or array)
+	IsError      bool                   `json:"is_error,omitempty"`    // For tool_result
 	CacheControl *AnthropicCacheControl `json:"cache_control,omitempty"`
 }
 
@@ -132,12 +132,12 @@ type AnthropicUsage struct {
 
 // AnthropicStreamEvent represents a generic event in an Anthropic stream.
 type AnthropicStreamEvent struct {
-	Type         string                  `json:"type"`
-	Message      *AnthropicResponse      `json:"message,omitempty"`       // message_start
-	Index        int                     `json:"index,omitempty"`         // content_block_start, content_block_delta
+	Type         string                 `json:"type"`
+	Message      *AnthropicResponse     `json:"message,omitempty"`       // message_start
+	Index        int                    `json:"index,omitempty"`         // content_block_start, content_block_delta
 	ContentBlock *AnthropicContentBlock `json:"content_block,omitempty"` // content_block_start
-	Delta        *AnthropicStreamDelta   `json:"delta,omitempty"`         // content_block_delta, message_delta
-	Usage        *AnthropicUsage         `json:"usage,omitempty"`         // message_delta
+	Delta        *AnthropicStreamDelta  `json:"delta,omitempty"`         // content_block_delta, message_delta
+	Usage        *AnthropicUsage        `json:"usage,omitempty"`         // message_delta
 }
 
 // AnthropicStreamDelta represents a delta in an Anthropic stream.
