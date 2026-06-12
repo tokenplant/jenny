@@ -202,7 +202,7 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 					data, _ := json.Marshal(msg)
 					fmt.Fprintln(os.Stdout, string(data))
 				}
-				return "", fmt.Errorf("budget exceeded: %.4f CNY > %.4f CNY limit", e.costState.TotalCostCNY, budgetCNY)
+				return "", fmt.Errorf("error_budget_exceeded: %.4f CNY > %.4f CNY limit", e.costState.TotalCostCNY, budgetCNY)
 			}
 		} else if budgetUSD > 0 {
 			if exceeded, _ := CheckBudgetExceeded(e.costState, budgetUSD, "USD"); exceeded {
@@ -226,7 +226,7 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 					data, _ := json.Marshal(msg)
 					fmt.Fprintln(os.Stdout, string(data))
 				}
-				return "", fmt.Errorf("budget exceeded: %.4f USD > %.4f USD limit", e.costState.TotalCostUSD, budgetUSD)
+				return "", fmt.Errorf("error_budget_exceeded: %.4f USD > %.4f USD limit", e.costState.TotalCostUSD, budgetUSD)
 			}
 		}
 
@@ -692,8 +692,8 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 			}
 		}
 
-		// Execute all tools using the parallel executor
-		executor := NewToolExecutor(e.tools, cwd)
+		// Execute all tools using the parallel executor with cross-turn state support
+		executor := NewToolExecutorWithStreamConfig(e.tools, cwd, &e.streamCfg)
 		execResults, err := executor.Execute(ctx, execBlocks)
 		if err != nil {
 			return "", fmt.Errorf("executing tools: %w", err)

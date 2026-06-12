@@ -279,6 +279,16 @@ func (e *QueryEngine) SetMaxTurns(maxTurns int) {
 	e.maxTurns = maxTurns
 }
 
+// SetMaxBudgetUsd sets the budget limit in USD for cost enforcement.
+// When set, the engine checks accumulated cost against this budget before each API call.
+// If exceeded, the loop terminates with error type "error_budget_exceeded".
+// A value of 0 means no budget limit (skips cost checking for performance).
+func (e *QueryEngine) SetMaxBudgetUsd(amount float64) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.streamCfg.MaxBudgetUSD = amount
+}
+
 // setMemExtractorForTest sets the memExtractor field for testing purposes.
 // This is only for use in test files within the agent package.
 func (e *QueryEngine) setMemExtractorForTest(memExtractor *MemoryExtractor) {

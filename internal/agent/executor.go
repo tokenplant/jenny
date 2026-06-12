@@ -3,7 +3,9 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/ipy/jenny/internal/tool"
@@ -40,6 +42,9 @@ type ToolExecutor struct {
 	tools          []tool.Tool
 	cwd            string
 	maxConcurrency int
+	// streamCfg is used for cross-turn state (permission denials, discovered skills).
+	// When nil, cross-turn features are disabled.
+	streamCfg *StreamConfig
 }
 
 // NewToolExecutor creates a new ToolExecutor.
@@ -49,6 +54,53 @@ func NewToolExecutor(tools []tool.Tool, cwd string) *ToolExecutor {
 		cwd:            cwd,
 		maxConcurrency: defaultMaxConcurrency,
 	}
+}
+
+// NewToolExecutorWithStreamConfig creates a new ToolExecutor with cross-turn state support.
+func NewToolExecutorWithStreamConfig(tools []tool.Tool, cwd string, streamCfg *StreamConfig) *ToolExecutor {
+	return &ToolExecutor{
+		tools:          tools,
+		cwd:            cwd,
+		maxConcurrency: defaultMaxConcurrency,
+		streamCfg:      streamCfg,
+	}
+}
+
+// BuildDenialKey creates a unique denial key from tool name and input.
+// The key format is "toolName:inputKeys" where inputKeys is a sorted, comma-separated list of key=value pairs.
+func BuildDenialKey(toolName string, input map[string]any) string {
+	// Collect and sort input keys for consistent matching
+	var keys []string
+	for k := range input {
+		keys = append(keys, k)
+	}
+	// Simple sort for determinism
+	for i := 0; i < len(keys)-1; i++ {
+		for j := i + 1; j < len(keys); j++ {
+			if keys[i] > keys[j] {
+				keys[i], keys[j] = keys[j], keys[i]
+			}
+		}
+	}
+
+	// Build key string
+	var sb strings.Builder
+	sb.WriteString(toolName)
+	sb.WriteString(":")
+	for i, k := range keys {
+		if i > 0 {
+			sb.WriteString(",")
+		}
+		sb.WriteString(k)
+		sb.WriteString("=")
+		if v, ok := input[k]; ok {
+			// Use JSON for value representation
+			if jsonBytes, err := json.Marshal(v); err == nil {
+				sb.WriteString(string(jsonBytes))
+			}
+		}
+	}
+	return sb.String()
 }
 
 // Execute runs all tool use blocks according to concurrency rules.
@@ -203,16 +255,26 @@ func (e *ToolExecutor) executeParallel(parentCtx context.Context, batch []toolUs
 			}
 			defer func() { <-sem }()
 
-			execResult, err := tw.tool.Execute(ctx, tw.block.Input, e.cwd)
-
-			if ctx.Err() != nil {
+			// Check permission denial cache before execution
+			denialKey := BuildDenialKey(tw.block.Name, tw.block.Input)
+			if e.streamCfg != nil && e.streamCfg.HasPermissionDenial(denialKey) {
+				// Tool was previously denied - return cached denial
 				results[tw.index] = toolResult{
-					ToolUseID:   tw.block.ID,
-					Content:     "Tool execution aborted due to sibling failure",
-					IsError:     true,
-					Interrupted: true,
+					ToolUseID: tw.block.ID,
+					Content:   "Permission denied: tool execution blocked by permission gate",
+					IsError:   true,
 				}
 				return
+			}
+
+			execResult, err := tw.tool.Execute(ctx, tw.block.Input, e.cwd)
+
+			// Check if this was a permission denial (error message contains "permission")
+			if err != nil && strings.Contains(strings.ToLower(err.Error()), "permission") {
+				// Record the denial for cross-turn caching
+				if e.streamCfg != nil {
+					e.streamCfg.AddPermissionDenial(denialKey)
+				}
 			}
 
 			if err != nil {
@@ -260,7 +322,27 @@ func (e *ToolExecutor) executeSerial(parentCtx context.Context, batch []toolUseW
 			continue
 		}
 
+		// Check permission denial cache before execution
+		denialKey := BuildDenialKey(tw.block.Name, tw.block.Input)
+		if e.streamCfg != nil && e.streamCfg.HasPermissionDenial(denialKey) {
+			// Tool was previously denied - return cached denial
+			results[tw.index] = toolResult{
+				ToolUseID: tw.block.ID,
+				Content:   "Permission denied: tool execution blocked by permission gate",
+				IsError:   true,
+			}
+			continue
+		}
+
 		execResult, err := tw.tool.Execute(ctx, tw.block.Input, e.cwd)
+
+		// Check if this was a permission denial (error message contains "permission")
+		if err != nil && strings.Contains(strings.ToLower(err.Error()), "permission") {
+			// Record the denial for cross-turn caching
+			if e.streamCfg != nil {
+				e.streamCfg.AddPermissionDenial(denialKey)
+			}
+		}
 
 		if err != nil {
 			results[tw.index] = toolResult{

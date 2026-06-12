@@ -46,7 +46,11 @@ type StreamConfig struct {
 	MemoryContent        string                      // Memory content to inject into system prompt
 	CachedSystemPrompt   string                      // Frozen system prompt from first assembly (cache-friendly)
 	Skills               []skills.Skill              // Discovered skills for manifest
-	ActiveSkills         []ActivatedSkill            // Skills activated this session (survives compaction)
+	ActiveSkills           []ActivatedSkill            // Skills activated this session (survives compaction)
+	// Non-compacted: survives context compaction.
+	PermissionDenials     []string                     // Denied tool executions (toolName + inputKey pairs) for cross-turn caching
+	// Non-compacted: survives context compaction.
+	DiscoveredSkillNames  []string                     // Skill names discovered during execution for cross-turn persistence
 	IsForkChild          bool                        // True when this session is a fork child (subagent spawned another agent)
 	StructuredSchema     map[string]any              // JSON schema for structured output (AC1, AC4: non-interactive only)
 	StructuredDenyRules  []string                    // Tool names to deny; checked by engine to enforce AC1
@@ -59,6 +63,32 @@ type StreamConfig struct {
 // SetActiveSkills sets the active skills list for the system prompt.
 func (cfg *StreamConfig) SetActiveSkills(skills []ActivatedSkill) {
 	cfg.ActiveSkills = skills
+}
+
+// AddPermissionDenial records a denied tool execution for cross-turn caching.
+// The denialKey should be a unique identifier for the tool name + input combination.
+func (cfg *StreamConfig) AddPermissionDenial(denialKey string) {
+	cfg.PermissionDenials = append(cfg.PermissionDenials, denialKey)
+}
+
+// HasPermissionDenial checks if a tool with the given denial key has been denied before.
+func (cfg *StreamConfig) HasPermissionDenial(denialKey string) bool {
+	for _, key := range cfg.PermissionDenials {
+		if key == denialKey {
+			return true
+		}
+	}
+	return false
+}
+
+// AddDiscoveredSkillName adds a skill name if not already present (deduplication).
+func (cfg *StreamConfig) AddDiscoveredSkillName(name string) {
+	for _, n := range cfg.DiscoveredSkillNames {
+		if n == name {
+			return // Already present, skip
+		}
+	}
+	cfg.DiscoveredSkillNames = append(cfg.DiscoveredSkillNames, name)
 }
 
 // ActivatedSkill tracks a skill that has been activated in the current session.
