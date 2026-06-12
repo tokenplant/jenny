@@ -45,9 +45,7 @@ jobs:
       run: |
         git config --global user.name "jenny-ci"
         git config --global user.email "jenny-ci@users.noreply.github.com"
-        if [ "${{ runner.os }}" == "Windows" ]; then
-          git config --global core.autocrlf false
-        fi
+        git config --global core.autocrlf false
 
     - name: Test
       run: go test ./...
