@@ -567,9 +567,11 @@ func TestBashTool_ScratchpadAccess(t *testing.T) {
 		t.Fatalf("failed to create test file: %v", err)
 	}
 
-	// Test that scratchpad file is accessible WITHOUT skipPermissions
+	// Test that scratchpad file is accessible WITHOUT skipPermissions.
+	// On Windows, sh needs forward slashes for paths.
+	testFileCmd := filepath.ToSlash(testFile)
 	result, err := tool.Execute(context.Background(), map[string]any{
-		"command": "cat " + testFile,
+		"command": "cat " + testFileCmd,
 	}, tmpDir)
 	if err != nil {
 		t.Fatalf("unexpected error reading scratchpad: %v", err)
@@ -587,7 +589,7 @@ func TestBashTool_ScratchpadAccess(t *testing.T) {
 		t.Fatalf("failed to create blocked file: %v", err)
 	}
 	result, err = tool.Execute(context.Background(), map[string]any{
-		"command": "cat " + outsideFile,
+		"command": "cat " + filepath.ToSlash(outsideFile),
 	}, tmpDir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

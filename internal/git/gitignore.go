@@ -35,7 +35,7 @@ func IsIgnored(repoRoot, path string) (bool, error) {
 		absPath = filepath.Join(resolvedDir, filepath.Base(absPath))
 	}
 
-	// Get the relative path from repo root
+	// Get the relative path from repo root (use native separators for dir traversal)
 	relPath, err := filepath.Rel(resolvedRoot, absPath)
 	if err != nil {
 		return false, err
@@ -47,8 +47,8 @@ func IsIgnored(repoRoot, path string) (bool, error) {
 		return false, err
 	}
 
-	// Also load patterns from parent directories up to repo root (excluding root)
-	// Deeper directory patterns are checked later (override shallower ones)
+	// Also load patterns from parent directories up to repo root (excluding root).
+	// Use relPath's native-separator form for the loop to match dir traversal.
 	dir := filepath.Dir(absPath)
 	for dir != resolvedRoot {
 		parentPatterns, err := loadGitignorePatterns(dir)

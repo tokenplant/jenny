@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"syscall"
@@ -372,6 +373,13 @@ func (t *EditTool) executeScoped(filePath, oldString, newString string, replaceA
 	}
 	tmpPath := tmpFile.Name()
 	defer os.Remove(tmpPath) // Clean up on any error path
+
+	// Normalize path separators on Windows so the rename call uses consistent paths.
+	// filepath.Dir returns backslashes; os.CreateTemp on some Go versions may return
+	// forward slashes. Mixing separators can cause "Access is denied" errors on Windows.
+	if runtime.GOOS == "windows" {
+		tmpPath = filepath.FromSlash(tmpPath)
+	}
 
 	// Use bufio.Reader with ReadBytes for line-level granularity
 	// that preserves delimiter info for streaming before/after sections.

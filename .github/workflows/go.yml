@@ -40,8 +40,14 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y ripgrep
+
+    - name: Setup Git Config
+      run: |
         git config --global user.name "jenny-ci"
         git config --global user.email "jenny-ci@users.noreply.github.com"
+        if [ "${{ runner.os }}" == "Windows" ]; then
+          git config --global core.autocrlf false
+        fi
 
     - name: Test
       run: go test ./...

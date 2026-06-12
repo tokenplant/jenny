@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 
@@ -55,6 +56,13 @@ type fileMatch struct {
 
 // matchGlob handles ** glob pattern to match across directory separators.
 func matchGlob(pattern, name string) bool {
+	// Normalize path separators on Windows so both pattern and name use forward slashes.
+	// filepath.Walk on Windows may use backslashes in relPath; the test pattern always uses forward slashes.
+	if runtime.GOOS == "windows" {
+		pattern = filepath.ToSlash(pattern)
+		name = filepath.ToSlash(name)
+	}
+
 	// Handle ** matching any sequence of characters including separators
 	if strings.Contains(pattern, "**") {
 		// Split pattern by **

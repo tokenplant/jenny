@@ -132,14 +132,18 @@ func isPathWithinCwd(path string, cwd string) bool {
 	}
 	cwdAbs = filepath.Clean(cwdAbs)
 
+	// Normalize to lowercase for Windows (case-insensitive file systems)
+	// and for case-sensitive Unix.
+	if runtime.GOOS == "windows" {
+		absPath = strings.ToLower(absPath)
+		cwdAbs = strings.ToLower(cwdAbs)
+	}
+
 	if absPath == cwdAbs {
 		return true
 	}
-	// Use platform-aware prefix check
-	if runtime.GOOS == "windows" {
-		return strings.HasPrefix(strings.ToLower(absPath), strings.ToLower(cwdAbs+string(filepath.Separator)))
-	}
-	return strings.HasPrefix(absPath, cwdAbs+string(filepath.Separator))
+	sep := string(filepath.Separator)
+	return strings.HasPrefix(absPath, cwdAbs+sep)
 }
 
 // validateCommandPaths checks if all paths in the command are within cwd or scratchpadDir
