@@ -56,23 +56,23 @@ Session totals (`CostState`):
 | Gemini 3.5 Flash | $1.50 | $9.00 | $0.15 | — | ai.google.dev/gemini-api/docs/pricing |
 | Gemini 3.1 Pro | $2.00 | $12.00 | $0.20 | — | ai.google.dev/gemini-api/docs/pricing |
 | Gemini 3.1 Flash Lite | $0.25 | $1.50 | $0.025 | — | ai.google.dev/gemini-api/docs/pricing |
-| MiniMax M3 | $0.62 | $2.48 | $0.12 | — | platform.minimaxi.com/docs/guides/pricing-paygo |
-| MiniMax M2.7 / M2.7-highspeed | $0.32 / $0.62 | $1.24 / $2.48 | $0.06 | $0.09 | platform.minimaxi.com/docs/guides/pricing-paygo |
-| MiniMax M2.5 | $0.31 | $1.24 | $0.03 | $0.07 | platform.minimaxi.com/docs/guides/pricing-paygo |
+| MiniMax M3 | $0.62 | $2.48 | $0.124 | — | platform.minimaxi.com/docs/guides/pricing-paygo |
+| MiniMax M2.7 / M2.7-highspeed | $0.32 / $0.62 | $1.24 / $2.48 | $0.062 | $0.089 | platform.minimaxi.com/docs/guides/pricing-paygo |
+| MiniMax M2.5 | $0.31 | $1.24 | $0.031 | $0.074 | platform.minimaxi.com/docs/guides/pricing-paygo |
 | Kimi K2.7 Code | $0.89 | $5.02 | $0.89 | — | platform.kimi.com/docs/pricing/chat-k26 |
 | Kimi K2.6 | $0.66 | $3.84 | $0.66 | — | platform.kimi.com/docs/pricing/chat-k26 |
 | Kimi K2.5 | $0.52 | $3.10 | $0.52 | — | platform.kimi.com/docs/pricing/chat-k25 |
-| Moonshot V1-8k | $0.07 | $0.44 | $0.07 | — | platform.kimi.com/docs/pricing/chat-v1 |
-| Moonshot V1-32k | $0.15 | $0.44 | $0.15 | — | platform.kimi.com/docs/pricing/chat-v1 |
-| Moonshot V1-128k | $0.30 | $0.44 | $0.30 | — | platform.kimi.com/docs/pricing/chat-v1 |
+| Moonshot V1-8k | $0.074 | $0.44 | $0.074 | — | platform.kimi.com/docs/pricing/chat-v1 |
+| Moonshot V1-32k | $0.148 | $0.44 | $0.148 | — | platform.kimi.com/docs/pricing/chat-v1 |
+| Moonshot V1-128k | $0.296 | $0.44 | $0.296 | — | platform.kimi.com/docs/pricing/chat-v1 |
 | Qwen 3.7 Max | $2.50 | $7.50 | $0.25 | $3.125 | docs.qwencloud.com/developer-guides/getting-started/pricing |
 | Qwen 3.7 Plus | $0.40 | $1.60 | $0.04 | $0.50 | docs.qwencloud.com/developer-guides/getting-started/pricing |
 | Qwen 3.6 Flash | $0.25 | $1.50 | — | — | docs.qwencloud.com/developer-guides/getting-started/pricing |
-| Hunyuan Turbos | $0.12 | $0.30 | — | — | cloud.tencent.com/document/product/1729/97731 |
-| Hunyuan T1 | $0.15 | $0.59 | — | — | cloud.tencent.com/document/product/1729/97731 |
+| Hunyuan Turbos | $0.118 | $0.295 | — | — | cloud.tencent.com/document/product/1729/97731 |
+| Hunyuan T1 | $0.148 | $0.591 | — | — | cloud.tencent.com/document/product/1729/97731 |
 | Hunyuan Hy-2.0 Instruct | $0.47 | $1.17 | — | — | cloud.tencent.com/document/product/1729/97731 |
 | Hunyuan Hy-2.0 Think | $0.59 | $2.35 | — | — | cloud.tencent.com/document/product/1729/97731 |
-| Hunyuan A13B | $0.07 | $0.30 | — | — | cloud.tencent.com/document/product/1729/97731 |
+| Hunyuan A13B | $0.074 | $0.295 | — | — | cloud.tencent.com/document/product/1729/97731 |
 
 Note: CNY-denominated prices (MiniMax, Kimi, Moonshot, Hunyuan) are converted at ~6.77 CNY/USD (June 2026 approximation).
 

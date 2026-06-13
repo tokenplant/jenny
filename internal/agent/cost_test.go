@@ -960,9 +960,9 @@ func TestPricing_CNYConversionRate(t *testing.T) {
 	cnyRate := 6.77
 
 	tests := []struct {
-		model     string
-		cnyPer1M  float64
-		usdPer1M  float64
+		model    string
+		cnyPer1M float64
+		usdPer1M float64
 	}{
 		{"minimax-m3", 4.20, 4.20 / cnyRate},
 		{"kimi-k2.7-code", 6.00, 6.00 / cnyRate},
