@@ -6,5 +6,6 @@ export default defineConfig({
   base: './',
   build: {
     outDir: '../internal/portal/webui/dist',
+    emptyOutDir: true,
   },
 })
