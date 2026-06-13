@@ -1,11 +1,15 @@
 package portal
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -2098,4 +2102,99 @@ func TestMarketplaceInstall_Validation(t *testing.T) {
 	}
 
 	t.Log("PASS: marketplace install validates request body correctly")
+}
+
+// TestMarketplaceInstall_Skill_Success verifies AC2: skill installation downloads and extracts tar.gz.
+func TestMarketplaceInstall_Skill_Success(t *testing.T) {
+	origJennyHome := os.Getenv("JENNY_HOME")
+	tmpDir, err := os.MkdirTemp("", "jenny-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Setenv("JENNY_HOME", tmpDir)
+	defer func() {
+		os.RemoveAll(tmpDir)
+		os.Setenv("JENNY_HOME", origJennyHome)
+	}()
+
+	// Create a test tar.gz in memory
+	tarBuf := new(bytes.Buffer)
+	gzWriter := gzip.NewWriter(tarBuf)
+	tarWriter := tar.NewWriter(gzWriter)
+
+	testFiles := map[string]string{
+		"README.md":        "# Test Skill\nA test skill for testing.",
+		".activation-glob": "**/*.go",
+	}
+	for name, content := range testFiles {
+		hdr := &tar.Header{
+			Name: name,
+			Mode: int64(0644),
+			Size: int64(len(content)),
+		}
+		if err := tarWriter.WriteHeader(hdr); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tarWriter.Write([]byte(content)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tarWriter.Close()
+	gzWriter.Close()
+
+	// Start a test server that serves the tar.gz
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/gzip")
+		w.WriteHeader(http.StatusOK)
+		tarBuf.WriteTo(w)
+	}))
+	defer server.Close()
+
+	ctx := context.Background()
+	p, err := startWithConfig(ctx, tmpDir, 10*time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Shutdown(ctx)
+
+	baseURL := fmt.Sprintf("http://127.0.0.1:%d", p.port)
+
+	// Install the skill
+	body := fmt.Sprintf(`{"type":"skill","name":"test-skill","download_url":"%s/test.tar.gz"}`, server.URL)
+	req, _ := http.NewRequest("POST", baseURL+"/api/marketplace/install?token="+p.authToken, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		t.Errorf("AC2 FAIL: expected 200, got %d: %s", resp.StatusCode, string(bodyBytes))
+		return
+	}
+
+	var result MarketplaceInstallResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatal(err)
+	}
+
+	if result.Status != "installed" {
+		t.Errorf("AC2 FAIL: expected status 'installed', got %q", result.Status)
+	}
+
+	// Verify skill directory was created
+	skillDir := filepath.Join(tmpDir, "skills", "test-skill")
+	if _, err := os.Stat(skillDir); os.IsNotExist(err) {
+		t.Error("AC2 FAIL: skill directory was not created")
+	}
+
+	// Verify README.md was extracted
+	readmePath := filepath.Join(skillDir, "README.md")
+	if _, err := os.Stat(readmePath); os.IsNotExist(err) {
+		t.Error("AC2 FAIL: README.md was not extracted")
+	}
+
+	t.Log("AC2 PASS: marketplace install downloads and extracts tar.gz successfully")
 }

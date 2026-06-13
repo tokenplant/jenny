@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // downloadAndExtract downloads a tar.gz file from the given URL and extracts it to destDir.
@@ -42,18 +43,49 @@ func downloadAndExtract(url, destDir string) error {
 			return fmt.Errorf("failed to read tar: %w", err)
 		}
 
-		target := filepath.Join(destDir, h.Name)
+		// Security: prevent path traversal by sanitizing the entry name.
+		// Reject absolute paths and entries that escape destDir via ".." components.
+		name := strings.TrimPrefix(filepath.ToSlash(h.Name), "/")
+		if name == "" || strings.Contains(name, "..") || strings.HasPrefix(name, "/") {
+			return fmt.Errorf("tar entry %q is not allowed: must be a safe relative path", h.Name)
+		}
 
+		target := filepath.Join(destDir, name)
+
+		// Ensure target is within destDir (defensive: resolve and check prefix)
+		cleanTarget, err := filepath.Abs(target)
+		if err != nil {
+			return fmt.Errorf("failed to resolve target path: %w", err)
+		}
+		cleanDestDir, err := filepath.Abs(destDir)
+		if err != nil {
+			return fmt.Errorf("failed to resolve destDir: %w", err)
+		}
+		if !strings.HasPrefix(cleanTarget, cleanDestDir+string(filepath.Separator)) && cleanTarget != cleanDestDir {
+			return fmt.Errorf("tar entry %q would escape install directory", h.Name)
+		}
+
+		// Security: mask file permissions to safe values.
+		// For directories: 0o755 (rwxr-xr-x)
+		// For files: 0o644 (rw-r--r--)
 		switch h.Typeflag {
 		case tar.TypeDir:
-			if err := os.MkdirAll(target, os.FileMode(h.Mode)); err != nil {
+			mode := os.FileMode(h.Mode) & 0o755
+			if mode == 0 {
+				mode = 0o755
+			}
+			if err := os.MkdirAll(target, mode); err != nil {
 				return fmt.Errorf("failed to create directory: %w", err)
 			}
 		case tar.TypeReg:
+			mode := os.FileMode(h.Mode) & 0o644
+			if mode == 0 {
+				mode = 0o644
+			}
 			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
 				return fmt.Errorf("failed to create parent directory: %w", err)
 			}
-			f, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR, os.FileMode(h.Mode))
+			f, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR|os.O_TRUNC, mode)
 			if err != nil {
 				return fmt.Errorf("failed to create file: %w", err)
 			}

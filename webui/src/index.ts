@@ -23,7 +23,7 @@ export type {
 export { useTheme } from './hooks/useTheme';
 export { useConfirm } from './hooks/useConfirm';
 export { useToast } from './hooks/useToast';
-export { useApi, useStats, useSessions, useSessionStream, killSession, apiPost } from './hooks/useApi';
+export { useApi, useStats, useSessions, useSessionStream, killSession, apiPost, apiGet } from './hooks/useApi';
 export type { SessionMetadata, Stats } from './hooks/useApi';
 
 // ── i18n ────────────────────────────────────

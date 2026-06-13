@@ -21,6 +21,7 @@ import {
   useSessionStream,
   killSession,
   apiPost,
+  apiGet,
   useApi,
   useToast,
   useConfirm,
@@ -640,17 +641,13 @@ function MarketplaceBrowseView({ onBack }: MarketplaceBrowseViewProps) {
   const [installed, setInstalled] = React.useState<Set<string>>(new Set());
   const [installing, setInstalling] = React.useState<string | null>(null);
 
-  // Fetch marketplace items
+  // Fetch marketplace items using apiGet helper
   React.useEffect(() => {
     const fetchItems = async () => {
       setLoading(true);
       setError(null);
       try {
-        const response = await fetch(`/api/marketplace/browse?token=${getToken()}`);
-        if (!response.ok) {
-          throw new Error(await response.text());
-        }
-        const data = await response.json();
+        const data = await apiGet<MarketplaceItem[]>('/api/marketplace/browse');
         setItems(data);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch marketplace');
@@ -660,18 +657,15 @@ function MarketplaceBrowseView({ onBack }: MarketplaceBrowseViewProps) {
       }
     };
     fetchItems();
-  }, []);
+  }, [toast]);
 
-  // Get installed names from existing data
+  // Get installed names from existing data using apiGet helper
   React.useEffect(() => {
     const updateInstalled = async () => {
       try {
-        const skillsRes = await fetch(`/api/skills?token=${getToken()}`);
-        if (skillsRes.ok) {
-          const skills: SkillInfo[] = await skillsRes.json();
-          const names = new Set<string>(skills.map((s) => s.name));
-          setInstalled(names);
-        }
+        const skills: SkillInfo[] = await apiGet('/api/skills');
+        const names = new Set<string>(skills.map((s) => s.name));
+        setInstalled(names);
       } catch {
         // Ignore errors
       }
@@ -684,28 +678,21 @@ function MarketplaceBrowseView({ onBack }: MarketplaceBrowseViewProps) {
 
     setInstalling(item.name);
     try {
-      const response = await fetch(`/api/marketplace/install?token=${getToken()}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: item.type,
-          name: item.name,
-          download_url: item.download_url,
-        }),
+      await apiPost('/api/marketplace/install', {
+        type: item.type,
+        name: item.name,
+        download_url: item.download_url,
       });
-
-      if (response.ok) {
-        setInstalled((prev) => new Set([...prev, item.name]));
-        toast.addToast({ kind: 'success', title: 'Installed', message: `${item.name} has been installed.` });
-      } else if (response.status === 409) {
-        // Already installed
+      setInstalled((prev) => new Set([...prev, item.name]));
+      toast.addToast({ kind: 'success', title: 'Installed', message: `${item.name} has been installed.` });
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : 'Unknown error';
+      if (errMsg.includes('409') || errMsg.includes('already installed')) {
         setInstalled((prev) => new Set([...prev, item.name]));
         toast.addToast({ kind: 'info', title: 'Already installed', message: `${item.name} is already installed.` });
       } else {
-        throw new Error(await response.text());
+        toast.addToast({ kind: 'error', title: 'Install failed', message: errMsg });
       }
-    } catch (err) {
-      toast.addToast({ kind: 'error', title: 'Install failed', message: err instanceof Error ? err.message : 'Unknown error' });
     } finally {
       setInstalling(null);
     }

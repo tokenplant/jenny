@@ -36,7 +36,7 @@ function getPortalConfig() {
 }
 
 // API fetch wrapper
-async function apiGet<T>(path: string): Promise<T> {
+export async function apiGet<T>(path: string): Promise<T> {
   const { apiUrl, token } = getPortalConfig();
   const url = `${apiUrl}${path}?token=${token}`;
 
@@ -47,7 +47,6 @@ async function apiGet<T>(path: string): Promise<T> {
   }
   return res.json();
 }
-
 // API POST wrapper
 export async function apiPost<T>(path: string, body: unknown): Promise<T> {
   const { apiUrl, token } = getPortalConfig();

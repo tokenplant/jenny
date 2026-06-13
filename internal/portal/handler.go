@@ -1119,7 +1119,8 @@ func (p *Portal) handleMarketplaceInstall(w http.ResponseWriter, r *http.Request
 		}
 
 	case "mcp":
-		// For MCP, we need to update mcp.json
+		// For MCP, we download and parse the manifest to extract command/args,
+		// then update mcp.json with the real config.
 		mcpPath := filepath.Join(homeDir, "mcp.json")
 		var config map[string]struct {
 			Command  string   `json:"command"`
@@ -1141,7 +1142,7 @@ func (p *Portal) handleMarketplaceInstall(w http.ResponseWriter, r *http.Request
 			return
 		}
 
-		// Download and extract to temp dir to get command info
+		// Download and extract to temp dir to get manifest
 		tmpDir, err := os.MkdirTemp("", "jenny-mcp-*")
 		if err != nil {
 			http.Error(w, fmt.Sprintf(`{"error":%q}`, err.Error()), http.StatusInternalServerError)
@@ -1154,17 +1155,35 @@ func (p *Portal) handleMarketplaceInstall(w http.ResponseWriter, r *http.Request
 			return
 		}
 
-		// Look for manifest or infer command from directory contents
-		installPath = tmpDir
+		// Look for manifest.json in the extracted package
+		manifestPath := filepath.Join(tmpDir, "manifest.json")
+		var manifest struct {
+			Command string   `json:"command"`
+			Args    []string `json:"args"`
+		}
+		if data, err := os.ReadFile(manifestPath); err == nil {
+			if err := json.Unmarshal(data, &manifest); err != nil {
+				http.Error(w, fmt.Sprintf(`{"error":"invalid manifest.json: %s"}`, err.Error()), http.StatusBadRequest)
+				return
+			}
+		} else {
+			http.Error(w, `{"error":"MCP package must contain manifest.json with command and args fields"}`, http.StatusBadRequest)
+			return
+		}
 
-		// Add to config with placeholder command (user should configure)
+		if manifest.Command == "" {
+			http.Error(w, `{"error":"manifest.json must specify a non-empty command field"}`, http.StatusBadRequest)
+			return
+		}
+
+		// Add to config with real command from manifest
 		config[req.Name] = struct {
 			Command  string   `json:"command"`
 			Args     []string `json:"args"`
 			Disabled bool     `json:"disabled,omitempty"`
 		}{
-			Command:  "echo",
-			Args:     []string{"TODO: configure MCP command"},
+			Command:  manifest.Command,
+			Args:     manifest.Args,
 			Disabled: false,
 		}
 
@@ -1178,6 +1197,9 @@ func (p *Portal) handleMarketplaceInstall(w http.ResponseWriter, r *http.Request
 			http.Error(w, fmt.Sprintf(`{"error":%q}`, err.Error()), http.StatusInternalServerError)
 			return
 		}
+
+		// Return stable path (mcp.json path, not the temp dir that was cleaned up)
+		installPath = mcpPath
 	}
 
 	w.Header().Set("Content-Type", "application/json")
