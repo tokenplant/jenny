@@ -87,13 +87,15 @@ Loaded per turn; merge coordinator userContext when enabled.
 
 ## File structure
 
-`internal/agent/` splits the engine across three files to keep each under ~300–1100 lines:
+`internal/agent/` splits the engine across five files to keep each under ~800 lines:
 
 | File | Responsibility |
 |------|---------------|
 | `engine.go` | Constructor, compaction counters, WireReadFileCache, SetMaxTurns |
-| `engine_loop.go` | SubmitMessage, runLoop |
+| `engine_loop.go` | SubmitMessage, runLoop (skeleton with calls to extracted helpers) |
 | `engine_stream.go` | emitConsolidatedAssistant, finalizeAsEndTurn, TurnCount, Model, Drain |
+| `engine_results.go` | executeAndProcessTools, handleStreamError — tool execution, result NDJSON emission, streaming error handling |
+| `engine_stopreasons.go` | handleStopReason — stop reason switch for end_turn, tool_use, max_tokens, stop_seq, default |
 
 When splitting files, each needs its own import block; expect total line count to grow by up to ±30 lines over the pre-split single file due to per-file import headers.
 
