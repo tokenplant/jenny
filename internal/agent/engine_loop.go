@@ -302,11 +302,11 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 					}
 					log.Debug("Context compaction succeeded", "newMessageCount", len(messages))
 				} else {
-					// Compaction failed - increment failure counter
-					e.mu.Lock()
-					e.compactFailCount++
-					log.Warn("Context compaction failed", "error", err, "consecutiveFailures", e.compactFailCount)
-					e.mu.Unlock()
+			// Compaction failed - increment failure counter with persistence
+				e.incrementCompactFailCount()
+				e.mu.Lock()
+				log.Warn("Context compaction failed", "error", err, "consecutiveFailures", e.compactFailCount)
+				e.mu.Unlock()
 				}
 			} else {
 				log.Debug("Auto-compact skipped: circuit breaker tripped")

@@ -535,16 +535,18 @@ func (m *Manager) Flush() error {
 }
 
 // RegisterShutdownFlush registers a signal handler to flush pending writes
-// before process exit. Since writes are synchronous, this is currently a NOP
-// but provides a hook for future buffered write implementation.
-func (m *Manager) RegisterShutdownFlush() {
+// before process exit. It returns a channel that is closed when a shutdown
+// signal is received, allowing the caller to perform cleanup before exiting.
+func (m *Manager) RegisterShutdownFlush() <-chan struct{} {
+	done := make(chan struct{})
 	go func() {
 		sigCh := make(chan os.Signal, 1)
 		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 		<-sigCh
 		_ = m.Flush()
-		os.Exit(0)
+		close(done)
 	}()
+	return done
 }
 
 // sessionEntry is an intermediate type used by ListSessions for sorting.

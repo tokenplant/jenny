@@ -306,12 +306,13 @@ func buildSummaryPrompt(messages []api.Message) string {
 	return sb.String()
 }
 
-// truncateContent truncates content to a maximum length.
+// truncateContent truncates content to a maximum number of runes.
 func truncateContent(content string, maxLen int) string {
-	if len(content) <= maxLen {
+	runes := []rune(content)
+	if len(runes) <= maxLen {
 		return content
 	}
-	return content[:maxLen] + "..."
+	return string(runes[:maxLen]) + "..."
 }
 
 // prepareSummaryMessages prepares messages for the summary API call by stripping
@@ -332,6 +333,15 @@ func prepareSummaryMessages(messages []api.Message) []api.Message {
 	return result
 }
 
+// Pre-compiled regexps for stripMediaMarkers (avoid recompilation on every call).
+var (
+	base64ImageRe   = regexp.MustCompile(`data:image/[^;]+;base64,[A-Za-z0-9+/=]{100,}`)
+	base64PdfRe     = regexp.MustCompile(`data:application/pdf[^,;]*,[A-Za-z0-9+/=]{100,}`)
+	markdownImageRe = regexp.MustCompile(`!\[([^\]]*)\]\([^)]+\)`)
+	imageURLRe      = regexp.MustCompile(`https?://[^)\s"']+\.(png|jpg|jpeg|gif|bmp|webp|svg)(\?[^)\s"']*)?`)
+	pdfURLRe        = regexp.MustCompile(`https?://[^)\s"']+\.pdf(\?[^)\s"']*)?`)
+)
+
 // stripMediaMarkers replaces image/document content with markers.
 // This prevents large media from being sent to the summary agent.
 func stripMediaMarkers(content string) string {
@@ -339,30 +349,11 @@ func stripMediaMarkers(content string) string {
 		return content
 	}
 
-	// Replace base64 image data URLs with [image] marker
-	// Pattern: data:image/[type];base64,[data...]
-	base64ImageRe := regexp.MustCompile(`data:image/[^;]+;base64,[A-Za-z0-9+/=]{100,}`)
 	content = base64ImageRe.ReplaceAllString(content, "[image]")
-
-	// Replace base64 PDF/document data URLs with [document] marker
-	base64PdfRe := regexp.MustCompile(`data:application/pdf[^,;]*,[A-Za-z0-9+/=]{100,}`)
 	content = base64PdfRe.ReplaceAllString(content, "[document]")
-
-	// Replace markdown image syntax: ![alt](url)
-	markdownImageRe := regexp.MustCompile(`!\[([^\]]*)\]\([^)]+\)`)
 	content = markdownImageRe.ReplaceAllString(content, "[image]")
-
-	// Replace common image URL patterns (http/https URLs ending in image extensions)
-	imageExtensions := []string{".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".svg"}
-	for _, ext := range imageExtensions {
-		pattern := `https?://[^)\s"']+\.` + ext + `(\?[^)\s"']*)?`
-		re := regexp.MustCompile(pattern)
-		content = re.ReplaceAllString(content, "[image]")
-	}
-
-	// Replace PDF URLs
-	pdfUrlRe := regexp.MustCompile(`https?://[^)\s"']+\.pdf(\?[^)\s"']*)?`)
-	content = pdfUrlRe.ReplaceAllString(content, "[document]")
+	content = imageURLRe.ReplaceAllString(content, "[image]")
+	content = pdfURLRe.ReplaceAllString(content, "[document]")
 
 	return content
 }

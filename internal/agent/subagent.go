@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/ipy/jenny/internal/api"
 	"github.com/ipy/jenny/internal/git"
@@ -298,8 +299,8 @@ func (r *LocalSubagentRunner) RunSubagent(ctx context.Context, params tool.Subag
 		if err != nil {
 			return nil, fmt.Errorf("worktree isolation requires git repository: %w", err)
 		}
-		// Generate unique branch name based on agent ID
-		branchName := fmt.Sprintf("worktree-%s", params.SubagentType)
+		// Generate unique branch name based on agent type and timestamp
+		branchName := fmt.Sprintf("worktree-%s-%d", params.SubagentType, time.Now().UnixNano())
 		worktreePath, err = git.CreateWorktree(repoRoot, branchName)
 		if err != nil {
 			return nil, fmt.Errorf("creating worktree: %w", err)

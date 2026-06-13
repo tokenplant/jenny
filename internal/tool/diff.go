@@ -111,21 +111,26 @@ func computeLCS(oldLines, newLines []string) []diffEntry {
 		}
 	}
 
-	// Backtrack to find diff
+	// Backtrack to find diff (build in reverse, then reverse at end to avoid O(n²) prepend)
 	var result []diffEntry
 	i, j := m, n
 	for i > 0 || j > 0 {
 		if i > 0 && j > 0 && oldLines[i-1] == newLines[j-1] {
-			result = append([]diffEntry{{Type: "context", OldIdx: i - 1, NewIdx: j - 1, Content: oldLines[i-1]}}, result...)
+			result = append(result, diffEntry{Type: "context", OldIdx: i - 1, NewIdx: j - 1, Content: oldLines[i-1]})
 			i--
 			j--
 		} else if j > 0 && (i == 0 || lcs[i][j-1] >= lcs[i-1][j]) {
-			result = append([]diffEntry{{Type: "add", OldIdx: i, NewIdx: j - 1, Content: newLines[j-1]}}, result...)
+			result = append(result, diffEntry{Type: "add", OldIdx: i, NewIdx: j - 1, Content: newLines[j-1]})
 			j--
 		} else if i > 0 {
-			result = append([]diffEntry{{Type: "delete", OldIdx: i - 1, NewIdx: j, Content: oldLines[i-1]}}, result...)
+			result = append(result, diffEntry{Type: "delete", OldIdx: i - 1, NewIdx: j, Content: oldLines[i-1]})
 			i--
 		}
+	}
+
+	// Reverse the result since we built it backwards
+	for left, right := 0, len(result)-1; left < right; left, right = left+1, right-1 {
+		result[left], result[right] = result[right], result[left]
 	}
 
 	return result

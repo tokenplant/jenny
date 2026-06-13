@@ -257,10 +257,11 @@ func (t *WebFetchTool) Execute(ctx context.Context, input map[string]any, cwd st
 
 	hostname := parsedURL.Hostname()
 
-	// AC3: Blocklist preflight.
-	if err := t.checkBlocklist(ctx, hostname); err != nil {
+	// AC3: Blocklist preflight — also returns resolved IPs to pin in dialer.
+	resolvedAddrs, blErr := t.checkBlocklist(ctx, hostname)
+	if blErr != nil {
 		return &ToolResult{
-			Content: fmt.Sprintf("Access to '%s' is blocked: %v", hostname, err),
+			Content: fmt.Sprintf("Access to '%s' is blocked: %v", hostname, blErr),
 			IsError: true,
 		}, nil
 	}
@@ -270,8 +271,8 @@ func (t *WebFetchTool) Execute(ctx context.Context, input map[string]any, cwd st
 		return cached, nil
 	}
 
-	// Fetch.
-	result, err := t.fetch(ctx, parsedURL, urlStr)
+	// Fetch with pinned addresses to prevent DNS rebinding.
+	result, err := t.fetch(ctx, parsedURL, urlStr, resolvedAddrs)
 	if err != nil {
 		// Check if it's a redirectError — return as non-error instruction.
 		var redirErr *redirectError
@@ -297,10 +298,24 @@ func (t *WebFetchTool) Execute(ctx context.Context, input map[string]any, cwd st
 }
 
 // fetch performs the HTTP request and processes the response.
-func (t *WebFetchTool) fetch(ctx context.Context, parsedURL *url.URL, urlStr string) (*ToolResult, error) {
+// pinnedAddrs are the pre-resolved IP addresses from the blocklist check;
+// using them in a custom dialer prevents DNS rebinding attacks.
+func (t *WebFetchTool) fetch(ctx context.Context, parsedURL *url.URL, urlStr string, pinnedAddrs []string) (*ToolResult, error) {
+	// Build transport with pinned dialer to prevent DNS rebinding SSRF.
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	if len(pinnedAddrs) > 0 {
+		transport.DialContext = func(dialCtx context.Context, network, addr string) (net.Conn, error) {
+			_, port, _ := net.SplitHostPort(addr)
+			// Use the first resolved address from blocklist check
+			pinnedAddr := net.JoinHostPort(pinnedAddrs[0], port)
+			return (&net.Dialer{Timeout: 30 * time.Second}).DialContext(dialCtx, network, pinnedAddr)
+		}
+	}
+
 	// Create HTTP client with redirect handling.
 	client := &http.Client{
-		Timeout: webFetchTimeout,
+		Timeout:   webFetchTimeout,
+		Transport: transport,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			// Max redirect hop limit.
 			if len(via) >= webFetchMaxRedirects {
@@ -385,9 +400,14 @@ func (t *WebFetchTool) convertHTMLToMarkdown(htmlInput string) (string, bool) {
 	}
 
 	if len(markdown) > webFetchMaxMarkdownChars {
-		// AC2: Cap at 100K chars.
+		// AC2: Cap at 100K chars (rune-safe truncation).
 		note := fmt.Sprintf("\n\n[Content truncated at %d characters]", webFetchMaxMarkdownChars)
-		truncated := markdown[:webFetchMaxMarkdownChars-len(note)]
+		runes := []rune(markdown)
+		maxRunes := webFetchMaxMarkdownChars - len(note)
+		if maxRunes > len(runes) {
+			maxRunes = len(runes)
+		}
+		truncated := string(runes[:maxRunes])
 		return truncated + note, true
 	}
 	return markdown, false
@@ -416,9 +436,10 @@ func (t *WebFetchTool) saveBinaryToDisk(data []byte) (string, error) {
 
 // checkBlocklist verifies that a hostname is not on the blocklist (AC3).
 // It checks hardcoded SSRF targets and resolves DNS to detect private/loopback ranges.
-func (t *WebFetchTool) checkBlocklist(ctx context.Context, hostname string) error {
+// Returns the resolved IP addresses (if any) for use in a pinned dialer to prevent DNS rebinding.
+func (t *WebFetchTool) checkBlocklist(ctx context.Context, hostname string) ([]string, error) {
 	if t.skipBlocklist {
-		return nil
+		return nil, nil
 	}
 
 	// Strip IPv6 brackets.
@@ -426,7 +447,7 @@ func (t *WebFetchTool) checkBlocklist(ctx context.Context, hostname string) erro
 
 	// Fast-path: check hostname cache.
 	if t.hostnameCache.isBlocked(hostname) {
-		return fmt.Errorf("hostname is blocked (cached)")
+		return nil, fmt.Errorf("hostname is blocked (cached)")
 	}
 
 	// Hardcoded blocklist for common SSRF targets.
@@ -442,17 +463,17 @@ func (t *WebFetchTool) checkBlocklist(ctx context.Context, hostname string) erro
 	}
 	if hardcodedBlocked[lower] {
 		t.hostnameCache.markBlocked(hostname)
-		return fmt.Errorf("access to loopback/localhost addresses is not allowed")
+		return nil, fmt.Errorf("access to loopback/localhost addresses is not allowed")
 	}
 
 	// Check if it's an IP literal.
 	if ip := net.ParseIP(hostname); ip != nil {
 		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
 			t.hostnameCache.markBlocked(hostname)
-			return fmt.Errorf("access to loopback, private, or link-local addresses is not allowed")
+			return nil, fmt.Errorf("access to loopback, private, or link-local addresses is not allowed")
 		}
 		// Public IP — allowed.
-		return nil
+		return []string{hostname}, nil
 	}
 
 	// Resolve DNS with a 10s timeout context.
@@ -463,7 +484,7 @@ func (t *WebFetchTool) checkBlocklist(ctx context.Context, hostname string) erro
 	if err != nil {
 		// DNS resolution failure — allow the fetch; the HTTP request will fail
 		// naturally if the host is unreachable.
-		return nil
+		return nil, nil
 	}
 
 	for _, addr := range addrs {
@@ -473,9 +494,9 @@ func (t *WebFetchTool) checkBlocklist(ctx context.Context, hostname string) erro
 		}
 		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified() {
 			t.hostnameCache.markBlocked(hostname)
-			return fmt.Errorf("access to addresses resolving to loopback, private, or link-local ranges is not allowed")
+			return nil, fmt.Errorf("access to addresses resolving to loopback, private, or link-local ranges is not allowed")
 		}
 	}
 
-	return nil
+	return addrs, nil
 }

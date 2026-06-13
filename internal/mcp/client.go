@@ -30,10 +30,11 @@ type Client struct {
 
 // proc holds the process handles for a subprocess transport.
 type proc struct {
-	cmd     *exec.Cmd
-	stdin   io.WriteCloser
-	stdout  io.ReadCloser
-	cleanFn func()
+	cmd      *exec.Cmd
+	stdin    io.WriteCloser
+	stdout   io.ReadCloser
+	stdoutRd *bufio.Reader
+	cleanFn  func()
 }
 
 var (
@@ -286,9 +287,10 @@ func (c *Client) Connect(ctx context.Context) error {
 	}
 
 	c.proc = &proc{
-		cmd:    cmd,
-		stdin:  stdin,
-		stdout: stdout,
+		cmd:      cmd,
+		stdin:    stdin,
+		stdout:   stdout,
+		stdoutRd: bufio.NewReader(stdout),
 		cleanFn: func() {
 			cmd.Process.Kill()
 			cmd.Wait()
@@ -560,9 +562,8 @@ func (c *Client) sendRequest(_ context.Context, req jsonRPCRequest) (*jsonRPCRes
 		return nil, fmt.Errorf("writing request: %w", err)
 	}
 
-	// Read the response
-	reader := bufio.NewReader(c.proc.stdout)
-	line, err := reader.ReadBytes('\n')
+	// Read the response using the persistent buffered reader
+	line, err := c.proc.stdoutRd.ReadBytes('\n')
 	if err != nil {
 		return nil, fmt.Errorf("reading response: %w", err)
 	}

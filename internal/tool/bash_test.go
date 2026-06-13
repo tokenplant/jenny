@@ -300,12 +300,12 @@ func TestBashTool_AC1_ReadOnlyPipeline(t *testing.T) {
 
 // AC2: Output >30K chars spilled to disk
 func TestBashTool_AC2_OutputSpill(t *testing.T) {
-	tool := NewBashTool(false)
+	tool := NewBashTool(true) // skipPermissions=true since this test is about output spill, not security
 	cwd := t.TempDir()
 
 	// Test: large output should spill to disk
 	result, err := tool.Execute(context.Background(), map[string]any{
-		"command": "python3 -c \"print('x'*35000)\"",
+		"command": "printf '%0.sx' $(seq 1 35000)",
 	}, cwd)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

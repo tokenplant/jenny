@@ -151,18 +151,11 @@ func (t *ReadMcpResourceTool) persistBlob(data []byte) (string, error) {
 
 	// Generate unique filename: timestamp-random suffix
 	timestamp := time.Now().UnixNano()
+	var b [8]byte
+	rand.Read(b[:])
 	var randSuffix uint64
-	if _, err := rand.Read([]byte{}); err == nil {
-		// crypto/rand available, use it
-		var b [8]byte
-		rand.Read(b[:])
-		randSuffix = 0
-		for _, v := range b {
-			randSuffix = randSuffix<<8 + uint64(v)
-		}
-	} else {
-		// Fallback to math/rand
-		randSuffix = uint64(time.Now().UnixNano())
+	for _, v := range b {
+		randSuffix = randSuffix<<8 + uint64(v)
 	}
 	filename := fmt.Sprintf("%d-%016x.bin", timestamp, randSuffix)
 

@@ -77,7 +77,7 @@ func TestAC1_PersistBeforeAPI(t *testing.T) {
 		SessionID:      sessionID,
 	}
 
-	engine := NewQueryEngine(cfg, nil, "", WithClient(fastClient()))
+	engine := mustNewQueryEngine(cfg, nil, "", WithClient(fastClient()))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -135,7 +135,7 @@ func TestAC2_MaxTurnsEnforcement(t *testing.T) {
 		SessionID:      sessionID,
 	}
 
-	engine := NewQueryEngine(cfg, nil, "", WithClient(fastClient()))
+	engine := mustNewQueryEngine(cfg, nil, "", WithClient(fastClient()))
 	engine.SetMaxTurns(2) // Set max turns to 2
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -183,7 +183,7 @@ func TestAC5_TurnCounterResets(t *testing.T) {
 		SessionID:      sessionID,
 	}
 
-	engine := NewQueryEngine(cfg, nil, "", WithClient(fastClient()))
+	engine := mustNewQueryEngine(cfg, nil, "", WithClient(fastClient()))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -245,7 +245,7 @@ func TestAC3_CostStateFlushed(t *testing.T) {
 		SessionID:      sessionID,
 	}
 
-	engine := NewQueryEngine(cfg, nil, "", WithClient(fastClient()))
+	engine := mustNewQueryEngine(cfg, nil, "", WithClient(fastClient()))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -282,7 +282,7 @@ func TestQueryEngine_NewQueryEngine(t *testing.T) {
 		MaxTurns:       5,
 	}
 
-	engine := NewQueryEngine(cfg, nil, "test-model", WithClient(fastClient()))
+	engine := mustNewQueryEngine(cfg, nil, "test-model", WithClient(fastClient()))
 
 	if engine == nil {
 		t.Fatal("NewQueryEngine returned nil")
@@ -304,7 +304,7 @@ func TestQueryEngine_SetMaxTurns(t *testing.T) {
 		Enabled: false,
 	}
 
-	engine := NewQueryEngine(cfg, nil, "", WithClient(fastClient()))
+	engine := mustNewQueryEngine(cfg, nil, "", WithClient(fastClient()))
 	engine.SetMaxTurns(10)
 
 	if engine.maxTurns != 10 {
@@ -330,7 +330,7 @@ func TestAC1_SubmitMessageWithoutSessionManager(t *testing.T) {
 
 	// No session manager — sessionManager is nil
 	cfg := StreamConfig{Enabled: false}
-	engine := NewQueryEngine(cfg, nil, "", WithClient(fastClient()))
+	engine := mustNewQueryEngine(cfg, nil, "", WithClient(fastClient()))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -385,7 +385,7 @@ func TestAC1_ResumeDoesNotDuplicateUserMessage(t *testing.T) {
 		SessionID:      sessionID,
 		IsResume:       true, // Mark as resume — should skip duplicate user persist
 	}
-	engine := NewQueryEngine(cfg, nil, "", WithClient(fastClient()))
+	engine := mustNewQueryEngine(cfg, nil, "", WithClient(fastClient()))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -431,7 +431,7 @@ func TestAC2_MaxTurnsZeroIsUnlimited(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 
 	cfg := StreamConfig{Enabled: false}
-	engine := NewQueryEngine(cfg, nil, "", WithClient(fastClient()))
+	engine := mustNewQueryEngine(cfg, nil, "", WithClient(fastClient()))
 	// maxTurns defaults to 0 (unlimited — no limit check should trigger)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -479,7 +479,7 @@ func TestAC3_CostFlushOnMaxTurnsError(t *testing.T) {
 		SessionManager: sessMgr,
 		SessionID:      sessionID,
 	}
-	engine := NewQueryEngine(cfg, nil, "", WithClient(fastClient()))
+	engine := mustNewQueryEngine(cfg, nil, "", WithClient(fastClient()))
 	engine.SetMaxTurns(1) // Will exceed after 1st iteration (tool_use triggers loop)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -558,7 +558,7 @@ func TestAC5_TurnCounterIsAccurate(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 
 	cfg := StreamConfig{Enabled: false}
-	engine := NewQueryEngine(cfg, nil, "", WithClient(fastClient()))
+	engine := mustNewQueryEngine(cfg, nil, "", WithClient(fastClient()))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -653,7 +653,7 @@ func TestAC3_StreamJsonCallsSetOutput(t *testing.T) {
 		SessionID:      "test-session-stderr",
 	}
 
-	engine := NewQueryEngine(cfg, nil, "", WithClient(fastClient()))
+	engine := mustNewQueryEngine(cfg, nil, "", WithClient(fastClient()))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -761,7 +761,7 @@ func TestAC4_QueryEngineWireReadFileCache(t *testing.T) {
 	}
 
 	// Create QueryEngine - this calls WireReadFileCache internally
-	engine := NewQueryEngine(cfg, tools, "test-model", WithClient(fastClient()))
+	engine := mustNewQueryEngine(cfg, tools, "test-model", WithClient(fastClient()))
 
 	// Find the ReadTool in engine
 	var engineReadTool *tool.ReadTool
@@ -871,7 +871,7 @@ func TestAC1_MemdirCreatedAtPromptBuild(t *testing.T) {
 		AutoMemoryEnabled: true,
 	}
 
-	engine := NewQueryEngine(cfg, nil, "", WithClient(fastClient()))
+	engine := mustNewQueryEngine(cfg, nil, "", WithClient(fastClient()))
 
 	// Compute the expected memdir path using the same library the engine
 	// calls. git.GetRoot resolves symlinks (e.g. /var -> /private/var on
@@ -954,7 +954,7 @@ func TestAC1_DenyRuleStructuredOutput(t *testing.T) {
 		}
 	}()
 
-	engine := NewQueryEngine(cfg, nil, "test-model", WithClient(fastClient()))
+	engine := mustNewQueryEngine(cfg, nil, "test-model", WithClient(fastClient()))
 	// If we get here without panic, fail
 	t.Errorf("AC1 FAIL: expected panic but got engine: %v", engine)
 }
@@ -976,7 +976,7 @@ func TestAC4_InteractiveModeNoStructuredOutput(t *testing.T) {
 		SessionID:        "test-session-interactive",
 	}
 
-	engine := NewQueryEngine(cfg, nil, "test-model", WithClient(fastClient()))
+	engine := mustNewQueryEngine(cfg, nil, "test-model", WithClient(fastClient()))
 	if engine == nil {
 		t.Fatal("NewQueryEngine returned nil unexpectedly")
 	}
@@ -1006,7 +1006,7 @@ func TestAC4_NonInteractiveModeHasStructuredOutput(t *testing.T) {
 		SessionID:        "test-session-noninteractive",
 	}
 
-	engine := NewQueryEngine(cfg, nil, "test-model", WithClient(fastClient()))
+	engine := mustNewQueryEngine(cfg, nil, "test-model", WithClient(fastClient()))
 	if engine == nil {
 		t.Fatal("NewQueryEngine returned nil unexpectedly")
 	}
@@ -1051,7 +1051,7 @@ func TestAC3_NotEmittedError(t *testing.T) {
 		SessionID:        sessionID,
 	}
 
-	engine := NewQueryEngine(cfg, nil, "test-model", WithClient(fastClient()))
+	engine := mustNewQueryEngine(cfg, nil, "test-model", WithClient(fastClient()))
 	if engine == nil {
 		t.Fatal("NewQueryEngine returned nil unexpectedly")
 	}
@@ -1110,7 +1110,7 @@ func TestAC3_ResultExtraction(t *testing.T) {
 		SessionID:        sessionID,
 	}
 
-	engine := NewQueryEngine(cfg, nil, "test-model", WithClient(fastClient()))
+	engine := mustNewQueryEngine(cfg, nil, "test-model", WithClient(fastClient()))
 	if engine == nil {
 		t.Fatal("NewQueryEngine returned nil unexpectedly")
 	}
@@ -1185,7 +1185,7 @@ func TestToolCallEvents(t *testing.T) {
 		SessionID:      sessionID,
 	}
 
-	engine := NewQueryEngine(cfg, nil, "", WithClient(fastClient()))
+	engine := mustNewQueryEngine(cfg, nil, "", WithClient(fastClient()))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -1333,7 +1333,7 @@ func TestInterruptSyntheticToolResults_AC5(t *testing.T) {
 		SessionID:      sessionID,
 	}
 
-	engine := NewQueryEngine(cfg, tools, "test-model", WithClient(fastClient()))
+	engine := mustNewQueryEngine(cfg, tools, "test-model", WithClient(fastClient()))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
@@ -1499,7 +1499,7 @@ func TestEngine_InterruptedField_TriggersSynthetic(t *testing.T) {
 		SessionID:      sessionID,
 	}
 
-	engine := NewQueryEngine(cfg, tools, "test-model", WithClient(fastClient()))
+	engine := mustNewQueryEngine(cfg, tools, "test-model", WithClient(fastClient()))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
@@ -1569,7 +1569,7 @@ func TestEngine_BenignContent_NotInterpretedAsInterrupt(t *testing.T) {
 		SessionID:      sessionID,
 	}
 
-	engine := NewQueryEngine(cfg, tools, "test-model", WithClient(fastClient()))
+	engine := mustNewQueryEngine(cfg, tools, "test-model", WithClient(fastClient()))
 
 	// Use a valid context (not cancelled) so the tool completes normally
 	ctx := context.Background()
@@ -1698,7 +1698,7 @@ func TestToolCallEvents_Negative(t *testing.T) {
 		SessionID:      sessionID,
 	}
 
-	engine := NewQueryEngine(cfg, nil, "", WithClient(fastClient()))
+	engine := mustNewQueryEngine(cfg, nil, "", WithClient(fastClient()))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -1817,7 +1817,7 @@ func TestRunLoop_EmptyStopReason_TerminatesAsEndTurn(t *testing.T) {
 		SessionManager: sessMgr,
 		SessionID:      "sess_empty_sr",
 	}
-	engine := NewQueryEngine(cfg, nil, "test-model", WithClient(fastClient()))
+	engine := mustNewQueryEngine(cfg, nil, "test-model", WithClient(fastClient()))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -1879,7 +1879,7 @@ func TestRunLoop_NullStopReason_TerminatesAsEndTurn(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 
 	cfg := StreamConfig{Enabled: false}
-	engine := NewQueryEngine(cfg, nil, "test-model", WithClient(fastClient()))
+	engine := mustNewQueryEngine(cfg, nil, "test-model", WithClient(fastClient()))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -1909,7 +1909,7 @@ func TestRunLoop_UnknownStopReason_TerminatesAsEndTurn(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 
 	cfg := StreamConfig{Enabled: false}
-	engine := NewQueryEngine(cfg, nil, "test-model", WithClient(fastClient()))
+	engine := mustNewQueryEngine(cfg, nil, "test-model", WithClient(fastClient()))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -1950,7 +1950,7 @@ func TestRunLoop_EmptyStopReason_WithToolUse_TreatsAsToolUse(t *testing.T) {
 		SessionManager: sessMgr,
 		SessionID:      "sess_empty_sr_tool",
 	}
-	engine := NewQueryEngine(cfg, nil, "test-model", WithClient(fastClient()))
+	engine := mustNewQueryEngine(cfg, nil, "test-model", WithClient(fastClient()))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -2046,7 +2046,7 @@ func TestRunLoop_EmptyStopReason_MemExtractorCalledWithEmpty(t *testing.T) {
 		SessionID:         "sess_ac10",
 		AutoMemoryEnabled: true,
 	}
-	engine := NewQueryEngine(cfg, nil, "test-model", WithClient(fastClient()))
+	engine := mustNewQueryEngine(cfg, nil, "test-model", WithClient(fastClient()))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -2099,7 +2099,7 @@ func TestQueryEngine_ToolParamExtraction(t *testing.T) {
 	// AC1, AC3: Verify QueryEngine extracts extra fields from tool schema
 	tools := []tool.Tool{&mockExtraTool{}}
 	cfg := StreamConfig{Enabled: false}
-	engine := NewQueryEngine(cfg, tools, "", WithClient(fastClient()))
+	engine := mustNewQueryEngine(cfg, tools, "", WithClient(fastClient()))
 
 	if len(engine.toolParams) != 1 {
 		t.Fatalf("expected 1 tool param, got %d", len(engine.toolParams))
@@ -2168,7 +2168,7 @@ func TestEngine_OutputCapHit_EmitsStructuredError(t *testing.T) {
 		SessionID:      sessionID,
 	}
 
-	engine := NewQueryEngine(cfg, nil, "deepseek-v4-flash", WithClient(fastClient()))
+	engine := mustNewQueryEngine(cfg, nil, "deepseek-v4-flash", WithClient(fastClient()))
 
 	// Capture stdout
 	oldStdout := os.Stdout
@@ -2255,7 +2255,7 @@ func TestEngine_ContextExhausted_EmitsStructuredError(t *testing.T) {
 		SessionID:      sessionID,
 	}
 
-	engine := NewQueryEngine(cfg, nil, "deepseek-v4-flash", WithClient(fastClient()))
+	engine := mustNewQueryEngine(cfg, nil, "deepseek-v4-flash", WithClient(fastClient()))
 
 	// Capture stdout
 	oldStdout := os.Stdout
@@ -2389,7 +2389,7 @@ func TestEngine_AutoCompactFiresAboveThreshold(t *testing.T) {
 		SessionID:      sessionID,
 	}
 
-	engine := NewQueryEngine(cfg, nil, "deepseek-v4-flash", WithClient(fastClient()))
+	engine := mustNewQueryEngine(cfg, nil, "deepseek-v4-flash", WithClient(fastClient()))
 
 	// Verify the engine's compact config has correct threshold
 	// deepseek-v4-flash: effectiveWindow = 1M - 8192 = 991808
@@ -2447,7 +2447,7 @@ func TestEngine_ContextExhausted_MiniMax_EmitsStructuredError(t *testing.T) {
 		SessionID:      sessionID,
 	}
 
-	engine := NewQueryEngine(cfg, nil, "minimax-m2.7", WithClient(fastClient()))
+	engine := mustNewQueryEngine(cfg, nil, "minimax-m2.7", WithClient(fastClient()))
 
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
@@ -2509,7 +2509,7 @@ func TestAC2_PersistCompactBoundary_LogsError(t *testing.T) {
 		SessionID:      sessionID,
 	}
 
-	engine := NewQueryEngine(cfg, nil, "", WithClient(fastClient()))
+	engine := mustNewQueryEngine(cfg, nil, "", WithClient(fastClient()))
 
 	// Manually call persistCompactBoundary with valid params
 	// First append some entries to have a valid session
@@ -2576,7 +2576,7 @@ func (m *mockSkillActivatorForTest) GetActivatedSkills() []skills.ActivatedSkill
 func TestAC1_SkillActivatorWiring(t *testing.T) {
 	cfg := StreamConfig{Enabled: false}
 	mockActivator := &mockSkillActivatorForTest{}
-	engine := NewQueryEngine(cfg, nil, "", WithClient(fastClient()), WithSkillActivator(mockActivator))
+	engine := mustNewQueryEngine(cfg, nil, "", WithClient(fastClient()), WithSkillActivator(mockActivator))
 
 	// Verify the activator was wired correctly
 	if engine.skillActivator == nil {
@@ -2612,7 +2612,7 @@ func TestAC1_SkillActivatorWiring(t *testing.T) {
 func TestAC1_SkillActivatorDeduplication(t *testing.T) {
 	cfg := StreamConfig{Enabled: false}
 	mockActivator := &mockSkillActivatorForTest{}
-	engine := NewQueryEngine(cfg, nil, "", WithClient(fastClient()), WithSkillActivator(mockActivator))
+	engine := mustNewQueryEngine(cfg, nil, "", WithClient(fastClient()), WithSkillActivator(mockActivator))
 
 	// Register the same skill twice
 	mockActivator.RegisterActivation("readme-writer", "/path/to/readme-writer")
@@ -2630,7 +2630,7 @@ func TestAC1_SkillActivatorDeduplication(t *testing.T) {
 // when the skill activator is nil.
 func TestAC1_SkillActivatorNoOpWhenNil(t *testing.T) {
 	cfg := StreamConfig{Enabled: false}
-	engine := NewQueryEngine(cfg, nil, "", WithClient(fastClient())) // No activator
+	engine := mustNewQueryEngine(cfg, nil, "", WithClient(fastClient())) // No activator
 
 	// Should not panic and should leave ActiveSkills empty
 	engine.syncActiveSkills()

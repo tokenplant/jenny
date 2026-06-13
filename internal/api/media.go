@@ -117,9 +117,9 @@ func countMediaInContent(content string) (count int, largestSize int, err error)
 		if base64EndInPayload > 0 {
 			cleaned := cleanBase64Fragment(payload[:base64EndInPayload])
 			decoded := make([]byte, base64.StdEncoding.DecodedLen(len(cleaned)))
-			_, decodeErr := base64.StdEncoding.Decode(decoded, []byte(cleaned))
-			if decodeErr == nil && len(decoded) > largestSize {
-				largestSize = len(decoded)
+			n, decodeErr := base64.StdEncoding.Decode(decoded, []byte(cleaned))
+			if decodeErr == nil && n > largestSize {
+				largestSize = n
 			}
 		}
 

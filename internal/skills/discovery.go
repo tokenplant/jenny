@@ -229,25 +229,19 @@ func parseSkillMetadata(content []byte) (description string, activationGlob stri
 		}
 	}
 
-	// Fall back to first non-empty line as description
+	// Fall back to first non-empty, non-heading line as description
 	for line := range strings.SplitSeq(contentStr, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		if line, ok := strings.CutPrefix(line, "# "); ok {
-		} else if line, ok = strings.CutPrefix(line, "## "); ok {
-		} else if line, ok = strings.CutPrefix(line, "### "); ok {
-		}
-		if line != "" {
-			if description == "" {
-				if len(line) > 100 {
-					line = line[:97] + "..."
-				}
-				description = line
+		if description == "" {
+			if len(line) > 100 {
+				line = line[:97] + "..."
 			}
-			break
+			description = line
 		}
+		break
 	}
 
 	if description == "" {

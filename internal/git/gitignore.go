@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 )
 
 func IsIgnored(repoRoot, path string) (bool, error) {
@@ -194,8 +195,16 @@ func matchGitignorePattern(path, pattern string) bool {
 	return path == pattern
 }
 
+// globCache caches compiled regexps for glob patterns.
+var globCache sync.Map // map[string]*regexp.Regexp
+
 // matchGlob matches a path against a glob pattern with * wildcards.
 func matchGlob(path, pattern string) bool {
+	// Check cache first
+	if cached, ok := globCache.Load(pattern); ok {
+		return cached.(*regexp.Regexp).MatchString(path)
+	}
+
 	// Convert glob pattern to regex
 	var buf strings.Builder
 	buf.WriteString("^")
@@ -215,6 +224,10 @@ func matchGlob(path, pattern string) bool {
 	}
 	buf.WriteString("$")
 
-	matched, _ := regexp.MatchString(buf.String(), path)
-	return matched
+	re, err := regexp.Compile(buf.String())
+	if err != nil {
+		return false
+	}
+	globCache.Store(pattern, re)
+	return re.MatchString(path)
 }

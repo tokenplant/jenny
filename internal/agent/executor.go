@@ -4,6 +4,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -278,10 +279,13 @@ func (e *ToolExecutor) executeParallel(parentCtx context.Context, batch []toolUs
 			}
 
 			if err != nil {
+				// Mark as interrupted if the error is due to context cancellation
+				interrupted := errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 				results[tw.index] = toolResult{
-					ToolUseID: tw.block.ID,
-					Content:   fmt.Sprintf("Error executing tool: %v", err),
-					IsError:   true,
+					ToolUseID:   tw.block.ID,
+					Content:     fmt.Sprintf("Error executing tool: %v", err),
+					IsError:     true,
+					Interrupted: interrupted,
 				}
 			} else {
 				results[tw.index] = toolResult{
@@ -345,10 +349,12 @@ func (e *ToolExecutor) executeSerial(parentCtx context.Context, batch []toolUseW
 		}
 
 		if err != nil {
+			interrupted := errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 			results[tw.index] = toolResult{
-				ToolUseID: tw.block.ID,
-				Content:   fmt.Sprintf("Error executing tool: %v", err),
-				IsError:   true,
+				ToolUseID:   tw.block.ID,
+				Content:     fmt.Sprintf("Error executing tool: %v", err),
+				IsError:     true,
+				Interrupted: interrupted,
 			}
 			// Bash failure aborts siblings in same batch
 			if isBashTool(tw.block.Name) {

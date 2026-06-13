@@ -4,6 +4,7 @@
 package agent
 
 import (
+	"fmt"
 	"slices"
 	"sync"
 	"time"
@@ -88,7 +89,7 @@ func WithSkillActivator(activator tool.SkillActivator) QueryEngineOption {
 }
 
 // NewQueryEngine creates a new QueryEngine with the given configuration.
-func NewQueryEngine(cfg StreamConfig, tools []tool.Tool, model string, opts ...QueryEngineOption) *QueryEngine {
+func NewQueryEngine(cfg StreamConfig, tools []tool.Tool, model string, opts ...QueryEngineOption) (*QueryEngine, error) {
 	// AC1/AC4: Inject StructuredOutputTool for non-interactive sessions with schema
 	var structuredTool *tool.StructuredOutputTool
 	if cfg.StructuredSchema != nil && cfg.Enabled {
@@ -200,8 +201,7 @@ func NewQueryEngine(cfg StreamConfig, tools []tool.Tool, model string, opts ...Q
 	if e.client == nil {
 		client, err := api.NewClientWithModel(model)
 		if err != nil {
-			// Client creation error will be reported on first API call
-			log.Debug("QueryEngine: API client creation warning", "error", err)
+			return nil, fmt.Errorf("API client creation failed: %w", err)
 		}
 		e.client = client
 	}
@@ -229,7 +229,7 @@ func NewQueryEngine(cfg StreamConfig, tools []tool.Tool, model string, opts ...Q
 	// Initialize session memory
 	e.sessionMemory = NewSessionMemory(sessionID, e.client, e.compactConfig)
 
-	return e
+	return e, nil
 }
 
 // WireTools injects context (ReadFileCache, SessionID) from StreamConfig into tools.

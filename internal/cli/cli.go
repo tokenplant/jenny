@@ -188,17 +188,20 @@ func Parse() (*Flags, error) {
 	// session or API initialisation, so a prompt is not required.
 	if version || psp {
 		return &Flags{
+			Model:                  model,
 			OutputFormat:           outputFormat,
 			Verbose:                verbose,
 			IncludePartialMessages: includePartial,
 			SkipPermissions:        skipPerms,
 			NoSessionPersistence:   noSessionPersistence,
+			DeniedTools:            deniedTools,
 			Bare:                   bare,
 			SwarmsEnabled:          swarmsEnabled,
 			Version:                version,
 			PrintSystemPrompt:      psp,
 			CustomSystemPrompt:     customSys,
 			AppendSystemPrompt:     appendSys,
+			MCPConfig:              mcpPaths,
 			MaxIterations:          maxIter,
 			MaxTurns:               maxTurns,
 			MaxBudgetUsd:           maxBudget,

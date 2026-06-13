@@ -324,9 +324,10 @@ type TaskResultEntry struct {
 // EmitTaskProgress emits a progress event for a running task.
 // Outputs to stdout as stream-json format.
 func EmitTaskProgress(taskID string, durationSeconds float64, outputPreview string) {
-	// Truncate preview to 200 chars
-	if len(outputPreview) > 200 {
-		outputPreview = outputPreview[:200]
+	// Truncate preview to 200 runes (safe for multi-byte characters)
+	runes := []rune(outputPreview)
+	if len(runes) > 200 {
+		outputPreview = string(runes[:200])
 	}
 
 	msg := StreamMessage{

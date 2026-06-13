@@ -13,7 +13,7 @@ import (
 // TestSetMaxBudgetUsd_sets_field tests that SetMaxBudgetUsd correctly sets the budget field.
 func TestSetMaxBudgetUsd_sets_field(t *testing.T) {
 	cfg := StreamConfig{Enabled: false}
-	engine := NewQueryEngine(cfg, nil, "", WithClient(fastClient()))
+	engine := mustNewQueryEngine(cfg, nil, "", WithClient(fastClient()))
 
 	// Initially no budget set
 	if engine.streamCfg.MaxBudgetUSD != 0 {
@@ -60,7 +60,7 @@ func TestBudgetZero_is_noop(t *testing.T) {
 		// No budget set (MaxBudgetUSD = 0)
 	}
 
-	engine := NewQueryEngine(cfg, nil, "", WithClient(fastClient()))
+	engine := mustNewQueryEngine(cfg, nil, "", WithClient(fastClient()))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

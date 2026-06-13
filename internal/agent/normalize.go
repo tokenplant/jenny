@@ -112,10 +112,26 @@ func filterOrphanedThinking(messages []api.Message) []api.Message {
 	return result
 }
 
-// isThinkingOnlyContent checks if content is only thinking tags.
+// isThinkingOnlyContent checks if content consists solely of thinking blocks.
 func isThinkingOnlyContent(content string) bool {
 	trimmed := strings.TrimSpace(content)
-	return strings.HasPrefix(trimmed, "<thinking>") && strings.HasSuffix(trimmed, "</thinking>")
+	if trimmed == "" {
+		return false
+	}
+	// Strip all <thinking>...</thinking> blocks and check if anything remains
+	for {
+		start := strings.Index(trimmed, "<thinking>")
+		if start == -1 {
+			break
+		}
+		end := strings.Index(trimmed[start:], "</thinking>")
+		if end == -1 {
+			break
+		}
+		end += start + len("</thinking>")
+		trimmed = trimmed[:start] + trimmed[end:]
+	}
+	return strings.TrimSpace(trimmed) == ""
 }
 
 // stripTrailingThinking removes thinking blocks at the end of assistant messages.

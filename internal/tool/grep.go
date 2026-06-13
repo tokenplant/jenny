@@ -304,10 +304,13 @@ func (t *GrepTool) Execute(ctx context.Context, input map[string]any, cwd string
 		output = strings.Join(lines, "\n")
 	}
 
-	// Truncate if needed (20K char cap)
+	// Truncate if needed (20K char cap, rune-safe)
 	truncated := false
 	if len(output) > maxResultSizeChars {
-		output = output[:maxResultSizeChars]
+		runes := []rune(output)
+		if len(runes) > maxResultSizeChars {
+			output = string(runes[:maxResultSizeChars])
+		}
 		truncated = true
 		output += "\n[output truncated]"
 	}

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -84,12 +85,29 @@ func (t *BashTool) executeSed(command string, cwd string) (*ToolResult, error) {
 		}, nil
 	}
 
-	// Apply replacement
+	// Apply replacement using regex (matching real sed behavior)
 	content := string(data)
-	if parsed.global {
-		content = strings.ReplaceAll(content, parsed.pattern, parsed.replacement)
+	re, reErr := regexp.Compile(parsed.pattern)
+	if reErr != nil {
+		// If pattern is not valid regex, fall back to literal replacement
+		if parsed.global {
+			content = strings.ReplaceAll(content, parsed.pattern, parsed.replacement)
+		} else {
+			content = strings.Replace(content, parsed.pattern, parsed.replacement, 1)
+		}
 	} else {
-		content = strings.Replace(content, parsed.pattern, parsed.replacement, 1)
+		if parsed.global {
+			content = re.ReplaceAllString(content, parsed.replacement)
+		} else {
+			found := false
+			content = re.ReplaceAllStringFunc(content, func(match string) string {
+				if found {
+					return match
+				}
+				found = true
+				return re.ReplaceAllString(match, parsed.replacement)
+			})
+		}
 	}
 
 	// Write back

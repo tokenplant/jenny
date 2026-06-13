@@ -80,14 +80,14 @@ func computeBackoff(attempt int, cfg RetryConfig, retryAfter *time.Duration) tim
 
 // isRetryable checks if an HTTP status code or error is retryable.
 func isRetryable(statusCode int, err error) bool {
-	// Connection errors and context cancellation are retryable
 	if err != nil {
+		// Context cancellation is NOT retryable — the caller explicitly cancelled.
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return false
+		}
+		// Transient network errors are retryable.
 		var netErr net.Error
 		if errors.As(err, &netErr); netErr != nil {
-			return true
-		}
-		// Context cancellation is retryable
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return true
 		}
 	}

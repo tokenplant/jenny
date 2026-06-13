@@ -131,7 +131,7 @@ func TestAC1_ThinkingBlockEmittedSeparately(t *testing.T) {
 	}
 
 	stdout := captureStdout(t, func() {
-		engine := NewQueryEngine(cfg, nil, "", WithClient(fastClient()))
+		engine := mustNewQueryEngine(cfg, nil, "", WithClient(fastClient()))
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if _, err := engine.SubmitMessage(ctx, "test"); err != nil {
@@ -194,7 +194,7 @@ func TestAC2_ThinkingSignatureIncluded(t *testing.T) {
 	}
 
 	stdout := captureStdout(t, func() {
-		engine := NewQueryEngine(cfg, nil, "", WithClient(fastClient()))
+		engine := mustNewQueryEngine(cfg, nil, "", WithClient(fastClient()))
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_, _ = engine.SubmitMessage(ctx, "test")
@@ -235,7 +235,7 @@ func TestAC2_ThinkingSignatureOmittedWhenEmpty(t *testing.T) {
 	}
 
 	stdout := captureStdout(t, func() {
-		engine := NewQueryEngine(cfg, nil, "", WithClient(fastClient()))
+		engine := mustNewQueryEngine(cfg, nil, "", WithClient(fastClient()))
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_, _ = engine.SubmitMessage(ctx, "test")
@@ -273,7 +273,7 @@ func TestAC3_ContentOrdering_ThinkingTextToolUse(t *testing.T) {
 	}
 
 	stdout := captureStdout(t, func() {
-		engine := NewQueryEngine(cfg, nil, "", WithClient(fastClient()))
+		engine := mustNewQueryEngine(cfg, nil, "", WithClient(fastClient()))
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_, _ = engine.SubmitMessage(ctx, "test")
@@ -326,7 +326,7 @@ func TestAC4_TextOnlyUnaffected(t *testing.T) {
 	}
 
 	stdout := captureStdout(t, func() {
-		engine := NewQueryEngine(cfg, nil, "", WithClient(fastClient()))
+		engine := mustNewQueryEngine(cfg, nil, "", WithClient(fastClient()))
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_, _ = engine.SubmitMessage(ctx, "test")
@@ -375,7 +375,7 @@ func TestAC5_ToolUseOnlyNoEmptyText(t *testing.T) {
 	}
 
 	stdout := captureStdout(t, func() {
-		engine := NewQueryEngine(cfg, nil, "", WithClient(fastClient()))
+		engine := mustNewQueryEngine(cfg, nil, "", WithClient(fastClient()))
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_, _ = engine.SubmitMessage(ctx, "test")
@@ -467,7 +467,7 @@ func TestAC6_FallbackPathThinkingBlock(t *testing.T) {
 	}
 
 	stdout := captureStdout(t, func() {
-		engine := NewQueryEngine(cfg, nil, "", WithClient(fastClient()))
+		engine := mustNewQueryEngine(cfg, nil, "", WithClient(fastClient()))
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_, _ = engine.SubmitMessage(ctx, "test")

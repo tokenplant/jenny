@@ -240,7 +240,7 @@ func Run(ctx context.Context, prompt string, tools []tool.Tool, cwd string, maxI
 				}
 
 				// Execute tool
-				result, err := t.Execute(context.Background(), block.ToolInput, cwd)
+				result, err := t.Execute(ctx, block.ToolInput, cwd)
 				if err != nil {
 					toolResults = append(toolResults, api.ToolResult{
 						ToolUseID: block.ToolID,
@@ -354,7 +354,10 @@ func RunStream(ctx context.Context, prompt string, tools []tool.Tool, cwd string
 
 	// Create QueryEngine - it handles API client creation, cost state restoration,
 	// tool parameter conversion, and the agent loop lifecycle
-	engine := NewQueryEngine(cfg, tools, model, append(opts, WithCWD(cwd))...)
+	engine, err := NewQueryEngine(cfg, tools, model, append(opts, WithCWD(cwd))...)
+	if err != nil {
+		return "", "", err
+	}
 
 	// Emit system/init line once at start of stream-json mode (AC1-AC6)
 	if cfg.Enabled {

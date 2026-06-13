@@ -463,9 +463,9 @@ func (t *LSPTool) executeOutgoingCalls(ctx context.Context, input map[string]any
 func uriToFilePath(uri string) string {
 	if after, ok := strings.CutPrefix(uri, "file://"); ok {
 		path := after
-		// Handle Windows-style paths
-		if len(path) > 2 && path[1] == ':' {
-			path = path[1:] // Remove leading slash before drive letter
+		// Handle Windows-style paths: file:///C:/path -> /C:/path -> C:/path
+		if len(path) > 2 && path[0] == '/' && path[2] == ':' {
+			path = path[1:]
 		}
 		return path
 	}

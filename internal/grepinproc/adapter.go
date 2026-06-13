@@ -12,6 +12,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -404,7 +405,7 @@ func readAllContext(ctx context.Context, f *os.File) ([]byte, error) {
 			buf = append(buf, rb[:n]...)
 		}
 		if err != nil {
-			if err.Error() == "EOF" {
+			if err == io.EOF {
 				return buf, nil
 			}
 			return buf, err

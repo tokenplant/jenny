@@ -10,8 +10,11 @@ import (
 	"time"
 )
 
-// Logger is the package-level logger instance.
+// Logger is the package-level logger instance, protected by loggerMu.
 var Logger *slog.Logger
+
+// loggerMu protects concurrent access to Logger and outputWriter.
+var loggerMu sync.RWMutex
 
 // outputWriter controls where log output is sent.
 var outputWriter io.Writer = os.Stderr
@@ -30,12 +33,20 @@ func resetLogger() {
 		opts.Level = slog.LevelDebug
 	}
 
+	loggerMu.Lock()
 	w := outputWriter
 	if w == nil {
 		w = os.Stderr
 	}
-
 	Logger = slog.New(slog.NewTextHandler(w, opts))
+	loggerMu.Unlock()
+}
+
+func getLogger() *slog.Logger {
+	loggerMu.RLock()
+	l := Logger
+	loggerMu.RUnlock()
+	return l
 }
 
 // isTruthy returns true if the given string represents a truthy value.
@@ -52,8 +63,10 @@ func isTruthy(val string) bool {
 // SetOutput redirects log output to the specified writer.
 // This is used to redirect debug logs to stderr when stream-json mode is active.
 func SetOutput(w io.Writer) {
+	loggerMu.Lock()
 	outputWriter = w
-	resetLogger()
+	loggerMu.Unlock()
+	resetLogger() // resetLogger acquires loggerMu internally
 }
 
 // SetVerbose enables or disables debug-level logging.
@@ -75,23 +88,23 @@ func Output() io.Writer {
 
 // Debug logs a debug-level message.
 func Debug(msg string, args ...any) {
-	Logger.Debug(msg, args...)
+	getLogger().Debug(msg, args...)
 }
 
 // Info logs an info-level message.
 func Info(msg string, args ...any) {
-	Logger.Info(msg, args...)
+	getLogger().Info(msg, args...)
 }
 
 // Warn logs a warning-level message.
 func Warn(msg string, args ...any) {
-	Logger.Warn(msg, args...)
+	getLogger().Warn(msg, args...)
 }
 
 // Error logs an error-level message.
 func Error(msg string, args ...any) {
 	errorRing.Append(ErrorEntry{Time: time.Now(), Message: msg, Args: args})
-	Logger.Error(msg, args...)
+	getLogger().Error(msg, args...)
 }
 
 // ErrorEntry represents a single error entry in the ring buffer.

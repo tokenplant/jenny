@@ -12,6 +12,7 @@ import (
 	"github.com/ipy/jenny/internal/api"
 	"github.com/ipy/jenny/internal/testutil"
 	"github.com/ipy/jenny/internal/testutil/mockapi"
+	"github.com/ipy/jenny/internal/tool"
 )
 
 // captureStdout delegates to testutil.CaptureStdout for stdout capture.
@@ -24,8 +25,26 @@ func makeMockStreamServerWithPartialEvents(t *testing.T) *httptest.Server {
 	t.Helper()
 	ms := mockapi.NewMockServer()
 	ms.SetPathHandler("POST /v1/messages", func(w http.ResponseWriter, r *http.Request) {
-		io.ReadAll(r.Body)
+		bodyBytes, _ := io.ReadAll(r.Body)
 		r.Body.Close()
+
+		var req api.AnthropicRequest
+		json.Unmarshal(bodyBytes, &req)
+
+		if !req.Stream {
+			resp := api.AnthropicResponse{
+				Type: "message",
+				Role: "assistant",
+				Content: []api.AnthropicContentBlock{
+					{Type: "text", Text: "Fallback response"},
+				},
+				Model:      "test-model",
+				StopReason: "end_turn",
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
 
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
@@ -58,8 +77,32 @@ func makeMockStreamServerWithCacheTokens(t *testing.T) *httptest.Server {
 	t.Helper()
 	ms := mockapi.NewMockServer()
 	ms.SetPathHandler("POST /v1/messages", func(w http.ResponseWriter, r *http.Request) {
-		io.ReadAll(r.Body)
+		bodyBytes, _ := io.ReadAll(r.Body)
 		r.Body.Close()
+
+		var req api.AnthropicRequest
+		json.Unmarshal(bodyBytes, &req)
+
+		if !req.Stream {
+			resp := api.AnthropicResponse{
+				Type: "message",
+				Role: "assistant",
+				Content: []api.AnthropicContentBlock{
+					{Type: "text", Text: "Fallback response with cache tokens"},
+				},
+				Model:      "test-model",
+				StopReason: "end_turn",
+				Usage: api.AnthropicUsage{
+					InputTokens:              5,
+					OutputTokens:             2,
+					CacheReadInputTokens:     3,
+					CacheCreationInputTokens: 1,
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
 
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
@@ -96,8 +139,32 @@ func makeMockStreamServerWithEvents(t *testing.T, events []string) *httptest.Ser
 
 	// Serve POST /v1/messages (SDK streaming endpoint)
 	ms.SetPathHandler("POST /v1/messages", func(w http.ResponseWriter, r *http.Request) {
-		io.ReadAll(r.Body)
+		bodyBytes, _ := io.ReadAll(r.Body)
 		r.Body.Close()
+
+		var req api.AnthropicRequest
+		json.Unmarshal(bodyBytes, &req)
+
+		if !req.Stream {
+			// Non-streaming response for summary agent or other calls
+			resp := api.AnthropicResponse{
+				Type: "message",
+				Role: "assistant",
+				Content: []api.AnthropicContentBlock{
+					{Type: "text", Text: "Summary of the conversation"},
+				},
+				Model:      "test-model",
+				StopReason: "end_turn",
+				Usage: api.AnthropicUsage{
+					InputTokens:  100,
+					OutputTokens: 10,
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(resp)
+			return
+		}
+
 		writeSSEEvents(w, events)
 	})
 
@@ -222,4 +289,14 @@ func fastClient() api.Requester {
 		Max529Retries: 0,
 	})
 	return client
+}
+
+// mustNewQueryEngine creates a QueryEngine for testing, panicking on error.
+// All test callers use WithClient so the error path is never reached.
+func mustNewQueryEngine(cfg StreamConfig, tools []tool.Tool, model string, opts ...QueryEngineOption) *QueryEngine {
+	e, err := NewQueryEngine(cfg, tools, model, opts...)
+	if err != nil {
+		panic(fmt.Sprintf("mustNewQueryEngine: %v", err))
+	}
+	return e
 }
