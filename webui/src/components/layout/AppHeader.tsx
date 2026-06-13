@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import type { Theme } from '../../types';
+import type { Locale } from '../../i18n/translate';
 
 // ── AppHeader ───────────────────────────────
 
@@ -24,8 +25,8 @@ export interface AppHeaderProps {
   /** Max width (default '72rem' = max-w-6xl) */
   maxWidth?: string;
   /** Locale switcher */
-  locale?: string;
-  onLocaleChange?: (locale: string) => void;
+  locale?: Locale;
+  onLocaleChange?: (locale: Locale) => void;
   /** Theme switcher */
   theme?: Theme;
   onThemeChange?: (theme: Theme) => void;
@@ -237,8 +238,8 @@ function LocaleSwitcher({
   locale,
   onLocaleChange,
 }: {
-  locale: string;
-  onLocaleChange: (locale: string) => void;
+  locale: Locale;
+  onLocaleChange: (locale: Locale) => void;
 }) {
   return (
     <div
@@ -255,10 +256,11 @@ function LocaleSwitcher({
         flexShrink: 0,
       }}
     >
-      {[
-        { value: 'zh-Hans', label: '中文' },
-        { value: 'en', label: 'EN' },
-      ].map((opt) => {
+      {([
+        { value: 'en' as Locale, label: 'EN' },
+        { value: 'zh-Hans' as Locale, label: '中文' },
+        { value: 'zh-Hant' as Locale, label: '繁中' },
+      ] as { value: Locale; label: string }[]).map((opt) => {
         const active = locale === opt.value;
         return (
           <button

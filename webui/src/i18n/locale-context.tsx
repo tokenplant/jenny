@@ -22,7 +22,12 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
       return stored as Locale;
     }
     const browser = navigator.language;
-    if (browser.startsWith('zh')) return 'zh-Hans';
+    if (browser.startsWith('zh')) {
+      if (browser === 'zh-TW' || browser === 'zh-HK' || browser === 'zh-Hant') {
+        return 'zh-Hant' as Locale;
+      }
+      return 'zh-Hans';
+    }
     return 'en';
   });
 
@@ -44,7 +49,9 @@ export function useLocale() {
   const ctx = useContext(LocaleContext);
   if (!ctx) throw new Error('useLocale must be used within LocaleProvider');
 
-  const localeName = ctx.locale === 'en' ? 'English' : '中文';
+  const localeName = ctx.locale === 'en' ? 'English'
+    : ctx.locale === 'zh-Hant' ? '繁體中文'
+    : '中文';
 
   return { ...ctx, localeName };
 }

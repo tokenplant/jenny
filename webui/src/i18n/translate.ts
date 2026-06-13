@@ -3,11 +3,11 @@
 // Simple key-value translation with param replacement
 // ============================================
 
-export type Locale = 'en' | 'zh-Hans';
+export type Locale = 'en' | 'zh-Hans' | 'zh-Hant';
 
 export const DEFAULT_LOCALE: Locale = 'en';
-export const SUPPORTED_LOCALES: Locale[] = ['en', 'zh-Hans'];
-export const LOCALE_STORAGE_KEY = 'glimpse-ui-locale';
+export const SUPPORTED_LOCALES: Locale[] = ['en', 'zh-Hans', 'zh-Hant'];
+export const LOCALE_STORAGE_KEY = 'jenny-portal-locale';
 
 export type Messages = Record<string, string>;
 
@@ -100,6 +100,50 @@ const translations: Record<Locale, Messages> = {
     'portal.coming_soon': '敬请期待',
     'portal.coming_soon.hint': '该功能正在开发中。',
   },
+  'zh-Hant': {
+    // Common
+    'common.cancel': '取消',
+    'common.confirm': '確認',
+    'common.save': '儲存',
+    'common.delete': '刪除',
+    'common.edit': '編輯',
+    'common.close': '關閉',
+    'common.loading': '載入中…',
+    'common.error': '錯誤',
+    'common.success': '成功',
+    'common.warning': '警告',
+    'common.info': '資訊',
+    'common.optional': '（選填）',
+    'common.required': '（必填）',
+
+    // Page
+    'page.empty': '尚無項目',
+    'page.empty.hint': '這裡沒有內容。',
+    'page.error': '發生錯誤',
+    'page.error.retry': '重試',
+
+    // Actions
+    'action.refresh': '重新整理',
+    'action.expand': '展開',
+    'action.collapse': '收合',
+    'action.copy': '複製',
+    'action.copied': '已複製！',
+    'action.download': '下載',
+
+    // Jenny Portal
+    'portal.start': '開始',
+    'portal.sessions': '會話',
+    'portal.projects': '專案',
+    'portal.skills': '技能',
+    'portal.mcp': 'MCP',
+    'portal.plugins': '插件',
+    'portal.marketplace': '市集',
+    'portal.new_session': '啟動新會話',
+    'portal.launch': '啟動 Agent',
+    'portal.recent_projects': '最近專案',
+    'portal.coming_soon': '即將推出',
+    'portal.coming_soon.hint': '此功能正在開發中。',
+  },
 };
 
 function replaceParams(template: string, params: Record<string, string | number>): string {
@@ -127,6 +171,7 @@ export function assertKeyParity(): void {
   const keysByLocale: Record<Locale, Set<string>> = {
     en: new Set(Object.keys(translations.en)),
     'zh-Hans': new Set(Object.keys(translations['zh-Hans'])),
+    'zh-Hant': new Set(Object.keys(translations['zh-Hant'])),
   };
 
   for (const locale of SUPPORTED_LOCALES) {

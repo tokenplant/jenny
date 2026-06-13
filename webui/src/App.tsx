@@ -46,7 +46,7 @@ function App() {
 
 function AppContent() {
   const { theme, setTheme } = useTheme();
-  const { t } = useLocale();
+  const { t, locale, setLocale } = useLocale();
   const [activeTab, setActiveTab] = useState<TabId>('start');
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
 
@@ -73,6 +73,8 @@ function AppContent() {
         onTabChange={(id) => setActiveTab(id as TabId)}
         theme={theme}
         onThemeChange={setTheme}
+        locale={locale}
+        onLocaleChange={setLocale}
       />
 
       <main style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
