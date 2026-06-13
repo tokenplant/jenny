@@ -4,7 +4,7 @@ slug: webui-portal
 priority: P1
 status: in-progress
 spec: complete
-code: in-progress
+code: complete
 package: internal/portal
 depends_on:
   - agent-loop
