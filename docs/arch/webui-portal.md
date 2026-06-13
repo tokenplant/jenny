@@ -110,3 +110,52 @@ var webuiDist embed.FS
 ```
 
 This ensures `jenny` remains a single-binary distribution.
+
+## Tester Validation
+
+### Chrome CDP Launch Commands
+
+To validate the WebUI Portal with agent-browser, Chrome must be launched with remote debugging enabled:
+
+```bash
+# Step 1: Kill any existing Chrome to avoid profile lock conflicts
+pkill -f "Google Chrome" || true
+sleep 1
+
+# Step 2: Start fresh Chrome with remote debugging
+/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome \
+  --remote-debugging-port=9222 \
+  --no-first-run \
+  --user-data-dir=/tmp/chrome-dev-test \
+  --disable-extensions \
+  --disable-sync \
+  --disable-default-apps \
+  --no-default-browser-check &
+sleep 3
+
+# Step 3: Verify CDP is reachable
+curl -s http://127.0.0.1:9222/json/version
+```
+
+### Portal Start
+
+```bash
+cd /Users/sin/work/agents/jenny
+go run . portal
+```
+
+The portal will print a URL like `http://127.0.0.1:<port>?token=<hex>`. Use this URL for browser navigation.
+
+### Validation Checklist
+
+- [ ] Page title is "Jenny Portal"
+- [ ] Tab bar renders all 7 tabs: Start, Sessions, Projects, Skills, MCP, Plugins, Marketplace
+- [ ] StatCards are present on the Start tab (may show zero values)
+- [ ] Browser DevTools Console shows zero errors
+- [ ] Sessions tab UI renders without errors
+
+### Edge Cases
+
+- If Chrome is already running with a profile lock, use `--user-data-dir=/tmp/chrome-dev-test`
+- If port 9222 is already in use, use a different port: `--remote-debugging-port=9223`
+- The portal binds exclusively to 127.0.0.1 and is only accessible from localhost
