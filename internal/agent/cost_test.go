@@ -561,7 +561,7 @@ func TestAC5_CheckBudgetExceededWithLimit(t *testing.T) {
 	state := &CostState{TotalCostUSD: 0.05}
 
 	// Budget not exceeded
-	exceeded, total := CheckBudgetExceeded(state, 0.10, "USD")
+	exceeded, total := CheckBudgetExceeded(state, 0.10)
 	if exceeded {
 		t.Error("AC5 FAIL: budget exceeded when 0.05 <= 0.10")
 	}
@@ -570,7 +570,7 @@ func TestAC5_CheckBudgetExceededWithLimit(t *testing.T) {
 	}
 
 	// Budget exceeded
-	exceeded, total = CheckBudgetExceeded(state, 0.02, "USD")
+	exceeded, total = CheckBudgetExceeded(state, 0.02)
 	if !exceeded {
 		t.Error("AC5 FAIL: budget NOT exceeded when 0.05 > 0.02")
 	}
@@ -583,7 +583,7 @@ func TestAC5_CheckBudgetExceededZeroLimit(t *testing.T) {
 	state := &CostState{TotalCostUSD: 100.0}
 
 	// Zero budget = no limit
-	exceeded, total := CheckBudgetExceeded(state, 0, "USD")
+	exceeded, total := CheckBudgetExceeded(state, 0)
 	if exceeded {
 		t.Error("AC5 FAIL: budget exceeded when maxBudgetUSD=0 (should be no limit)")
 	}
@@ -595,7 +595,7 @@ func TestAC5_CheckBudgetExceededZeroLimit(t *testing.T) {
 func TestAC5_CheckBudgetExceededNegativeLimit(t *testing.T) {
 	state := &CostState{TotalCostUSD: 0.01}
 
-	exceeded, _ := CheckBudgetExceeded(state, -1, "USD")
+	exceeded, _ := CheckBudgetExceeded(state, -1)
 	if exceeded {
 		t.Error("AC5 FAIL: budget exceeded when maxBudgetUSD < 0 (should be no limit)")
 	}
@@ -732,266 +732,11 @@ func TestAC5_BudgetNoLimitWhenMaxBudgetUSDIsZero(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// CNY Multi-Currency Tests (AC1-AC5)
-// ---------------------------------------------------------------------------
-
-// TestCNY_AC1_USDRoundTripUnchanged verifies AC1: existing USD fields round-trip
-// unchanged when currency is not explicitly set.
-func TestCNY_AC1_USDRoundTripUnchanged(t *testing.T) {
-	tmpDir := t.TempDir()
-	origWd, _ := os.Getwd()
-	os.Chdir(tmpDir)
-	defer os.Chdir(origWd)
-
-	// Create state with default (empty) currency
-	state := &CostState{
-		LastSessionID: "sess_cny_ac1",
-		ModelUsage: map[string]ModelUsage{
-			"deepseek-v4-flash": {
-				InputTokens:  100,
-				OutputTokens: 50,
-				CostUSD:      0.00055, // 100 * 0.0000015 + 50 * 0.000008
-			},
-		},
-		TotalCostUSD: 0.00055,
-	}
-
-	// Save and reload
-	if err := SaveCostState(state); err != nil {
-		t.Fatalf("CNY AC1 FAIL: SaveCostState error = %v", err)
-	}
-	loaded, err := LoadCostState("sess_cny_ac1")
-	if err != nil {
-		t.Fatalf("CNY AC1 FAIL: LoadCostState error = %v", err)
-	}
-
-	// Verify USD fields are identical
-	if loaded.TotalCostUSD != state.TotalCostUSD {
-		t.Errorf("CNY AC1 FAIL: TotalCostUSD = %f, want %f", loaded.TotalCostUSD, state.TotalCostUSD)
-	}
-	mu, ok := loaded.ModelUsage["deepseek-v4-flash"]
-	if !ok {
-		t.Fatal("CNY AC1 FAIL: model usage not restored")
-	}
-	if mu.CostUSD != state.ModelUsage["deepseek-v4-flash"].CostUSD {
-		t.Errorf("CNY AC1 FAIL: CostUSD = %f, want %f", mu.CostUSD, state.ModelUsage["deepseek-v4-flash"].CostUSD)
-	}
-	// Currency should be empty (omitted from JSON)
-	if loaded.Currency != "" {
-		t.Errorf("CNY AC1 FAIL: Currency = %q, want empty", loaded.Currency)
-	}
-
-	t.Log("CNY AC1 PASS: USD fields round-trip unchanged with default currency")
-}
-
-// TestCNY_AC2_CNYFieldsPopulated verifies AC2: Setting Currency="CNY" populates
-// both TotalCostCNY and per-model CostCNY alongside USD fields.
-func TestCNY_AC2_CNYFieldsPopulated(t *testing.T) {
-	state := &CostState{
-		Currency: "CNY",
-		ModelUsage: map[string]ModelUsage{
-			"deepseek-v4-flash": {
-				InputTokens:  100,
-				OutputTokens: 50,
-				CostUSD:      0.00055,
-				CostCNY:      0.00385, // 100 * 0.0000105 + 50 * 0.000056
-			},
-		},
-		TotalCostUSD: 0.00055,
-		TotalCostCNY: 0.00385,
-	}
-
-	usage := api.Usage{
-		InputTokens:  100,
-		OutputTokens: 50,
-	}
-	AccumulateUsage(state, "deepseek-v4-flash", usage)
-
-	mu := state.ModelUsage["deepseek-v4-flash"]
-	if mu.CostUSD == 0 {
-		t.Error("CNY AC2 FAIL: CostUSD should be non-zero")
-	}
-	if mu.CostCNY == 0 {
-		t.Error("CNY AC2 FAIL: CostCNY should be non-zero")
-	}
-	if state.TotalCostUSD == 0 {
-		t.Error("CNY AC2 FAIL: TotalCostUSD should be non-zero")
-	}
-	if state.TotalCostCNY == 0 {
-		t.Error("CNY AC2 FAIL: TotalCostCNY should be non-zero")
-	}
-
-	t.Logf("CNY AC2 PASS: CNY fields populated: CostUSD=%.6f, CostCNY=%.6f", mu.CostUSD, mu.CostCNY)
-}
-
-// TestCNY_AC3_CNYRateCorrectness verifies AC3: CNY cost calculation uses CNY-denominated
-// per-token rates (not a post-hoc USD*rate conversion).
-func TestCNY_AC3_CNYRateCorrectness(t *testing.T) {
-	state := &CostState{Currency: "CNY"}
-
-	// Accumulate exactly 1,000,000 input tokens for deepseek-v4-flash
-	// CNY rate for deepseek-v4-flash input is 0.000001 per token (native CNY ¥1/MTok)
-	// So 1M tokens * 0.000001 = 1 CNY
-	usage := api.Usage{InputTokens: 1000000}
-	AccumulateUsage(state, "deepseek-v4-flash", usage)
-
-	expectedCNY := 1.0 // 1M * 0.000001 (¥1/MTok native CNY)
-	mu := state.ModelUsage["deepseek-v4-flash"]
-	if mu.CostCNY != expectedCNY {
-		t.Errorf("CNY AC3 FAIL: CostCNY = %f, want %f (1M tokens * CNY rate)", mu.CostCNY, expectedCNY)
-	}
-
-	// Also verify USD is computed separately with USD rate
-	// 1M * 0.0000015 = 1.5 USD
-	expectedUSD := 1.5
-	if mu.CostUSD != expectedUSD {
-		t.Errorf("CNY AC3 FAIL: CostUSD = %f, want %f (1M tokens * USD rate)", mu.CostUSD, expectedUSD)
-	}
-
-	t.Logf("CNY AC3 PASS: CNY rate correct - 1M input tokens = %.4f CNY, USD = %.4f", mu.CostCNY, mu.CostUSD)
-}
-
-// TestCNY_AC4_StreamJsonFieldEmission verifies AC4: stream-json terminal result line
-// emits total_cost_cny when Currency="CNY" and omits it when USD or unset.
-func TestCNY_AC4_StreamJsonFieldEmission(t *testing.T) {
-	// Test1: CNY currency should emit total_cost_cny
-	stateCNY := &CostState{
-		Currency:     "CNY",
-		TotalCostUSD: 0.00055,
-		TotalCostCNY: 0.00385,
-	}
-	msgCNY := &StreamMessage{
-		Usage: &Usage{
-			InputTokens:  100,
-			OutputTokens: 50,
-		},
-		TotalCostUSD: stateCNY.TotalCostUSD,
-		TotalCostCNY: stateCNY.TotalCostCNY,
-	}
-
-	dataCNY, err := json.Marshal(msgCNY)
-	if err != nil {
-		t.Fatalf("CNY AC4 FAIL: json.Marshal(msgCNY) error = %v", err)
-	}
-	var parsedCNY map[string]any
-	if err := json.Unmarshal(dataCNY, &parsedCNY); err != nil {
-		t.Fatalf("CNY AC4 FAIL: cannot unmarshal CNY message JSON: %v", err)
-	}
-	if _, ok := parsedCNY["total_cost_cny"]; !ok {
-		t.Error("CNY AC4 FAIL: CNY message missing 'total_cost_cny' in JSON output")
-	}
-	if _, ok := parsedCNY["total_cost_usd"]; !ok {
-		t.Error("CNY AC4 FAIL: CNY message missing 'total_cost_usd' in JSON output")
-	}
-
-	// Test 2: USD/unset currency should omit total_cost_cny
-	msgUSD := &StreamMessage{
-		Usage: &Usage{
-			InputTokens:  100,
-			OutputTokens: 50,
-		},
-		TotalCostUSD: 0.00055,
-	}
-	dataUSD, err := json.Marshal(msgUSD)
-	if err != nil {
-		t.Fatalf("CNY AC4 FAIL: json.Marshal(msgUSD) error = %v", err)
-	}
-	var parsedUSD map[string]any
-	if err := json.Unmarshal(dataUSD, &parsedUSD); err != nil {
-		t.Fatalf("CNY AC4 FAIL: cannot unmarshal USD message JSON: %v", err)
-	}
-	if _, ok := parsedUSD["total_cost_cny"]; ok {
-		t.Error("CNY AC4 FAIL: USD message should NOT have 'total_cost_cny' in JSON output")
-	}
-	if _, ok := parsedUSD["total_cost_usd"]; !ok {
-		t.Error("CNY AC4 FAIL: USD message missing 'total_cost_usd' in JSON output")
-	}
-
-	t.Log("CNY AC4 PASS: total_cost_cny emitted for CNY, omitted for USD")
-}
-
-// TestCNY_AC5_CheckBudgetExceededWithCNY verifies AC5: Budget enforcement works
-// with CNY currency.
-func TestCNY_AC5_CheckBudgetExceededWithCNY(t *testing.T) {
-	state := &CostState{
-		Currency:     "CNY",
-		TotalCostUSD: 0.00055,
-		TotalCostCNY: 0.00385,
-	}
-
-	// Budget not exceeded (0.00385 CNY < 0.01 CNY limit)
-	exceeded, total := CheckBudgetExceeded(state, 0.01, "CNY")
-	if exceeded {
-		t.Error("CNY AC5 FAIL: budget exceeded when 0.00385 <= 0.01 CNY")
-	}
-	if total != 0.00385 {
-		t.Errorf("CNY AC5 FAIL: returned total = %f, want 0.00385", total)
-	}
-
-	// Budget exceeded (0.00385 CNY > 0.001 CNY limit)
-	exceeded, total = CheckBudgetExceeded(state, 0.001, "CNY")
-	if !exceeded {
-		t.Error("CNY AC5 FAIL: budget NOT exceeded when 0.00385 > 0.001 CNY")
-	}
-	if total != 0.00385 {
-		t.Errorf("CNY AC5 FAIL: returned total = %f, want 0.00385", total)
-	}
-}
-
-func TestCNY_AC5_BudgetCNYNoLimitWhenMaxBudgetCNYIsZero(t *testing.T) {
-	state := &CostState{
-		Currency:     "CNY",
-		TotalCostCNY: 100.0,
-	}
-
-	// Zero CNY budget = no limit
-	exceeded, total := CheckBudgetExceeded(state, 0, "CNY")
-	if exceeded {
-		t.Error("CNY AC5 FAIL: budget exceeded when maxBudgetCNY=0 (should be no limit)")
-	}
-	if total != 100.0 {
-		t.Errorf("CNY AC5 FAIL: returned total = %f, want 100.0", total)
-	}
-}
-
-// ---------------------------------------------------------------------------
 // Pricing Table Verification Tests
 // ---------------------------------------------------------------------------
 
-// TestPricing_AC1_ClaudeCNYRates verifies AC1: Claude CNY rates match reference.
-func TestPricing_AC1_ClaudeCNYRates(t *testing.T) {
-	state := &CostState{Currency: "CNY"}
-
-	// 1M input tokens for claude-sonnet-4-20250514 → ¥21
-	usage := api.Usage{InputTokens: 1000000}
-	AccumulateUsage(state, "claude-sonnet-4-20250514", usage)
-	mu := state.ModelUsage["claude-sonnet-4-20250514"]
-	if mu.CostCNY != 21.0 {
-		t.Errorf("AC1 FAIL: claude-sonnet-4 CNY input1M = %f, want 21.0", mu.CostCNY)
-	}
-
-	// 1M input tokens for claude-opus-4-20250514 → ¥35
-	usage2 := api.Usage{InputTokens: 1000000}
-	AccumulateUsage(state, "claude-opus-4-20250514", usage2)
-	mu2 := state.ModelUsage["claude-opus-4-20250514"]
-	if mu2.CostCNY != 35.0 {
-		t.Errorf("AC1 FAIL: claude-opus-4 CNY input 1M = %f, want 35.0", mu2.CostCNY)
-	}
-
-	// 1M output tokens for claude-sonnet-4-20250514 → ¥105
-	state3 := &CostState{Currency: "CNY"}
-	usage3 := api.Usage{OutputTokens: 1000000}
-	AccumulateUsage(state3, "claude-sonnet-4-20250514", usage3)
-	mu3 := state3.ModelUsage["claude-sonnet-4-20250514"]
-	if mu3.CostCNY != 105.0 {
-		t.Errorf("AC1 FAIL: claude-sonnet-4 CNY output 1M = %f, want 105.0", mu3.CostCNY)
-	}
-
-	t.Log("AC1 PASS: Claude CNY rates correct")
-}
-
-// TestPricing_AC2_ClaudeUSDRates verifies AC2: Claude USD rates match reference.
-func TestPricing_AC2_ClaudeUSDRates(t *testing.T) {
+// TestPricing_AC1_ClaudeUSDRates verifies AC1: Claude USD rates match reference.
+func TestPricing_AC1_ClaudeUSDRates(t *testing.T) {
 	state := &CostState{}
 
 	// 1M input tokens for claude-sonnet-4-20250514 → $3
@@ -999,7 +744,7 @@ func TestPricing_AC2_ClaudeUSDRates(t *testing.T) {
 	AccumulateUsage(state, "claude-sonnet-4-20250514", usage)
 	mu := state.ModelUsage["claude-sonnet-4-20250514"]
 	if mu.CostUSD != 3.0 {
-		t.Errorf("AC2 FAIL: claude-sonnet-4 USD input 1M = %f, want 3.0", mu.CostUSD)
+		t.Errorf("AC1 FAIL: claude-sonnet-4 USD input 1M = %f, want 3.0", mu.CostUSD)
 	}
 
 	// 1M input tokens for claude-opus-4-20250514 → $5
@@ -1007,14 +752,23 @@ func TestPricing_AC2_ClaudeUSDRates(t *testing.T) {
 	AccumulateUsage(state, "claude-opus-4-20250514", usage2)
 	mu2 := state.ModelUsage["claude-opus-4-20250514"]
 	if mu2.CostUSD != 5.0 {
-		t.Errorf("AC2 FAIL: claude-opus-4 USD input 1M = %f, want 5.0", mu2.CostUSD)
+		t.Errorf("AC1 FAIL: claude-opus-4 USD input 1M = %f, want 5.0", mu2.CostUSD)
 	}
 
-	t.Log("AC2 PASS: Claude USD rates correct")
+	// 1M output tokens for claude-sonnet-4-20250514 → $15
+	state2 := &CostState{}
+	usage3 := api.Usage{OutputTokens: 1000000}
+	AccumulateUsage(state2, "claude-sonnet-4-20250514", usage3)
+	mu3 := state2.ModelUsage["claude-sonnet-4-20250514"]
+	if mu3.CostUSD != 15.0 {
+		t.Errorf("AC1 FAIL: claude-sonnet-4 USD output 1M = %f, want 15.0", mu3.CostUSD)
+	}
+
+	t.Log("AC1 PASS: Claude USD rates correct")
 }
 
-// TestPricing_AC3_NewModelFamilies verifies AC3: new model families are present.
-func TestPricing_AC3_NewModelFamilies(t *testing.T) {
+// TestPricing_AC2_NewModelFamilies verifies AC2: new model families are present.
+func TestPricing_AC2_NewModelFamilies(t *testing.T) {
 	newModels := []string{
 		"deepseek-v4-pro",
 		"gemini-2.5-flash",
@@ -1026,57 +780,58 @@ func TestPricing_AC3_NewModelFamilies(t *testing.T) {
 	}
 
 	for _, model := range newModels {
-		pricing := GetModelPricing(model, "CNY")
+		pricing := GetModelPricing(model)
 		if pricing.InputUSD <= 0 {
-			t.Errorf("AC3 FAIL: %s CNY InputUSD = %f, want > 0", model, pricing.InputUSD)
+			t.Errorf("AC2 FAIL: %s USD InputUSD = %f, want > 0", model, pricing.InputUSD)
 		}
 	}
 
-	t.Log("AC3 PASS: new model families present")
+	t.Log("AC2 PASS: new model families present")
 }
 
-// TestPricing_AC4_NativeCNYModels verifies AC4: native CNY models have correct rates.
-func TestPricing_AC4_NativeCNYModels(t *testing.T) {
-	state := &CostState{Currency: "CNY"}
+// TestPricing_AC3_DeepSeekUSDRates verifies AC3: native USD models have correct rates.
+// Source: api-docs.deepseek.com/quick_start/pricing
+func TestPricing_AC3_DeepSeekUSDRates(t *testing.T) {
+	state := &CostState{}
 
-	// 1M input tokens for deepseek-v4-flash → ¥1
+	// 1M input tokens for deepseek-v4-flash → $0.14 (cache miss)
 	usage := api.Usage{InputTokens: 1000000}
 	AccumulateUsage(state, "deepseek-v4-flash", usage)
 	mu := state.ModelUsage["deepseek-v4-flash"]
-	if mu.CostCNY != 1.0 {
-		t.Errorf("AC4 FAIL: deepseek-v4-flash CNY input 1M = %f, want 1.0", mu.CostCNY)
+	if mu.CostUSD != 0.14 {
+		t.Errorf("AC3 FAIL: deepseek-v4-flash USD input 1M = %f, want 0.14", mu.CostUSD)
 	}
 
-	// 1M output tokens for minimax-m3 → ¥16.8
-	state2 := &CostState{Currency: "CNY"}
+	// 1M output tokens for deepseek-v4-flash → $0.28
+	state2 := &CostState{}
 	usage2 := api.Usage{OutputTokens: 1000000}
-	AccumulateUsage(state2, "minimax-m3", usage2)
-	mu2 := state2.ModelUsage["minimax-m3"]
-	// Use tolerance-based comparison for floating point
-	if mu2.CostCNY < 16.7999 || mu2.CostCNY > 16.8001 {
-		t.Errorf("AC4 FAIL: minimax-m3 CNY output 1M = %f, want ~16.8", mu2.CostCNY)
+	AccumulateUsage(state2, "deepseek-v4-flash", usage2)
+	mu2 := state2.ModelUsage["deepseek-v4-flash"]
+	if mu2.CostUSD != 0.28 {
+		t.Errorf("AC3 FAIL: deepseek-v4-flash USD output 1M = %f, want 0.28", mu2.CostUSD)
 	}
 
-	t.Log("AC4 PASS: native CNY model rates correct")
+	// 1M input tokens for deepseek-v4-pro → $0.435 (cache miss)
+	state3 := &CostState{}
+	usage3 := api.Usage{InputTokens: 1000000}
+	AccumulateUsage(state3, "deepseek-v4-pro", usage3)
+	mu3 := state3.ModelUsage["deepseek-v4-pro"]
+	if mu3.CostUSD != 0.435 {
+		t.Errorf("AC3 FAIL: deepseek-v4-pro USD input 1M = %f, want 0.435", mu3.CostUSD)
+	}
+
+	t.Log("AC3 PASS: native USD model rates correct")
 }
 
-// TestPricing_AC5_UnknownModelFallback verifies AC5: unknown model returns conservative defaults.
-func TestPricing_AC5_UnknownModelFallback(t *testing.T) {
-	pricingUSD := GetModelPricing("nonexistent-model", "USD")
-	if !pricingUSD.UnknownModel {
-		t.Error("AC5 FAIL: USD unknown model UnknownModel = false, want true")
+// TestPricing_AC4_UnknownModelFallback verifies AC4: unknown model returns conservative defaults.
+func TestPricing_AC4_UnknownModelFallback(t *testing.T) {
+	pricing := GetModelPricing("nonexistent-model")
+	if !pricing.UnknownModel {
+		t.Error("AC4 FAIL: unknown model UnknownModel = false, want true")
 	}
-	if pricingUSD.InputUSD <= 0 || pricingUSD.OutputUSD <= 0 {
-		t.Error("AC5 FAIL: USD unknown model has zero rates")
-	}
-
-	pricingCNY := GetModelPricing("nonexistent-model", "CNY")
-	if !pricingCNY.UnknownModel {
-		t.Error("AC5 FAIL: CNY unknown model UnknownModel = false, want true")
-	}
-	if pricingCNY.InputUSD <= 0 || pricingCNY.OutputUSD <= 0 {
-		t.Error("AC5 FAIL: CNY unknown model has zero rates")
+	if pricing.InputUSD <= 0 || pricing.OutputUSD <= 0 {
+		t.Error("AC4 FAIL: unknown model has zero rates")
 	}
 
-	t.Log("AC5 PASS: unknown model fallback correct")
+	t.Log("AC4 PASS: unknown model fallback correct")
 }

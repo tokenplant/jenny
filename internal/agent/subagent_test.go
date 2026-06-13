@@ -444,10 +444,9 @@ func TestLocalSubagentRunner_AC4_StreamConfigPropagation(t *testing.T) {
 	readTool := tool.NewReadTool(false, nil)
 	runner := NewLocalSubagentRunner([]tool.Tool{readTool}, nil, fastClient())
 
-	// Set up parent config with all 8 new fields
+	// Set up parent config with all inherited fields
 	parentCfg := StreamConfig{
 		MaxBudgetUSD:         1.50,
-		MaxBudgetCNY:         10.0,
 		MaxTurns:             5,
 		CustomSystemPrompt:   "custom prompt",
 		AppendSystemPrompt:   "append prompt",
@@ -475,17 +474,11 @@ func TestLocalSubagentRunner_AC4_StreamConfigPropagation(t *testing.T) {
 		t.Log("AC4 PASS: IsNamedAgent is true")
 	}
 
-	// Verify all 8 inherited fields
+	// Verify all 7 inherited fields
 	if capturedCfg.MaxBudgetUSD != parentCfg.MaxBudgetUSD {
 		t.Errorf("AC4 FAIL: MaxBudgetUSD not inherited, got %v want %v", capturedCfg.MaxBudgetUSD, parentCfg.MaxBudgetUSD)
 	} else {
 		t.Log("AC4 PASS: MaxBudgetUSD inherited")
-	}
-
-	if capturedCfg.MaxBudgetCNY != parentCfg.MaxBudgetCNY {
-		t.Errorf("AC4 FAIL: MaxBudgetCNY not inherited, got %v want %v", capturedCfg.MaxBudgetCNY, parentCfg.MaxBudgetCNY)
-	} else {
-		t.Log("AC4 PASS: MaxBudgetCNY inherited")
 	}
 
 	if capturedCfg.MaxTurns != parentCfg.MaxTurns {

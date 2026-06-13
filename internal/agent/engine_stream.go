@@ -105,7 +105,6 @@ func (e *QueryEngine) finalizeAsEndTurn(ctx context.Context, resp *api.Response,
 			DurationAPIMs:   e.totalAPIDurationMs,
 			NumTurns:        e.turnCount,
 			TotalCostUSD:    e.costState.TotalCostUSD,
-			TotalCostCNY:    e.costState.TotalCostCNY,
 			ModelUsage:      e.buildModelUsage(),
 			FastModeState:   "off",
 		}

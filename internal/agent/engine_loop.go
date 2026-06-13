@@ -174,7 +174,6 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 					DurationMs:      time.Since(e.startTime).Milliseconds(),
 					DurationAPIMs:   e.totalAPIDurationMs,
 					TotalCostUSD:    e.costState.TotalCostUSD,
-					TotalCostCNY:    e.costState.TotalCostCNY,
 					ModelUsage:      e.buildModelUsage(),
 				}
 				data, _ := json.Marshal(msg)
@@ -185,7 +184,6 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 		// Increment turn counter at start of each API iteration
 		e.turnCount++
 		budgetUSD := e.streamCfg.MaxBudgetUSD
-		budgetCNY := e.streamCfg.MaxBudgetCNY
 		e.mu.Unlock()
 
 		// AC3: Reset structured output tool at start of each turn
@@ -194,34 +192,8 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 		}
 
 		// AC2: Budget enforcement - check before each API call
-		// Use CNY budget if currency is CNY, otherwise use USD budget
-		currency := e.costState.Currency
-		if currency == "CNY" && budgetCNY > 0 {
-			if exceeded, _ := CheckBudgetExceeded(e.costState, budgetCNY, "CNY"); exceeded {
-				if e.streamCfg.Enabled {
-					msg := StreamMessage{
-						Type:            "result",
-						Subtype:         "error",
-						Result:          fmt.Sprintf("budget exceeded: %.4f CNY > %.4f CNY limit", e.costState.TotalCostCNY, budgetCNY),
-						SessionID:       sessionID,
-						ParentToolUseID: nil,
-						Uuid:            GenerateUUID(),
-						Model:           e.model,
-						IsError:         true,
-						StopReason:      "budget_exceeded",
-						DurationMs:      time.Since(e.startTime).Milliseconds(),
-						DurationAPIMs:   e.totalAPIDurationMs,
-						TotalCostUSD:    e.costState.TotalCostUSD,
-						TotalCostCNY:    e.costState.TotalCostCNY,
-						ModelUsage:      e.buildModelUsage(),
-					}
-					data, _ := json.Marshal(msg)
-					fmt.Fprintln(os.Stdout, string(data))
-				}
-				return "", fmt.Errorf("error_budget_exceeded: %.4f CNY > %.4f CNY limit", e.costState.TotalCostCNY, budgetCNY)
-			}
-		} else if budgetUSD > 0 {
-			if exceeded, _ := CheckBudgetExceeded(e.costState, budgetUSD, "USD"); exceeded {
+		if budgetUSD > 0 {
+			if exceeded, _ := CheckBudgetExceeded(e.costState, budgetUSD); exceeded {
 				if e.streamCfg.Enabled {
 					msg := StreamMessage{
 						Type:            "result",
@@ -236,7 +208,6 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 						DurationMs:      time.Since(e.startTime).Milliseconds(),
 						DurationAPIMs:   e.totalAPIDurationMs,
 						TotalCostUSD:    e.costState.TotalCostUSD,
-						TotalCostCNY:    e.costState.TotalCostCNY,
 						ModelUsage:      e.buildModelUsage(),
 					}
 					data, _ := json.Marshal(msg)
@@ -482,7 +453,6 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 					DurationMs:    time.Since(e.startTime).Milliseconds(),
 					DurationAPIMs: e.totalAPIDurationMs,
 					TotalCostUSD:  e.costState.TotalCostUSD,
-					TotalCostCNY:  e.costState.TotalCostCNY,
 					ModelUsage:    e.buildModelUsage(),
 					// Additional fields for error_max_tokens
 					ErrorMaxTokens: &ErrorMaxTokensDetail{
@@ -514,7 +484,6 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 					DurationMs:      time.Since(e.startTime).Milliseconds(),
 					DurationAPIMs:   e.totalAPIDurationMs,
 					TotalCostUSD:    e.costState.TotalCostUSD,
-					TotalCostCNY:    e.costState.TotalCostCNY,
 					ModelUsage:      e.buildModelUsage(),
 				}
 				data, _ := json.Marshal(msg)
@@ -1029,7 +998,6 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 					DurationMs:    time.Since(e.startTime).Milliseconds(),
 					DurationAPIMs: e.totalAPIDurationMs,
 					TotalCostUSD:  e.costState.TotalCostUSD,
-					TotalCostCNY:  e.costState.TotalCostCNY,
 					ModelUsage:    e.buildModelUsage(),
 					// Additional fields for error_max_tokens
 					ErrorMaxTokens: &ErrorMaxTokensDetail{
@@ -1082,7 +1050,6 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 					DurationAPIMs:   e.totalAPIDurationMs,
 					NumTurns:        e.turnCount,
 					TotalCostUSD:    e.costState.TotalCostUSD,
-					TotalCostCNY:    e.costState.TotalCostCNY,
 					ModelUsage:      e.buildModelUsage(),
 					FastModeState:   "off",
 				}

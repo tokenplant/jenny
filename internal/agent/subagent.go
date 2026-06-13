@@ -237,7 +237,6 @@ func (r *LocalSubagentRunner) GetCapturedStreamConfigInfo() map[string]any {
 	return map[string]any{
 		"IsNamedAgent":         cfg.IsNamedAgent,
 		"MaxBudgetUSD":         cfg.MaxBudgetUSD,
-		"MaxBudgetCNY":         cfg.MaxBudgetCNY,
 		"MaxTurns":             cfg.MaxTurns,
 		"CustomSystemPrompt":   cfg.CustomSystemPrompt,
 		"AppendSystemPrompt":   cfg.AppendSystemPrompt,
@@ -337,7 +336,6 @@ func (r *LocalSubagentRunner) RunSubagent(ctx context.Context, params tool.Subag
 		streamCfg.ReadFileCache = r.parentConfig.ReadFileCache
 		streamCfg.Skills = r.parentConfig.Skills
 		streamCfg.MaxBudgetUSD = r.parentConfig.MaxBudgetUSD
-		streamCfg.MaxBudgetCNY = r.parentConfig.MaxBudgetCNY
 		streamCfg.MaxTurns = r.parentConfig.MaxTurns
 		streamCfg.CustomSystemPrompt = r.parentConfig.CustomSystemPrompt
 		streamCfg.AppendSystemPrompt = r.parentConfig.AppendSystemPrompt

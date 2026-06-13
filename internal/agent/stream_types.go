@@ -38,7 +38,6 @@ type StreamConfig struct {
 	HistoryMessages      []api.Message               // Messages loaded from transcript for resume
 	IsResume             bool                        // True when resuming an existing session (skip duplicate user message persistence)
 	MaxBudgetUSD         float64                     // Budget limit in USD (0 = no limit)
-	MaxBudgetCNY         float64                     // Budget limit in CNY (0 = no limit)
 	MaxTurns             int                         // Maximum turns (0 = unlimited)
 	MCPConfig            map[string]mcp.MCPServerDef // Loaded MCP server configurations
 	CustomSystemPrompt   string                      // Custom system prompt; replaces defaults when set
@@ -133,7 +132,6 @@ type StreamMessage struct {
 	ParentToolUseID   *string            `json:"parent_tool_use_id,omitempty"`
 	SessionID         string             `json:"session_id,omitempty"`
 	TotalCostUSD      float64            `json:"total_cost_usd,omitempty"`
-	TotalCostCNY      float64            `json:"total_cost_cny,omitempty"`
 	Uuid              string             `json:"uuid,omitempty"`
 	Usage             *Usage             `json:"usage,omitempty"`
 	ModelUsage        any                `json:"modelUsage,omitempty"`
@@ -280,9 +278,6 @@ func (s StreamMessage) MarshalJSON() ([]byte, error) {
 	}
 	if s.TotalCostUSD != 0 {
 		fields = append(fields, fmt.Sprintf(`"total_cost_usd":%g`, s.TotalCostUSD))
-	}
-	if s.TotalCostCNY != 0 {
-		fields = append(fields, fmt.Sprintf(`"total_cost_cny":%g`, s.TotalCostCNY))
 	}
 	if s.Uuid != "" {
 		fields = append(fields, `"uuid":`+encodeString(s.Uuid))
