@@ -56,6 +56,9 @@ const translations: Record<Locale, Messages> = {
     'portal.recent_projects': 'Recent Projects',
     'portal.coming_soon': 'Coming Soon',
     'portal.coming_soon.hint': 'This feature is under development.',
+    'portal.no_projects': 'No projects yet',
+    'portal.no_projects.hint': 'Start a session to see it here.',
+    'portal.show_all': 'Show all',
   },
   'zh-Hans': {
     // Common
@@ -101,6 +104,9 @@ const translations: Record<Locale, Messages> = {
     'portal.recent_projects': '最近项目',
     'portal.coming_soon': '敬请期待',
     'portal.coming_soon.hint': '该功能正在开发中。',
+    'portal.no_projects': '暂无项目',
+    'portal.no_projects.hint': '启动一个会话即可在此查看。',
+    'portal.show_all': '显示全部',
   },
   'zh-Hant': {
     // Common
@@ -146,6 +152,9 @@ const translations: Record<Locale, Messages> = {
     'portal.recent_projects': '最近專案',
     'portal.coming_soon': '即將推出',
     'portal.coming_soon.hint': '此功能正在開發中。',
+    'portal.no_projects': '尚無專案',
+    'portal.no_projects.hint': '啟動一個會話即可在此查看。',
+    'portal.show_all': '顯示全部',
   },
 };
 
