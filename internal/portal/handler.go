@@ -31,6 +31,14 @@ type SessionMeta struct {
 	PID       int    `json:"pid,omitempty"`
 }
 
+// SkillInfo represents a skill's metadata for the API response.
+type SkillInfo struct {
+	Name           string `json:"name"`
+	Description    string `json:"description"`
+	Path           string `json:"path"`
+	ActivationGlob string `json:"activation_glob,omitempty"`
+}
+
 // Stats represents the global stats returned by the API.
 type Stats struct {
 	TotalSessions  int     `json:"total_sessions"`
@@ -47,6 +55,7 @@ func (p *Portal) setupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/sessions/start", p.withAuth(p.handleStartSession))
 	mux.HandleFunc("POST /api/sessions/", p.withAuth(p.handleSessionAction))
 	mux.HandleFunc("GET /api/stats", p.withAuth(p.handleStats))
+	mux.HandleFunc("GET /api/skills", p.withAuth(p.handleListSkills))
 	mux.HandleFunc("GET /", p.handleStatic)
 	mux.HandleFunc("/", p.handleStatic)
 }
@@ -736,4 +745,82 @@ func sessionExists(sessionID string) bool {
 	transcriptPath := filepath.Join(constants.SessionDir(sessionID), "transcript.jsonl")
 	_, err := os.Stat(transcriptPath)
 	return err == nil
+}
+
+// handleListSkills handles GET /api/skills.
+func (p *Portal) handleListSkills(w http.ResponseWriter, r *http.Request) {
+	skillsDir := filepath.Join(constants.JennyHomeDir(), "skills")
+
+	entries, err := os.ReadDir(skillsDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte("[]"))
+			return
+		}
+		http.Error(w, fmt.Sprintf(`{"error":%q}`, err.Error()), http.StatusInternalServerError)
+		return
+	}
+
+	var skills []SkillInfo
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		skillPath := filepath.Join(skillsDir, entry.Name())
+
+		// Read README.md or SKILL.md for description
+		desc := readSkillDescription(skillPath)
+
+		// Read .activation-glob if present
+		glob := readActivationGlob(skillPath)
+
+		skills = append(skills, SkillInfo{
+			Name:           entry.Name(),
+			Description:    desc,
+			Path:           skillPath,
+			ActivationGlob: glob,
+		})
+	}
+
+	if skills == nil {
+		skills = []SkillInfo{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(skills)
+}
+
+// readSkillDescription reads the description from a skill directory.
+// It tries SKILL.md first (for skills that follow the new format), then README.md, README, or skill.md.
+func readSkillDescription(skillPath string) string {
+	// Try SKILL.md first (preferred format)
+	for _, name := range []string{"SKILL.md", "README.md", "README", "skill.md"} {
+		data, err := os.ReadFile(filepath.Join(skillPath, name))
+		if err == nil {
+			// Use first non-empty, non-heading line as description
+			lines := splitLines(string(data))
+			for _, line := range lines {
+				line = strings.TrimSpace(line)
+				if line == "" || strings.HasPrefix(line, "#") {
+					continue
+				}
+				// Truncate long descriptions
+				if len(line) > 100 {
+					line = line[:97] + "..."
+				}
+				return line
+			}
+		}
+	}
+	return ""
+}
+
+// readActivationGlob reads the activation glob pattern from a skill directory.
+func readActivationGlob(skillPath string) string {
+	data, err := os.ReadFile(filepath.Join(skillPath, ".activation-glob"))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(data))
 }

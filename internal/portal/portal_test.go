@@ -1291,3 +1291,185 @@ func TestDeletedSessionNotInList(t *testing.T) {
 
 	t.Log("AC2 PASS: deleted session no longer appears in sessions list")
 }
+
+// TestListSkills verifies AC1: GET /api/skills returns installed skills.
+func TestListSkills(t *testing.T) {
+	origJennyHome := os.Getenv("JENNY_HOME")
+	tmpDir, err := os.MkdirTemp("", "jenny-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Setenv("JENNY_HOME", tmpDir)
+	defer func() {
+		os.RemoveAll(tmpDir)
+		os.Setenv("JENNY_HOME", origJennyHome)
+	}()
+
+	// Create a mock skill directory with SKILL.md
+	skillsDir := filepath.Join(tmpDir, "skills")
+	testSkillDir := filepath.Join(skillsDir, "test-skill")
+	if err := os.MkdirAll(testSkillDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	skillMdPath := filepath.Join(testSkillDir, "SKILL.md")
+	if err := os.WriteFile(skillMdPath, []byte("A test skill for testing purposes"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a second skill with README.md and activation glob
+	readmeSkillDir := filepath.Join(skillsDir, "readme-skill")
+	if err := os.MkdirAll(readmeSkillDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	readmePath := filepath.Join(readmeSkillDir, "README.md")
+	if err := os.WriteFile(readmePath, []byte("A skill using README.md"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	globPath := filepath.Join(readmeSkillDir, ".activation-glob")
+	if err := os.WriteFile(globPath, []byte("**/*.go"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := context.Background()
+	p, err := startWithConfig(ctx, tmpDir, 10*time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Shutdown(ctx)
+
+	baseURL := fmt.Sprintf("http://127.0.0.1:%d", p.port)
+	resp, err := http.Get(baseURL + "/api/skills?token=" + p.authToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var skills []SkillInfo
+	if err := json.NewDecoder(resp.Body).Decode(&skills); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(skills) != 2 {
+		t.Fatalf("expected 2 skills, got %d", len(skills))
+	}
+
+	// Find the test-skill
+	var testSkill *SkillInfo
+	var readmeSkill *SkillInfo
+	for i := range skills {
+		if skills[i].Name == "test-skill" {
+			testSkill = &skills[i]
+		}
+		if skills[i].Name == "readme-skill" {
+			readmeSkill = &skills[i]
+		}
+	}
+
+	if testSkill == nil {
+		t.Fatal("test-skill not found")
+	}
+	if !strings.Contains(testSkill.Description, "test skill") {
+		t.Errorf("expected description containing 'test skill', got %q", testSkill.Description)
+	}
+	if testSkill.Path == "" {
+		t.Error("expected path to be set")
+	}
+
+	if readmeSkill == nil {
+		t.Fatal("readme-skill not found")
+	}
+	if readmeSkill.ActivationGlob != "**/*.go" {
+		t.Errorf("expected activation_glob '**/*.go', got %q", readmeSkill.ActivationGlob)
+	}
+
+	t.Log("AC1 PASS: skills list returns installed skills with metadata")
+}
+
+// TestListSkills_Empty verifies skills endpoint returns [] when no skills installed.
+func TestListSkills_Empty(t *testing.T) {
+	origJennyHome := os.Getenv("JENNY_HOME")
+	tmpDir, err := os.MkdirTemp("", "jenny-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Setenv("JENNY_HOME", tmpDir)
+	defer func() {
+		os.RemoveAll(tmpDir)
+		os.Setenv("JENNY_HOME", origJennyHome)
+	}()
+
+	ctx := context.Background()
+	p, err := startWithConfig(ctx, tmpDir, 10*time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Shutdown(ctx)
+
+	baseURL := fmt.Sprintf("http://127.0.0.1:%d", p.port)
+
+	// Test with no skills directory at all
+	resp, err := http.Get(baseURL + "/api/skills?token=" + p.authToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var skills []SkillInfo
+	if err := json.NewDecoder(resp.Body).Decode(&skills); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(skills) != 0 {
+		t.Fatalf("expected 0 skills, got %d", len(skills))
+	}
+
+	t.Log("AC1 PASS: skills endpoint returns [] when no skills installed")
+}
+
+// TestListSkills_RequiresAuth verifies skills endpoint requires auth.
+func TestListSkills_RequiresAuth(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "jenny-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	ctx := context.Background()
+	p, err := startWithConfig(ctx, tmpDir, 10*time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Shutdown(ctx)
+
+	baseURL := fmt.Sprintf("http://127.0.0.1:%d", p.port)
+
+	// Test without token
+	resp, err := http.Get(baseURL + "/api/skills")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("expected 401 without token, got %d", resp.StatusCode)
+	}
+	resp.Body.Close()
+
+	// Test with wrong token
+	resp, err = http.Get(baseURL + "/api/skills?token=wrongtoken")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("expected 401 with wrong token, got %d", resp.StatusCode)
+	}
+	resp.Body.Close()
+
+	t.Log("PASS: skills endpoint requires auth token")
+}
