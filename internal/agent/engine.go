@@ -5,6 +5,7 @@ package agent
 
 import (
 	"fmt"
+	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -17,6 +18,9 @@ import (
 	"github.com/ipy/jenny/internal/skills"
 	"github.com/ipy/jenny/internal/tool"
 )
+
+// compile-time check that tool.ReadFileCache is used by seedReadFileCacheFromTranscript
+var _ = (*tool.ReadFileCache)(nil)
 
 // QueryEngine orchestrates the agent query lifecycle with structured
 // persist-before-API ordering, turn limits, and cost state management.
@@ -446,4 +450,65 @@ func (e *QueryEngine) syncActiveSkills() {
 		}
 		e.streamCfg.SetActiveSkills(activated)
 	}
+}
+
+// seedReadFileCacheFromTranscript seeds the ReadFileCache from transcript entries.
+// It extracts completed Read tool_use + tool_result pairs and adds them to the cache.
+func seedReadFileCacheFromTranscript(cache *tool.ReadFileCache, sessionManager *session.Manager, sessionID string) error {
+	if cache == nil || sessionManager == nil || sessionID == "" {
+		return nil
+	}
+
+	entries, err := sessionManager.LoadTranscript(sessionID)
+	if err != nil {
+		return err
+	}
+
+	// Build a map of tool_use ID -> tool_use entry for Read tools
+	readToolUses := make(map[string]session.TranscriptEntry)
+	for _, entry := range entries {
+		if entry.Type == "assistant" && len(entry.ToolUse) > 0 {
+			for _, tu := range entry.ToolUse {
+				if tu.Name == "Read" {
+					readToolUses[tu.ID] = entry
+				}
+			}
+		}
+	}
+
+	// Now iterate through tool_result entries and match them to Read tool_use
+	for _, entry := range entries {
+		if entry.Type == session.EntryTypeToolResult && !entry.IsError {
+			if toolUseEntry, ok := readToolUses[entry.ToolID]; ok {
+				// Find the specific tool_use that matches entry.ToolID
+				var tu *session.ToolUse
+				for i := range toolUseEntry.ToolUse {
+					if toolUseEntry.ToolUse[i].ID == entry.ToolID {
+						tu = &toolUseEntry.ToolUse[i]
+						break
+					}
+				}
+				if tu == nil {
+					continue
+				}
+				path, _ := tu.Input["file_path"].(string)
+				_, hasOffset := tu.Input["offset"]
+				_, hasLimit := tu.Input["limit"]
+
+				// Skip partial reads (offset or limit set means partial read)
+				if hasOffset || hasLimit {
+					continue
+				}
+
+				if path != "" && entry.Content != "" {
+					// Use current mtime since transcript doesn't store it precisely
+					if info, err := os.Stat(path); err == nil {
+						cache.Add(path, entry.Content, info.ModTime(), true, 0, 0)
+					}
+				}
+			}
+		}
+	}
+
+	return nil
 }

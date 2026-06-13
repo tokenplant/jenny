@@ -91,11 +91,11 @@ Loaded per turn; merge coordinator userContext when enabled.
 
 | File | Responsibility |
 |------|---------------|
-| `engine.go` | Constructor, compaction counters, WireReadFileCache, SetMaxTurns |
-| `engine_loop.go` | SubmitMessage, runLoop (skeleton with calls to extracted helpers) |
-| `engine_stream.go` | emitConsolidatedAssistant, finalizeAsEndTurn, TurnCount, Model, Drain |
-| `engine_results.go` | executeAndProcessTools, handleStreamError — tool execution, result NDJSON emission, streaming error handling |
-| `engine_stopreasons.go` | handleStopReason — stop reason switch for end_turn, tool_use, max_tokens, stop_seq, default |
+| `engine.go` | Constructor, compaction counters, WireTools, SetMaxTurns, SetMaxBudgetUsd, initMemoryExtractor, getTaskManager, persistCompactBoundary, detectResumeChanges, persistSystemReminder, syncActiveSkills, seedReadFileCacheFromTranscript |
+| `engine_loop.go` | SubmitMessage, runLoop (skeleton — delegates to extracted helpers), checkLimits, injectTaskCompletions, checkAndCompact, streamAndProcess, accumulateCostAndBuildAssistant, syncSkillsWithReminder, checkSessionMemory |
+| `engine_stream.go` | emitConsolidatedAssistant, finalizeAsEndTurn, TurnCount, Model, Drain, buildModelUsage, toLoopUsage, drainTaskCompletions |
+| `engine_results.go` | executeAndProcessTools, handleStreamError, buildToolResultUserMsg — tool execution, result NDJSON emission, streaming error handling |
+| `engine_stopreasons.go` | handleStopReason — stop reason switch for end_turn, tool_use, max_tokens, stop_seq, default; each handler method |
 
 When splitting files, each needs its own import block; expect total line count to grow by up to ±30 lines over the pre-split single file due to per-file import headers.
 

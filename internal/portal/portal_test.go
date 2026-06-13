@@ -997,3 +997,93 @@ func TestStartSessionValidation(t *testing.T) {
 
 	t.Log("PASS: start session validation works correctly")
 }
+
+// TestStartSession_WithModel verifies AC1: backend accepts optional model field.
+func TestStartSession_WithModel(t *testing.T) {
+	origJennyHome := os.Getenv("JENNY_HOME")
+	tmpDir, err := os.MkdirTemp("", "jenny-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Setenv("JENNY_HOME", tmpDir)
+	defer func() {
+		os.RemoveAll(tmpDir)
+		os.Setenv("JENNY_HOME", origJennyHome)
+	}()
+
+	ctx := context.Background()
+	p, err := startWithConfig(ctx, tmpDir, 10*time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Shutdown(ctx)
+
+	baseURL := fmt.Sprintf("http://127.0.0.1:%d", p.port)
+
+	// AC1: POST with model field should be accepted (not return 400)
+	body := `{"prompt":"test","model":"deepseek-v4-flash"}`
+	req, _ := http.NewRequest("POST", baseURL+"/api/sessions/start?token="+p.authToken, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	// The model field should be accepted - not return 400
+	if resp.StatusCode == http.StatusBadRequest {
+		t.Error("AC1 FAIL: model field should be accepted, not rejected with 400")
+	}
+	// Accept 200 (success) or 500 (subprocess spawn failure - os.Executable returns test binary)
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("AC1 FAIL: expected 200 or 500, got %d", resp.StatusCode)
+	}
+
+	t.Log("AC1 PASS: backend accepts optional model field on start session")
+}
+
+// TestStartSession_WithCWD verifies AC2: backend accepts optional cwd field.
+func TestStartSession_WithCWD(t *testing.T) {
+	origJennyHome := os.Getenv("JENNY_HOME")
+	tmpDir, err := os.MkdirTemp("", "jenny-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Setenv("JENNY_HOME", tmpDir)
+	defer func() {
+		os.RemoveAll(tmpDir)
+		os.Setenv("JENNY_HOME", origJennyHome)
+	}()
+
+	ctx := context.Background()
+	p, err := startWithConfig(ctx, tmpDir, 10*time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Shutdown(ctx)
+
+	baseURL := fmt.Sprintf("http://127.0.0.1:%d", p.port)
+
+	// AC2: POST with cwd field should be accepted (not return 400)
+	// Use a temp directory that exists for cross-platform compatibility
+	cwdPath := tmpDir
+	body := fmt.Sprintf(`{"prompt":"test","cwd":%q}`, cwdPath)
+	req, _ := http.NewRequest("POST", baseURL+"/api/sessions/start?token="+p.authToken, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	// The cwd field should be accepted - not return 400
+	if resp.StatusCode == http.StatusBadRequest {
+		t.Error("AC2 FAIL: cwd field should be accepted, not rejected with 400")
+	}
+	// Accept 200 (success) or 500 (subprocess spawn failure)
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusInternalServerError {
+		t.Errorf("AC2 FAIL: expected 200 or 500, got %d", resp.StatusCode)
+	}
+
+	t.Log("AC2 PASS: backend accepts optional cwd field on start session")
+}

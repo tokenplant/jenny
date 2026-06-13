@@ -621,6 +621,7 @@ func (p *Portal) handleStatic(w http.ResponseWriter, r *http.Request) {
 // StartSessionRequest represents the JSON body for POST /api/sessions/start.
 type StartSessionRequest struct {
 	Prompt string `json:"prompt"`
+	Model  string `json:"model,omitempty"`
 	CWD    string `json:"cwd,omitempty"`
 }
 
