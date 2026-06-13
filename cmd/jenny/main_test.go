@@ -458,7 +458,7 @@ func TestLoadPluginMCPServers(t *testing.T) {
   "name": "no-mcp-plugin",
   "skills": "./skills/"
 }`
-	manifest2Dir := filepath.Join(plugin2Root, ".jenny-plugin")
+	manifest2Dir := filepath.Join(plugin2Root, constants.PluginDirName)
 	if err := os.MkdirAll(manifest2Dir, 0755); err != nil {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}
@@ -522,7 +522,7 @@ func TestLoadPluginMCPServers_MultiplePlugins(t *testing.T) {
   "name": "plugin1",
   "mcpServers": "./.mcp.json"
 }`
-	manifest1Dir := filepath.Join(plugin1Root, ".jenny-plugin")
+	manifest1Dir := filepath.Join(plugin1Root, constants.PluginDirName)
 	if err := os.MkdirAll(manifest1Dir, 0755); err != nil {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}
@@ -550,7 +550,7 @@ func TestLoadPluginMCPServers_MultiplePlugins(t *testing.T) {
   "name": "plugin2",
   "mcpServers": "./.mcp.json"
 }`
-	manifest2Dir := filepath.Join(plugin2Root, ".jenny-plugin")
+	manifest2Dir := filepath.Join(plugin2Root, constants.PluginDirName)
 	if err := os.MkdirAll(manifest2Dir, 0755); err != nil {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}
