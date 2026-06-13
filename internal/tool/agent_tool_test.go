@@ -187,7 +187,6 @@ func TestAC3_NamedAgentHasAccessToParentTools(t *testing.T) {
 	// Set parent config with non-zero values before Execute
 	parentCfg := agent.StreamConfig{
 		MaxBudgetUSD: 1.5,
-		MaxBudgetCNY: 10.0,
 		MaxTurns:     50,
 	}
 	runner.SetParentConfig(parentCfg)
@@ -228,12 +227,6 @@ func TestAC3_NamedAgentHasAccessToParentTools(t *testing.T) {
 		t.Errorf("AC2-(5) FAIL: MaxBudgetUSD should be inherited, got %v", cfgInfo["MaxBudgetUSD"])
 	} else {
 		t.Logf("AC2-(5) PASS: MaxBudgetUSD is inherited: %v", cfgInfo["MaxBudgetUSD"])
-	}
-
-	if cfgInfo["MaxBudgetCNY"] != parentCfg.MaxBudgetCNY {
-		t.Errorf("AC2-(5) FAIL: MaxBudgetCNY should be inherited, got %v", cfgInfo["MaxBudgetCNY"])
-	} else {
-		t.Logf("AC2-(5) PASS: MaxBudgetCNY is inherited: %v", cfgInfo["MaxBudgetCNY"])
 	}
 
 	if cfgInfo["MaxTurns"] != parentCfg.MaxTurns {

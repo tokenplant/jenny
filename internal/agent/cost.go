@@ -263,45 +263,76 @@ var UnknownModelPricing = ModelPricing{
 	UnknownModel:     true,
 }
 
-// Custom pricing override loaded from .jenny/pricing.json
-var customPricing     map[string]ModelPricing
-var customPricingMu   sync.RWMutex
-var customPricingOnce sync.Once
+// Custom pricing override loaded from .jenny/pricing.json.
+// Supports reload: if the file changes, LoadCustomPricing re-reads it.
+var customPricing        map[string]ModelPricing
+var customPricingMu      sync.RWMutex
+var customPricingPath    string       // path of last loaded file
+var customPricingModTime int64        // mtime of last loaded file
 
 // LoadCustomPricing reads .jenny/pricing.json from the project directory and
 // merges entries into the global custom pricing map. File entries take precedence
 // over DefaultPricing. Malformed JSON produces a logged warning (not fatal).
+// Safe to call multiple times; re-reads the file if it has changed since last load.
 func LoadCustomPricing(projectDir string) {
-	customPricingOnce.Do(func() {
-		customPricingMu.Lock()
-		defer customPricingMu.Unlock()
+	configPath := filepath.Join(projectDir, ".jenny", "pricing.json")
 
-		configPath := filepath.Join(projectDir, ".jenny", "pricing.json")
-		data, err := os.ReadFile(configPath)
-		if err != nil {
-			if !os.IsNotExist(err) {
-				log.Warn("failed to read pricing override", "path", configPath, "error", err)
-			}
+	// Quick path: check if file has changed without locking
+	customPricingMu.RLock()
+	samePath := customPricingPath == configPath
+	modTime := customPricingModTime
+	customPricingMu.RUnlock()
+
+	if samePath && modTime != 0 {
+		if stat, err := os.Stat(configPath); err == nil && stat.ModTime().Unix() == modTime {
+			return // no change, skip re-read
+		}
+	}
+
+	customPricingMu.Lock()
+	defer customPricingMu.Unlock()
+
+	// Double-check after acquiring write lock
+	if customPricingPath == configPath && customPricingModTime != 0 {
+		if stat, err := os.Stat(configPath); err == nil && stat.ModTime().Unix() == customPricingModTime {
 			return
 		}
+	}
 
-		var overrides map[string]ModelPricing
-		if err := json.Unmarshal(data, &overrides); err != nil {
-			log.Warn("failed to parse pricing override", "path", configPath, "error", err)
-			return
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			log.Warn("failed to read pricing override", "path", configPath, "error", err)
 		}
+		customPricingPath = configPath
+		customPricingModTime = 0
+		customPricing = nil
+		return
+	}
 
-		customPricing = overrides
-		log.Debug("loaded custom pricing override", "models", len(overrides))
-	})
+	var overrides map[string]ModelPricing
+	if err := json.Unmarshal(data, &overrides); err != nil {
+		log.Warn("failed to parse pricing override", "path", configPath, "error", err)
+		customPricingPath = configPath
+		customPricingModTime = 0
+		customPricing = nil
+		return
+	}
+
+	customPricing = overrides
+	if stat, err := os.Stat(configPath); err == nil {
+		customPricingModTime = stat.ModTime().Unix()
+	}
+	customPricingPath = configPath
+	log.Debug("loaded custom pricing override", "models", len(overrides))
 }
 
-// ResetCustomPricing clears the custom pricing map and re-enables loading.
-// Intended for testing only.
+// ResetCustomPricing clears the custom pricing map. Intended for testing only.
 func ResetCustomPricing() {
-	customPricingOnce = sync.Once{}
 	customPricingMu.Lock()
 	customPricing = nil
+	customPricingPath = ""
+	customPricingModTime = 0
 	customPricingMu.Unlock()
 }
 
