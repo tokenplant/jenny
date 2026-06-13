@@ -117,6 +117,12 @@ When enabled, the following is appended to the system prompt:
 This session has secret redaction enabled. Tool results may contain `[REDACTED:<hex>]` placeholders (e.g. `[REDACTED:a3f1b2c9]`). Copy them verbatim — including the full hex suffix — and never simplify, abbreviate, or otherwise modify them.
 ```
 
+If the mode is `recover` (the default), this sentence is also appended:
+
+```
+They will be automatically recovered when you use them in tool calls, so you can refer to them directly as needed.
+```
+
 ## Configuration
 
 ### Environment Variables

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ipy/jenny/internal/redact"
 	"github.com/ipy/jenny/internal/tool"
 )
 
@@ -472,5 +473,71 @@ func TestAssembleSystemPrompt_TrailingNewline(t *testing.T) {
 	}
 	if prompt[len(prompt)-1] != '\n' {
 		t.Errorf("assembled system prompt must end with a newline; last byte = 0x%02x", prompt[len(prompt)-1])
+	}
+}
+
+func TestAssembleSystemPrompt_RedactionInstruction(t *testing.T) {
+	tests := []struct {
+		name           string
+		mode           redact.RedactMode
+		wantRecoverMsg bool
+		wantRedactMsg  bool
+	}{
+		{
+			name:           "disabled",
+			mode:           redact.ModeDisabled,
+			wantRedactMsg:  false,
+			wantRecoverMsg: false,
+		},
+		{
+			name:           "redact mode",
+			mode:           redact.ModeRedact,
+			wantRedactMsg:  true,
+			wantRecoverMsg: false,
+		},
+		{
+			name:           "recover mode",
+			mode:           redact.ModeRecover,
+			wantRedactMsg:  true,
+			wantRecoverMsg: true,
+		},
+		{
+			name:           "empty mode (defaults to recover)",
+			mode:           "",
+			wantRedactMsg:  true,
+			wantRecoverMsg: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := StreamConfig{
+				RedactMode: tt.mode,
+			}
+			prompt := buildSystemPrompt(cfg, nil, "/tmp")
+
+			redactMsg := "This session has secret redaction enabled."
+			recoverMsg := "They will be automatically recovered when you use them in tool calls"
+
+			if tt.wantRedactMsg {
+				if !strings.Contains(prompt, redactMsg) {
+					t.Errorf("expected redaction message in prompt for mode %s", tt.mode)
+				}
+			} else {
+				if strings.Contains(prompt, redactMsg) {
+					t.Errorf("did not expect redaction message in prompt for mode %s", tt.mode)
+				}
+			}
+
+			if tt.wantRecoverMsg {
+				if !strings.Contains(prompt, recoverMsg) {
+					t.Errorf("expected recovery message in prompt for mode %s", tt.mode)
+				}
+			} else {
+				if strings.Contains(prompt, recoverMsg) {
+					t.Errorf("did not expect recovery message in prompt for mode %s", tt.mode)
+				}
+			}
+		})
 	}
 }
