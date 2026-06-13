@@ -347,7 +347,7 @@ func run() error {
 
 	// Print result only when NOT in stream-json mode (result is already emitted as JSON in stream-json mode)
 	if flags.OutputFormat != "stream-json" {
-		fmt.Print(result)
+		fmt.Println(result)
 	}
 	return nil
 }

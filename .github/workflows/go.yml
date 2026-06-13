@@ -119,5 +119,6 @@ jobs:
         8. Attach all 'jenny-*' assets to the newly created release using 'gh release upload <tag_name> jenny-* --clobber'.
         Do not modify any files in the repository."
 
-        echo "\n\nContents of ~/.jenny:"
-        find ~/.jenny -type f -exec sh -c 'echo "\n--- $1 ---"; cat "$1"' _ {} \;
+        echo ""
+        echo "Contents of ~/.jenny:"
+        find ~/.jenny -type f -exec sh -c 'printf "\n--- %s ---\n" "$1"; cat "$1"' _ {} \;
