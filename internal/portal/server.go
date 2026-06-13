@@ -244,10 +244,10 @@ func (p *Portal) Shutdown(ctx context.Context) error {
 		p.idleTimer.Stop()
 	}
 
-	// Remove lockfile first, then URL file
-	os.Remove(p.lockPath)
+	// Remove URL file first, then lockfile
 	urlPath := p.lockPath[:len(p.lockPath)-len("portal.lock")] + "portal.url"
 	os.Remove(urlPath)
+	os.Remove(p.lockPath)
 
 	// Shutdown server
 	return p.server.Shutdown(ctx)
@@ -275,10 +275,10 @@ func (p *Portal) resetIdleTimer() {
 	}
 	p.idleTimer = time.AfterFunc(p.idleTimeout, func() {
 		// Timer expired - exit
-		// Clean up lockfile first, then URL file
-		os.Remove(p.lockPath)
+		// Clean up URL file first, then lockfile
 		urlPath := p.lockPath[:len(p.lockPath)-len("portal.lock")] + "portal.url"
 		os.Remove(urlPath)
+		os.Remove(p.lockPath)
 		if p.exitFunc != nil {
 			p.exitFunc()
 		} else {
@@ -301,10 +301,10 @@ func (p *Portal) runIdleMonitor(ctx context.Context) {
 			idle := time.Since(p.lastAccess)
 			p.mu.Unlock()
 			if idle >= p.idleTimeout {
-				// Clean up lockfile first, then URL file
-				os.Remove(p.lockPath)
+				// Clean up URL file first, then lockfile
 				urlPath := p.lockPath[:len(p.lockPath)-len("portal.lock")] + "portal.url"
 				os.Remove(urlPath)
+				os.Remove(p.lockPath)
 				if p.exitFunc != nil {
 					p.exitFunc()
 				} else {

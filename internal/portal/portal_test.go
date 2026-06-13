@@ -743,7 +743,8 @@ func TestAC2_NonInteractiveURLWrite(t *testing.T) {
 	t.Log("AC2 PASS: non-interactive URL file write and cleanup works correctly")
 }
 
-// TestAC2_ShutdownOrder verifies AC3: lockfile is removed before URL file on shutdown.
+// TestAC2_ShutdownOrder verifies AC3: URL file is removed before lockfile on shutdown.
+// This order prevents a stale lockfile check from racing with a fresh portal.url from a new instance.
 func TestAC2_ShutdownOrder(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "jenny-test-*")
 	if err != nil {
@@ -775,15 +776,15 @@ func TestAC2_ShutdownOrder(t *testing.T) {
 	// Shutdown portal
 	p.Shutdown(ctx)
 
-	// Verify lockfile is deleted first
-	if _, err := os.Stat(lockPath); !os.IsNotExist(err) {
-		t.Error("AC3 FAIL: lockfile should be deleted first")
-	}
-
-	// Verify URL file is deleted after (or at same time)
+	// Verify URL file is deleted first
 	if _, err := os.Stat(urlPath); !os.IsNotExist(err) {
-		t.Error("AC3 FAIL: URL file should be deleted")
+		t.Error("AC3 FAIL: URL file should be deleted first")
 	}
 
-	t.Log("AC3 PASS: shutdown order correct - lockfile removed before URL file")
+	// Verify lockfile is deleted after
+	if _, err := os.Stat(lockPath); !os.IsNotExist(err) {
+		t.Error("AC3 FAIL: lockfile should be deleted after URL file")
+	}
+
+	t.Log("AC3 PASS: shutdown order correct - URL file removed before lockfile")
 }

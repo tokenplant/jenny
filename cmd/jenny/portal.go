@@ -56,7 +56,7 @@ func runPortal(ctx context.Context) error {
 			if _, err := exec.LookPath("osascript"); err == nil {
 				script := fmt.Sprintf(`display dialog "Jenny Portal started" & return & "%s" buttons {"Open"} default button "Open"`, url)
 				cmd := exec.Command("osascript", "-e", script)
-				cmd.Run()
+				cmd.Start()
 			}
 		}
 	} else {
