@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
+import { createPortal } from 'preact/compat';
 
 // ── Portal ──────────────────────────────────
 
@@ -17,7 +17,7 @@ export interface PortalProps {
  *   <Modal>Content</Modal>
  * </Portal>
  */
-export function Portal({ children, container }: PortalProps) {
+export function Portal({ children, container }: PortalProps): ReactNode {
   const [mountNode, setMountNode] = useState<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -29,5 +29,5 @@ export function Portal({ children, container }: PortalProps) {
   }, [container]);
 
   if (!mountNode) return null;
-  return createPortal(children, mountNode);
+  return createPortal(children, mountNode) as ReactNode;
 }

@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "lint": "biome lint .",
     "format": "biome format --write .",
-    "check": "biome check ."
+    "check": "biome check .",
+    "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
     "preact": ">=10"

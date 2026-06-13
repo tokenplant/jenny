@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -361,10 +362,19 @@ func (p *Portal) handleSessionAction(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Send SIGTERM
-		if err := proc.Signal(syscall.SIGTERM); err != nil {
-			http.Error(w, `{"error":"failed to kill session"}`, http.StatusInternalServerError)
-			return
+		// Kill the process - use cross-platform approach
+		// On Unix: send SIGTERM for graceful shutdown
+		// On Windows: use Kill() which calls TerminateProcess
+		if runtime.GOOS == "windows" {
+			if err := proc.Kill(); err != nil {
+				http.Error(w, `{"error":"failed to kill session"}`, http.StatusInternalServerError)
+				return
+			}
+		} else {
+			if err := proc.Signal(syscall.SIGTERM); err != nil {
+				http.Error(w, `{"error":"failed to kill session"}`, http.StatusInternalServerError)
+				return
+			}
 		}
 
 		w.Header().Set("Content-Type", "application/json")

@@ -6,11 +6,11 @@ import type { CollapsibleVariant } from '../../types';
 
 export interface StreamPanelProps {
   title: string;
-  sessionId: string;
-  stream: 'stdout' | 'stderr';
+  sessionId?: string;
+  stream?: 'stdout' | 'stderr' | 'transcript';
   isRunning: boolean;
   variant?: 'muted' | 'danger' | 'default';
-  fetchStream: (sessionId: string, stream: 'stdout' | 'stderr', signal: AbortSignal) => Promise<string>;
+  fetchStream?: (sessionId: string, stream: 'stdout' | 'stderr' | 'transcript', signal: AbortSignal) => Promise<string>;
   className?: string;
 }
 
@@ -50,12 +50,14 @@ export function StreamPanel({
   };
 
   const poll = useCallback(async () => {
+    if (!fetchStream || !sessionId) return;
+
     abortRef.current = new AbortController();
     setIsLoading(true);
     setError(null);
 
     try {
-      const text = await fetchStream(sessionId, stream, abortRef.current.signal);
+      const text = await fetchStream(sessionId, stream ?? 'stdout', abortRef.current.signal);
       setContent((prev) => {
         // Incremental: only append new content
         if (text.startsWith(prev)) return text;

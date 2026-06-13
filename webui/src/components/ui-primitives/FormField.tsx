@@ -121,26 +121,86 @@ export function SelectField({
 
 // ── TextField ─────────────────────────────
 
-export interface TextFieldProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'onChange'> {
+export interface TextFieldProps {
   value: string;
   onChange: (value: string) => void;
+  className?: string;
+  style?: React.CSSProperties;
+  multiline?: boolean;
+  rows?: number;
+  placeholder?: string;
+  disabled?: boolean;
+  autoFocus?: boolean;
+  type?: string;
 }
 
 /**
- * TextField — Styled text input.
+ * TextField — Styled text input or textarea.
  * Focus: border turns primary + box-shadow glow.
  */
 export function TextField({
   value,
   onChange,
   className = '',
-  ...props
+  multiline = false,
+  rows = 3,
+  style,
+  placeholder,
+  disabled,
+  autoFocus,
+  type,
 }: TextFieldProps) {
+  const baseStyle: React.CSSProperties = {
+    padding: '0.5rem 0.75rem',
+    background: 'var(--color-surface-alt)',
+    border: '1px solid var(--color-border)',
+    borderRadius: '10px',
+    fontSize: '0.875rem',
+    color: 'var(--color-text)',
+    outline: 'none',
+    width: '100%',
+    transition: 'border-color 0.15s, box-shadow 0.15s',
+    ...style,
+  };
+
+  if (multiline) {
+    const handleFocus = (e: React.FocusEvent<HTMLTextAreaElement>) => {
+      e.currentTarget.style.borderColor = 'var(--color-primary)';
+      e.currentTarget.style.boxShadow = '0 0 0 2px var(--color-primary-glow)';
+    };
+    const handleBlur = (e: React.FocusEvent<HTMLTextAreaElement>) => {
+      e.currentTarget.style.borderColor = 'var(--color-border)';
+      e.currentTarget.style.boxShadow = 'none';
+    };
+    return (
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={className}
+        rows={rows}
+        placeholder={placeholder}
+        disabled={disabled}
+        autoFocus={autoFocus}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
+        style={{
+          ...baseStyle,
+          resize: 'vertical',
+          minHeight: '80px',
+        }}
+      />
+    );
+  }
+
   return (
     <input
+      type={type}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       className={className}
+      placeholder={placeholder}
+      disabled={disabled}
+      autoFocus={autoFocus}
       onFocus={(e) => {
         e.currentTarget.style.borderColor = 'var(--color-primary)';
         e.currentTarget.style.boxShadow = '0 0 0 2px var(--color-primary-glow)';
@@ -149,18 +209,7 @@ export function TextField({
         e.currentTarget.style.borderColor = 'var(--color-border)';
         e.currentTarget.style.boxShadow = 'none';
       }}
-      style={{
-        padding: '0.5rem 0.75rem',
-        background: 'var(--color-surface-alt)',
-        border: '1px solid var(--color-border)',
-        borderRadius: '10px',
-        fontSize: '0.875rem',
-        color: 'var(--color-text)',
-        outline: 'none',
-        width: '100%',
-        transition: 'border-color 0.15s, box-shadow 0.15s',
-      }}
-      {...props}
+      style={baseStyle}
     />
   );
 }

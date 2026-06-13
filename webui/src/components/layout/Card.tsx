@@ -56,14 +56,15 @@ export interface GlassPanelProps {
   children: ReactNode;
   className?: string;
   style?: React.CSSProperties;
+  interactive?: boolean; // hover lift effect
 }
 
 /**
  * GlassPanel — Padded glass container (convenience wrapper)
  */
-export function GlassPanel({ children, className = '', style }: GlassPanelProps) {
+export function GlassPanel({ children, className = '', style, interactive = false }: GlassPanelProps) {
   return (
-    <div className={['glass glass-panel', className].filter(Boolean).join(' ')} style={style}>
+    <div className={['glass', 'glass-panel', interactive ? 'hover-lift' : '', className].filter(Boolean).join(' ')} style={style}>
       {children}
     </div>
   );

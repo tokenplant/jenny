@@ -24,11 +24,22 @@ func isInteractive() bool {
 }
 
 // tryOpenBrowser attempts to open the URL in the default browser.
+// Cross-platform: macOS -> open, Linux -> xdg-open, Windows -> rundll32.
 func tryOpenBrowser(url string) {
-	cmds := []string{"open", "xdg-open"}
-	for _, cmd := range cmds {
-		if _, err := exec.LookPath(cmd); err == nil {
-			exec.Command(cmd, url).Start()
+	switch runtime.GOOS {
+	case "darwin":
+		if _, err := exec.LookPath("open"); err == nil {
+			exec.Command("open", url).Start()
+			return
+		}
+	case "linux":
+		if _, err := exec.LookPath("xdg-open"); err == nil {
+			exec.Command("xdg-open", url).Start()
+			return
+		}
+	case "windows":
+		if _, err := exec.LookPath("rundll32"); err == nil {
+			exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
 			return
 		}
 	}
@@ -66,9 +77,14 @@ func runPortal(ctx context.Context) error {
 		fmt.Printf("Auth token: %s\n", p.AuthToken())
 	}
 
-	// Block on signal
+	// Block on signal - use cross-platform signals
 	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+	// On Windows, use os.Interrupt (Ctrl+C equivalent); on Unix, also include SIGTERM
+	signals := []os.Signal{os.Interrupt}
+	if runtime.GOOS != "windows" {
+		signals = append(signals, syscall.SIGTERM)
+	}
+	signal.Notify(sig, signals...)
 	select {
 	case <-sig:
 	case <-ctx.Done():
