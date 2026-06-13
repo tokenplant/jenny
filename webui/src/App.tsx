@@ -807,11 +807,6 @@ function MarketplaceBrowseView({ onBack }: MarketplaceBrowseViewProps) {
   );
 }
 
-// Helper to get token from URL
-function getToken(): string {
-  if (typeof window === 'undefined') return '';
-  const params = new URLSearchParams(window.location.search);
-  return params.get('token') || '';
-}
+
 
 export default App;

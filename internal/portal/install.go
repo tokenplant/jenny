@@ -44,13 +44,21 @@ func downloadAndExtract(url, destDir string) error {
 		}
 
 		// Security: prevent path traversal by sanitizing the entry name.
-		// Reject absolute paths and entries that escape destDir via ".." components.
-		name := strings.TrimPrefix(filepath.ToSlash(h.Name), "/")
-		if name == "" || strings.Contains(name, "..") || strings.HasPrefix(name, "/") {
+		// Reject absolute paths and entries with ".." in any path segment.
+		cleanName := filepath.ToSlash(h.Name)
+		// Strip leading "/" if present
+		cleanName = strings.TrimPrefix(cleanName, "/")
+		if cleanName == "" || strings.HasPrefix(cleanName, "/") {
 			return fmt.Errorf("tar entry %q is not allowed: must be a safe relative path", h.Name)
 		}
+		// Check each path segment for ".." - reject if any segment is ".."
+		for _, part := range strings.Split(cleanName, "/") {
+			if part == ".." {
+				return fmt.Errorf("tar entry %q is not allowed: path traversal detected", h.Name)
+			}
+		}
 
-		target := filepath.Join(destDir, name)
+		target := filepath.Join(destDir, cleanName)
 
 		// Ensure target is within destDir (defensive: resolve and check prefix)
 		cleanTarget, err := filepath.Abs(target)
