@@ -198,9 +198,17 @@ func TestGenAIProvider_SendMessage_SystemPromptSuffix(t *testing.T) {
 	s := newTestGenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
 		body := readBodyJSON(r)
 		sys := body["systemInstruction"].(map[string]any)
-		got := sys["parts"].([]any)[0].(map[string]any)["text"].(string)
-		if !strings.Contains(got, "primary") || !strings.Contains(got, "suffix") {
-			t.Errorf("expected concatenated system prompt, got %q", got)
+		parts := sys["parts"].([]any)
+		if len(parts) != 2 {
+			t.Fatalf("expected 2 system parts (prefix + suffix), got %d", len(parts))
+		}
+		p0 := parts[0].(map[string]any)["text"].(string)
+		p1 := parts[1].(map[string]any)["text"].(string)
+		if p0 != "primary" {
+			t.Errorf("first part = %q, want %q", p0, "primary")
+		}
+		if p1 != "suffix" {
+			t.Errorf("second part = %q, want %q", p1, "suffix")
 		}
 		writeJSON(w, 200, map[string]any{
 			"candidates": []map[string]any{{

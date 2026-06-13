@@ -55,13 +55,13 @@ func normalizeNewMessage(msg api.Message) api.Message {
 		msg.Type = ""
 	}
 	// Strip orphaned thinking-only content
-	if msg.Role == "assistant" && isThinkingOnlyContent(msg.Content) {
+	if msg.Role == api.RoleAssistant && isThinkingOnlyContent(msg.Content) {
 		msg.Content = ""
 	}
 	// Strip trailing thinking
 	msg.Content = stripTrailingThinkingFromContent(msg.Content)
 	// Ensure non-empty assistant has a placeholder
-	if msg.Role == "assistant" && strings.TrimSpace(msg.Content) == "" && len(msg.ToolUse) == 0 {
+	if msg.Role == api.RoleAssistant && strings.TrimSpace(msg.Content) == "" && len(msg.ToolUse) == 0 {
 		msg.Content = "[Tool use interrupted]"
 	}
 	return msg
@@ -89,11 +89,11 @@ func filterInternalMessages(messages []api.Message) []api.Message {
 func filterOrphanedThinking(messages []api.Message) []api.Message {
 	var result []api.Message
 	for i, msg := range messages {
-		if msg.Role == "assistant" && isThinkingOnlyContent(msg.Content) {
+		if msg.Role == api.RoleAssistant && isThinkingOnlyContent(msg.Content) {
 			// Check if next message has non-thinking content
 			hasContentAfter := false
 			for j := i + 1; j < len(messages); j++ {
-				if messages[j].Role == "user" || (messages[j].Role == "assistant" && !isThinkingOnlyContent(messages[j].Content)) {
+				if messages[j].Role == api.RoleUser || (messages[j].Role == api.RoleAssistant && !isThinkingOnlyContent(messages[j].Content)) {
 					hasContentAfter = true
 					break
 				}
@@ -133,7 +133,7 @@ func isThinkingOnlyContent(content string) bool {
 // stripTrailingThinking removes thinking blocks at the end of assistant messages.
 func stripTrailingThinking(messages []api.Message) []api.Message {
 	for i := range messages {
-		if messages[i].Role == "assistant" {
+		if messages[i].Role == api.RoleAssistant {
 			messages[i].Content = stripTrailingThinkingFromContent(messages[i].Content)
 		}
 	}
@@ -157,10 +157,10 @@ func stripTrailingThinkingFromContent(content string) string {
 func filterWhitespaceOnly(messages []api.Message) []api.Message {
 	var result []api.Message
 	for _, msg := range messages {
-		if msg.Role == "user" && strings.TrimSpace(msg.Content) == "" && len(msg.ToolResults) == 0 {
+		if msg.Role == api.RoleUser && strings.TrimSpace(msg.Content) == "" && len(msg.ToolResults) == 0 {
 			continue // Skip empty user messages
 		}
-		if msg.Role == "assistant" && strings.TrimSpace(msg.Content) == "" && len(msg.ToolUse) == 0 {
+		if msg.Role == api.RoleAssistant && strings.TrimSpace(msg.Content) == "" && len(msg.ToolUse) == 0 {
 			continue // Skip empty assistant messages
 		}
 		result = append(result, msg)
@@ -171,7 +171,7 @@ func filterWhitespaceOnly(messages []api.Message) []api.Message {
 // ensureNonEmptyAssistant inserts [Tool use interrupted] if stripping leaves an empty assistant message.
 func ensureNonEmptyAssistant(messages []api.Message) []api.Message {
 	for i := range messages {
-		if messages[i].Role == "assistant" {
+		if messages[i].Role == api.RoleAssistant {
 			contentEmpty := strings.TrimSpace(messages[i].Content) == ""
 			noToolUse := len(messages[i].ToolUse) == 0
 			if contentEmpty && noToolUse {
@@ -198,7 +198,7 @@ func ensureToolResultPairing(messages []api.Message) []api.Message {
 	// Collect all tool_use_ids from assistant messages
 	var allToolUseIDs []string
 	for _, msg := range messages {
-		if msg.Role == "assistant" {
+		if msg.Role == api.RoleAssistant {
 			for _, tu := range msg.ToolUse {
 				allToolUseIDs = append(allToolUseIDs, tu.ID)
 			}
@@ -218,7 +218,7 @@ func ensureToolResultPairing(messages []api.Message) []api.Message {
 	for i := range messages {
 		msg := messages[i]
 
-		if msg.Role == "assistant" {
+		if msg.Role == api.RoleAssistant {
 			// Handle empty assistant after strip (direction 5)
 			if pendingAssistant != nil {
 				contentEmpty := strings.TrimSpace(pendingAssistant.Content) == ""
@@ -246,7 +246,7 @@ func ensureToolResultPairing(messages []api.Message) []api.Message {
 
 			pendingAssistant = &msg
 
-		} else if msg.Role == "user" {
+		} else if msg.Role == api.RoleUser {
 			if pendingAssistant != nil {
 				// Capture tool_use IDs before we clear pendingAssistant
 				assistantToolUse := pendingAssistant.ToolUse
@@ -386,11 +386,11 @@ func mergeConsecutiveSameRole(messages []api.Message) []api.Message {
 				current.Content += msg.Content
 			}
 			// Concatenate tool_use for assistant
-			if msg.Role == "assistant" {
+			if msg.Role == api.RoleAssistant {
 				current.ToolUse = append(current.ToolUse, msg.ToolUse...)
 			}
 			// Merge tool_results for user (dedup by ToolUseID - last-writer-wins)
-			if msg.Role == "user" {
+			if msg.Role == api.RoleUser {
 				// Map ToolUseID -> index in current.ToolResults for last-writer-wins
 				seenIDToIdx := make(map[string]int)
 				for i, tr := range current.ToolResults {

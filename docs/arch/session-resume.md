@@ -137,6 +137,23 @@ Drop or repair on load:
 - Resumed runs emit same stream-json sequence: `system`/`init` with original or forked `session_id`.
 - `result` line usage includes tokens accumulated across prior + current invocation when cost restored.
 
+## Prompt Cache Fidelity
+
+`RebuildMessages` must reproduce byte-for-byte identical API messages to what was sent in the original session. Any divergence invalidates the prompt cache prefix, wasting tokens and money.
+
+Preserved fields that affect caching:
+
+| Field | Where persisted | How restored |
+|-------|----------------|--------------|
+| `tool_result.IsError` | `TranscriptEntry.IsError` | `ToolResultBlock.IsError` in rebuilt message |
+| `assistant.Thinking` | `TranscriptEntry.Thinking` | `Message.Thinking` |
+| `assistant.Signature` | `TranscriptEntry.Signature` | `Message.Signature` |
+| System prompt | `state` entry with `SystemPrompt` | `cfg.CachedSystemPrompt` |
+
+System prompt suffix (dynamic content like git status, cwd) is sent as a **separate** content block (Anthropic), separate system message (OpenAI), or separate part (GenAI) to avoid invalidating the frozen prefix cache.
+
+Known limitation: when the assistant returns multiple thinking blocks with distinct per-block signatures, only the last signature is preserved. This can cause a cache miss on resume if Anthropic validates per-block signatures in the history.
+
 ## Acceptance Criteria
 
 - **AC1:** `-r` round-trips message history including tool_use/tool_result pairing.
@@ -144,5 +161,6 @@ Drop or repair on load:
 - **AC3:** Cost counters restore only on matching session ID.
 - **AC4:** Queue-only transcripts rejected.
 - **AC5:** Compaction boundaries truncate pre-boundary messages from API payload.
+- **AC6:** `tool_result.IsError` is preserved through transcript round-trip to avoid cache invalidation.
 - **AC-e2e-1:** Running `jenny -r <session_id> -p "<new prompt>"` with a valid prior transcript causes the Anthropic API request to include the prior user and assistant turns before the new user message.
 - **AC-e2e-2:** The resumed run exits 0 and emits an `assistant` event on stdout.

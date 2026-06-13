@@ -172,17 +172,15 @@ func (p *genaiProvider) doSendMessage(ctx context.Context, messages []Message, t
 		},
 	}
 
-	fullSystem := systemPrompt
-	if systemPromptSuffix != "" {
-		if fullSystem != "" {
-			fullSystem += "\n\n"
+	if systemPrompt != "" || systemPromptSuffix != "" {
+		var parts []GenAIPart
+		if systemPrompt != "" {
+			parts = append(parts, GenAIPart{Text: systemPrompt})
 		}
-		fullSystem += systemPromptSuffix
-	}
-	if fullSystem != "" {
-		reqBody.SystemInstruction = &GenAIContent{
-			Parts: []GenAIPart{{Text: fullSystem}},
+		if systemPromptSuffix != "" {
+			parts = append(parts, GenAIPart{Text: systemPromptSuffix})
 		}
+		reqBody.SystemInstruction = &GenAIContent{Parts: parts}
 	}
 
 	if len(tools) > 0 {
@@ -246,17 +244,15 @@ func (p *genaiProvider) SendMessageStream(ctx context.Context, messages []Messag
 			},
 		}
 
-		fullSystem := systemPrompt
-		if systemPromptSuffix != "" {
-			if fullSystem != "" {
-				fullSystem += "\n\n"
+		if systemPrompt != "" || systemPromptSuffix != "" {
+			var parts []GenAIPart
+			if systemPrompt != "" {
+				parts = append(parts, GenAIPart{Text: systemPrompt})
 			}
-			fullSystem += systemPromptSuffix
-		}
-		if fullSystem != "" {
-			reqBody.SystemInstruction = &GenAIContent{
-				Parts: []GenAIPart{{Text: fullSystem}},
+			if systemPromptSuffix != "" {
+				parts = append(parts, GenAIPart{Text: systemPromptSuffix})
 			}
+			reqBody.SystemInstruction = &GenAIContent{Parts: parts}
 		}
 
 		if len(tools) > 0 {

@@ -73,6 +73,19 @@ All providers MUST emit `StreamContentBlock` entries with `Type: "stream_event"`
 
 The Anthropic event types emitted are: `message_start`, `content_block_start`, `content_block_delta`, `content_block_stop`, `message_delta`, `message_stop`.
 
+### System Prompt Suffix Isolation
+
+The `systemPromptSuffix` (dynamic per-turn content: git status, cwd, active skills) MUST be sent as a **separate** block to preserve the frozen system prompt prefix for caching:
+
+| Provider | Mechanism |
+|----------|-----------|
+| Anthropic | Separate `AnthropicContentBlock` in the `system` array (no `cache_control` on suffix block) |
+| OpenAI ChatCompletion | Separate `system` role message after the frozen system prompt message |
+| OpenAI Responses | Separate `message` item with `role: system` |
+| GenAI | Separate `GenAIPart` within the single `SystemInstruction` content |
+
+Concatenating the suffix into the system prompt would invalidate the cache on every turn.
+
 ### Normalization
 
 `NormalizeMessages` is a shared gateway that all providers call. It handles:
@@ -135,7 +148,7 @@ Selection rules (mirrors the SDK's own logic):
 
 Behavior:
 - Non-streaming and streaming requests use `client.Models.GenerateContent` and `client.Models.GenerateContentStream` respectively.
-- System prompts are concatenated (`systemPrompt` + `"\n\n" + systemPromptSuffix`) and passed via `GenerateContentConfig.SystemInstruction`. (The SDK does not expose a per-segment cache-control knob, so the cached-stable/per-turn split is collapsed.)
+- System prompt and suffix are sent as separate `GenAIPart` entries within the single `SystemInstruction` content block. This preserves the stable prefix for potential future caching support.
 - Tools are translated from `ToolParam` to `*genai.Tool` with a `*genai.FunctionDeclaration` per tool. Empty property sets receive a synthetic `__arg__: string` placeholder.
 - Tool results are fed back as `*genai.FunctionResponse` parts on a `RoleUser` content turn, paired with the model's prior `*genai.FunctionCall` turn (the SDK requires both to be present in the conversation history).
 - Errors are mapped to `*RetryableHTTPError` (or returned unwrapped) based on `genai.APIError.Code` so the existing retry/streaming-fallback machinery works without changes.

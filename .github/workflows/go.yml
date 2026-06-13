@@ -106,6 +106,8 @@ jobs:
         ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL }}
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
+        rm -fr ~/.jenny || true
+
         ./jenny-linux-amd64 --verbose --dangerously-skip-permissions "You are a release assistant.
         1. Check the latest GitHub release version using 'gh release list'.
         2. Determine the next alpha version number (e.g., if latest is v0.1.0, next could be v0.1.1-alpha.1).
@@ -117,10 +119,5 @@ jobs:
         8. Attach all 'jenny-*' assets to the newly created release using 'gh release upload <tag_name> jenny-* --clobber'.
         Do not modify any files in the repository."
 
-        echo ""
-        if [ -d "/home/runner/.jenny" ]; then
-          echo "Contents of /home/runner/.jenny:"
-          find /home/runner/.jenny -type f -exec sh -c 'echo "\n--- $1 ---"; cat "$1"' _ {} \;
-        else
-          echo "/home/runner/.jenny not found"
-        fi
+        echo "\n\nContents of ~/.jenny:"
+        find ~/.jenny -type f -exec sh -c 'echo "\n--- $1 ---"; cat "$1"' _ {} \;

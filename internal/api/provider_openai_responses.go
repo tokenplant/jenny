@@ -221,16 +221,21 @@ func (p *openAIResponsesProvider) doSendMessage(ctx context.Context, messages []
 func (p *openAIResponsesProvider) buildInput(messages []Message, toolResults []ToolResult, systemPrompt string, systemPromptSuffix string) []any {
 	var input []any
 
-	if systemPrompt != "" || systemPromptSuffix != "" {
-		fullSystem := systemPrompt
-		if systemPromptSuffix != "" {
-			fullSystem = systemPrompt + "\n\n" + systemPromptSuffix
-		}
+	if systemPrompt != "" {
 		input = append(input, map[string]any{
 			"type": "message",
 			"role": RoleSystem,
 			"content": []map[string]any{
-				{"type": "input_text", "text": fullSystem},
+				{"type": "input_text", "text": systemPrompt},
+			},
+		})
+	}
+	if systemPromptSuffix != "" {
+		input = append(input, map[string]any{
+			"type": "message",
+			"role": RoleSystem,
+			"content": []map[string]any{
+				{"type": "input_text", "text": systemPromptSuffix},
 			},
 		})
 	}

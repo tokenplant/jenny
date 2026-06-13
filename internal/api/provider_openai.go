@@ -178,11 +178,7 @@ func (p *openAIProvider) doSendMessage(ctx context.Context, messages []Message, 
 
 	messages, tools, _ = NormalizeMessages(messages, tools, Capabilities{SupportsPromptCaching: false})
 
-	fullSystemPrompt := systemPrompt
-	if systemPromptSuffix != "" {
-		fullSystemPrompt = systemPrompt + "\n\n" + systemPromptSuffix
-	}
-	sdkMessages := p.buildMessages(messages, toolResults, fullSystemPrompt)
+	sdkMessages := p.buildMessages(messages, toolResults, systemPrompt, systemPromptSuffix)
 
 	var sdkTools []OpenAITool
 	if len(tools) > 0 {
@@ -224,12 +220,20 @@ func (p *openAIProvider) doSendMessage(ctx context.Context, messages []Message, 
 }
 
 // buildMessages converts api.Message slices to OpenAI format.
-func (p *openAIProvider) buildMessages(messages []Message, toolResults []ToolResult, systemPrompt string) []OpenAIMessage {
+// The system prompt is split into two separate messages: the frozen prefix
+// (cache-friendly) and the dynamic suffix (changes per-turn). This preserves
+// OpenAI's automatic prefix caching since the cached prefix remains identical.
+func (p *openAIProvider) buildMessages(messages []Message, toolResults []ToolResult, systemPrompt string, systemPromptSuffix string) []OpenAIMessage {
 	var sdkMessages []OpenAIMessage
 
 	if systemPrompt != "" {
 		sdkMsg := OpenAIMessage{Role: RoleSystem}
 		sdkMsg.SetContent(systemPrompt)
+		sdkMessages = append(sdkMessages, sdkMsg)
+	}
+	if systemPromptSuffix != "" {
+		sdkMsg := OpenAIMessage{Role: RoleSystem}
+		sdkMsg.SetContent(systemPromptSuffix)
 		sdkMessages = append(sdkMessages, sdkMsg)
 	}
 
@@ -398,11 +402,7 @@ func (p *openAIProvider) SendMessageStream(ctx context.Context, messages []Messa
 
 		messages, tools, _ = NormalizeMessages(messages, tools, Capabilities{SupportsPromptCaching: false})
 
-		fullSystemPrompt := systemPrompt
-		if systemPromptSuffix != "" {
-			fullSystemPrompt = systemPrompt + "\n\n" + systemPromptSuffix
-		}
-		sdkMessages := p.buildMessages(messages, toolResults, fullSystemPrompt)
+		sdkMessages := p.buildMessages(messages, toolResults, systemPrompt, systemPromptSuffix)
 
 		var sdkTools []OpenAITool
 		if len(tools) > 0 {

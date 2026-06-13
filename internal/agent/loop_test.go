@@ -393,6 +393,23 @@ func TestRebuildMessages(t *testing.T) {
 			wantLen: 4,
 		},
 		{
+			name: "tool_result IsError preserved for cache fidelity",
+			entries: []session.TranscriptEntry{
+				{Type: "user", Content: "Run it"},
+				{Type: "assistant", Content: "", ToolUse: []session.ToolUse{
+					{ID: "tool_err", Name: "Bash", Input: map[string]any{"command": "exit 1"}},
+				}},
+				{Type: "tool_result", ToolID: "tool_err", Content: "command failed", IsError: true},
+				{Type: "assistant", Content: "The command failed."},
+			},
+			wantLen: 4,
+			validate: func(t *testing.T, msgs []api.Message) {
+				if !msgs[2].ToolResults[0].IsError {
+					t.Error("tool_result IsError must be preserved through transcript round-trip to avoid cache invalidation")
+				}
+			},
+		},
+		{
 			name: "assistant with thinking and signature",
 			entries: []session.TranscriptEntry{
 				{Type: "user", Content: "Plan a trip"},

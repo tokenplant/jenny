@@ -118,7 +118,7 @@ func stripCredentialBoundArtifacts(messages []Message, caps Capabilities) ([]Mes
 		result[i] = msg
 
 		// Only strip from assistant messages
-		if msg.Role != "assistant" {
+		if msg.Role != RoleAssistant {
 			continue
 		}
 

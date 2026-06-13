@@ -20,15 +20,15 @@ var _ *tool.ReadFileCache
 // chainParticipantTypes are entry types that produce chain participant messages
 // in RebuildMessages. These are the types that generate non-empty API messages.
 var chainParticipantTypes = map[string]bool{
-	"user":        true,
-	"assistant":   true,
-	"tool_result": true,
+	session.EntryTypeUser:       true,
+	session.EntryTypeAssistant:  true,
+	session.EntryTypeToolResult: true,
 }
 
 // systemMessageTypes are entry types that become system role messages in the API chain.
 // These are preserved in RebuildMessages to maintain session context markers.
 var systemMessageTypes = map[string]bool{
-	"system": true,
+	session.EntryTypeSystem: true,
 }
 
 // HasChainMessages reports whether at least one entry produces a chain participant
@@ -59,18 +59,18 @@ func RebuildMessages(entries []session.TranscriptEntry) []api.Message {
 
 	for _, entry := range entries {
 		switch entry.Type {
-		case "user":
+		case session.EntryTypeUser:
 			// Flush any pending assistant message
 			if currentAssistant != nil {
 				messages = append(messages, *currentAssistant)
 				currentAssistant = nil
 			}
 			messages = append(messages, api.Message{
-				Role:    "user",
+				Role:    api.RoleUser,
 				Content: entry.Content,
 			})
 
-		case "assistant":
+		case session.EntryTypeAssistant:
 			// Flush any pending assistant message
 			if currentAssistant != nil {
 				messages = append(messages, *currentAssistant)
@@ -84,42 +84,40 @@ func RebuildMessages(entries []session.TranscriptEntry) []api.Message {
 				})
 			}
 			currentAssistant = &api.Message{
-				Role:      "assistant",
+				Role:      api.RoleAssistant,
 				Content:   entry.Content,
 				ToolUse:   toolUseBlocks,
 				Thinking:  entry.Thinking,
 				Signature: entry.Signature,
 			}
 
-		case "tool_result":
+		case session.EntryTypeToolResult:
 			// Tool results must be in a user message, not attached to assistant's tool_use.
 			// Flush any pending assistant message first (tool_use goes in assistant, tool_result in user).
 			if currentAssistant != nil {
 				messages = append(messages, *currentAssistant)
 				currentAssistant = nil
 			}
-			// Create a user message with the tool result
 			messages = append(messages, api.Message{
-				Role: "user",
+				Role: api.RoleUser,
 				ToolResults: []api.ToolResultBlock{
 					{
 						ToolUseID: entry.ToolID,
 						Content:   entry.Content,
+						IsError:   entry.IsError,
 					},
 				},
 			})
 
-		case "system":
+		case session.EntryTypeSystem:
 			// Flush any pending assistant message first to maintain ordering
 			if currentAssistant != nil {
 				messages = append(messages, *currentAssistant)
 				currentAssistant = nil
 			}
-			// System messages (e.g., compaction boundary markers) become role:system API messages
-			// This preserves session context markers like compact_boundary from the transcript
 			if entry.Content != "" {
 				messages = append(messages, api.Message{
-					Role:    "system",
+					Role:    api.RoleSystem,
 					Content: entry.Content,
 				})
 			}
@@ -160,7 +158,7 @@ func Run(ctx context.Context, prompt string, tools []tool.Tool, cwd string, maxI
 	// Initialize messages with user message only (system prompt goes to top-level parameter)
 	messages := []api.Message{
 		{
-			Role:    "user",
+			Role:    api.RoleUser,
 			Content: prompt,
 		},
 	}
@@ -218,9 +216,9 @@ func Run(ctx context.Context, prompt string, tools []tool.Tool, cwd string, maxI
 
 		for _, block := range resp.Content {
 			switch block.Type {
-			case "text":
+			case api.BlockTypeText:
 				textOutput.WriteString(block.Text)
-			case "tool_use":
+			case api.BlockTypeToolUse:
 				// Collect tool_use blocks for the assistant message
 				toolUseBlocks = append(toolUseBlocks, api.ToolUseBlock{
 					ID:    block.ToolID,
@@ -260,7 +258,7 @@ func Run(ctx context.Context, prompt string, tools []tool.Tool, cwd string, maxI
 
 		// Build and append assistant message with text and tool_use blocks
 		assistantMsg := api.Message{
-			Role:    "assistant",
+			Role:    api.RoleAssistant,
 			Content: textOutput.String(),
 		}
 		if len(toolUseBlocks) > 0 {
@@ -276,7 +274,7 @@ func Run(ctx context.Context, prompt string, tools []tool.Tool, cwd string, maxI
 			if len(toolResults) > 0 {
 				// Send tool results back to model before ending
 				userMsg := api.Message{
-					Role:        "user",
+					Role:        api.RoleUser,
 					ToolResults: make([]api.ToolResultBlock, 0, len(toolResults)),
 				}
 				for _, tr := range toolResults {
@@ -297,7 +295,7 @@ func Run(ctx context.Context, prompt string, tools []tool.Tool, cwd string, maxI
 			// Continue the loop to let the model process tool results
 			if len(toolResults) > 0 {
 				userMsg := api.Message{
-					Role:        "user",
+					Role:        api.RoleUser,
 					ToolResults: make([]api.ToolResultBlock, 0, len(toolResults)),
 				}
 				for _, tr := range toolResults {
