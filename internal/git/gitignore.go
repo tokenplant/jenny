@@ -57,19 +57,32 @@ func IsIgnored(repoRoot, path string) (bool, error) {
 	}
 
 	// Also load patterns from parent directories up to repo root (excluding root).
-	// Both dir and resolvedRoot use forward slashes on all platforms, since
-	// filepath.Dir preserves the separator style of its input on Windows.
-	dir := filepath.Dir(path)
-	for dir != "" && dir != "." && dir != resolvedRoot {
-		parentPatterns, err := loadGitignorePatterns(filepath.FromSlash(dir))
+	// We collect subdirectories from the file's directory up to the repo root,
+	// then process them in reverse order (root-most first) to ensure correct
+	// override behavior where deeper .gitignore files win.
+	var subdirs []string
+	curr := filepath.Dir(path)
+	for {
+		// Use forward slashes for consistent comparison with resolvedRoot.
+		// filepath.Dir on Windows may return backslashes even if input had forward slashes.
+		currSlash := filepath.ToSlash(curr)
+		if currSlash == resolvedRoot || currSlash == "." || currSlash == "/" || currSlash == "" {
+			break
+		}
+		subdirs = append(subdirs, curr)
+		parent := filepath.Dir(curr)
+		if parent == curr {
+			break
+		}
+		curr = parent
+	}
+
+	// Load patterns from subdirs in root-to-file order.
+	for i := len(subdirs) - 1; i >= 0; i-- {
+		parentPatterns, err := loadGitignorePatterns(subdirs[i])
 		if err == nil {
 			patterns = append(patterns, parentPatterns...)
 		}
-		nextDir := filepath.Dir(dir)
-		if nextDir == dir {
-			break
-		}
-		dir = nextDir
 	}
 
 	return matchesGitignore(relPath, patterns), nil
@@ -131,16 +144,22 @@ func matchGitignorePattern(path, pattern string) bool {
 	path = filepath.ToSlash(path)
 	pattern = filepath.ToSlash(pattern)
 
+	// Leading slash means the pattern is relative to the directory of the .gitignore file.
+	// Since path is already relative to the repository root (for root .gitignore),
+	// we strip the leading slash and ensure we match against the full path.
+	isRelative := strings.HasPrefix(pattern, "/")
+	if isRelative {
+		pattern = pattern[1:]
+	}
+
 	// Directory pattern: match the directory and its contents
 	if strings.HasSuffix(pattern, "/") {
-		if strings.HasPrefix(path, pattern[:len(pattern)-1]) {
+		base := pattern[:len(pattern)-1]
+		// Match if path is the directory itself or a file/subdir within it
+		if path == base || strings.HasPrefix(path, pattern) {
 			return true
 		}
-		// Also match if path IS the directory
-		if path == pattern[:len(pattern)-1] {
-			return true
-		}
-		pattern = pattern[:len(pattern)-1]
+		pattern = base
 	}
 
 	// Handle ** glob (match any number of directories)
@@ -165,33 +184,30 @@ func matchGitignorePattern(path, pattern string) bool {
 		}
 
 		// Multiple ** - not fully supported; reject with documented limitation
-		// Multi-** patterns like a/**/b/**/c have complex semantics that require
-		// tracking how many directories each ** matches. For correctness, we
-		// explicitly reject these patterns rather than silently returning wrong results.
 		return false
 	}
 
 	// Handle * glob (match any characters except /)
 	if strings.Contains(pattern, "*") {
 		// Simple glob matching - for gitignore, patterns without / in the pattern
-		// (other than leading !) should match against the last path segment (filename)
-		if !strings.Contains(pattern, "/") {
+		// (other than leading /) should match against the last path segment (filename)
+		if !isRelative && !strings.Contains(pattern, "/") {
 			// Match against last path segment (filename)
 			segments := strings.Split(path, "/")
 			filename := segments[len(segments)-1]
 			return matchGlob(filename, pattern)
 		}
-		// Pattern contains / - match against full path
+		// Pattern contains / or is anchored via leading / - match against full path
 		return matchGlob(path, pattern)
 	}
 
 	// Exact match - for patterns without /, match against filename only
-	if !strings.Contains(pattern, "/") {
+	if !isRelative && !strings.Contains(pattern, "/") {
 		segments := strings.Split(path, "/")
 		filename := segments[len(segments)-1]
 		return filename == pattern
 	}
-	// Pattern contains / - match against full path
+	// Pattern contains / or is anchored via leading / - match against full path
 	return path == pattern
 }
 

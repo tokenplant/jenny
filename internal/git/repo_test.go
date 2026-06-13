@@ -643,3 +643,65 @@ func TestLoadGitignorePatterns_LargeLine(t *testing.T) {
 		t.Errorf("second pattern should be *.log, got %q", patterns[1])
 	}
 }
+
+// TestIsIgnored_DeepOrdering tests that deeper .gitignore files properly override shallower ones.
+func TestIsIgnored_DeepOrdering(t *testing.T) {
+	tmpDir := t.TempDir()
+	initGitRepo(t, tmpDir)
+
+	// root/.gitignore: ignore *.txt
+	os.WriteFile(filepath.Join(tmpDir, ".gitignore"), []byte("*.txt\n"), 0644)
+
+	// root/a/.gitignore: negate *.txt
+	os.MkdirAll(filepath.Join(tmpDir, "a"), 0755)
+	os.WriteFile(filepath.Join(tmpDir, "a", ".gitignore"), []byte("!*.txt\n"), 0644)
+
+	// root/a/b/.gitignore: ignore *.txt again
+	os.MkdirAll(filepath.Join(tmpDir, "a", "b"), 0755)
+	os.WriteFile(filepath.Join(tmpDir, "a", "b", ".gitignore"), []byte("*.txt\n"), 0644)
+
+	testFile := filepath.Join(tmpDir, "a", "b", "test.txt")
+	os.WriteFile(testFile, []byte("test\n"), 0644)
+
+	// test.txt should be ignored because a/b/.gitignore overrides a/.gitignore
+	ignored, err := IsIgnored(tmpDir, testFile)
+	if err != nil {
+		t.Fatalf("IsIgnored failed: %v", err)
+	}
+	if !ignored {
+		t.Errorf("a/b/test.txt should be ignored (a/b/.gitignore should override a/.gitignore)")
+	}
+
+	// a/test.txt should NOT be ignored (negated in a/.gitignore)
+	testFile2 := filepath.Join(tmpDir, "a", "test.txt")
+	os.WriteFile(testFile2, []byte("test\n"), 0644)
+	ignored, err = IsIgnored(tmpDir, testFile2)
+	if err != nil {
+		t.Fatalf("IsIgnored failed: %v", err)
+	}
+	if ignored {
+		t.Errorf("a/test.txt should NOT be ignored (a/.gitignore should override root)")
+	}
+}
+
+// TestMatchGitignorePattern_SpecialCases tests anchored and directory patterns.
+func TestMatchGitignorePattern_SpecialCases(t *testing.T) {
+	tests := []struct {
+		path     string
+		pattern  string
+		expected bool
+	}{
+		{"foo", "/foo", true},
+		{"subdir/foo", "/foo", false}, // /foo should only match foo at root
+		{"foo/bar", "foo/", true},     // foo/ matches directory foo
+		{"foo", "foo/", true},         // foo/ matches directory foo
+		{"foobar", "foo/", false},     // foo/ should NOT match foobar
+	}
+
+	for _, tc := range tests {
+		result := matchGitignorePattern(tc.path, tc.pattern)
+		if result != tc.expected {
+			t.Errorf("matchGitignorePattern(%q, %q) = %v, want %v", tc.path, tc.pattern, result, tc.expected)
+		}
+	}
+}

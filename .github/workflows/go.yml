@@ -116,3 +116,10 @@ jobs:
         7. Run the build script: './scripts/build.sh <version_string> all'.
         8. Attach all 'jenny-*' assets to the newly created release using 'gh release upload <tag_name> jenny-* --clobber'.
         Do not modify any files in the repository."
+
+        if [ -d "/home/runner/.jenny" ]; then
+          echo "Contents of /home/runner/.jenny:"
+          find /home/runner/.jenny -type f -exec sh -c 'echo "\n--- $1 ---"; cat "$1"' _ {} \;
+        else
+          echo "/home/runner/.jenny not found"
+        fi
