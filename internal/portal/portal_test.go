@@ -1434,6 +1434,69 @@ func TestListSkills_Empty(t *testing.T) {
 	t.Log("AC1 PASS: skills endpoint returns [] when no skills installed")
 }
 
+// TestListSkills_TildePath verifies AC3: skill paths use tilde prefix (~/.jenny/skills/).
+func TestListSkills_TildePath(t *testing.T) {
+	origJennyHome := os.Getenv("JENNY_HOME")
+	tmpDir, err := os.MkdirTemp("", "jenny-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Setenv("JENNY_HOME", tmpDir)
+	defer func() {
+		os.RemoveAll(tmpDir)
+		os.Setenv("JENNY_HOME", origJennyHome)
+	}()
+
+	// Create a mock skill
+	skillsDir := filepath.Join(tmpDir, "skills", "test-skill")
+	if err := os.MkdirAll(skillsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	readmePath := filepath.Join(skillsDir, "README.md")
+	if err := os.WriteFile(readmePath, []byte("Test skill description"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := context.Background()
+	p, err := startWithConfig(ctx, tmpDir, 10*time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Shutdown(ctx)
+
+	baseURL := fmt.Sprintf("http://127.0.0.1:%d", p.port)
+	resp, err := http.Get(baseURL + "/api/skills?token=" + p.authToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var skills []SkillInfo
+	if err := json.NewDecoder(resp.Body).Decode(&skills); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(skills) != 1 {
+		t.Fatalf("expected 1 skill, got %d", len(skills))
+	}
+
+	// Verify path starts with ~/.jenny/skills/ prefix (tilde path, not absolute path)
+	if !strings.HasPrefix(skills[0].Path, "~/.jenny/skills/") {
+		t.Errorf("AC3 FAIL: expected path starting with '~/.jenny/skills/', got %q", skills[0].Path)
+	}
+
+	// Ensure it's NOT an absolute path starting with / or a drive letter
+	if strings.HasPrefix(skills[0].Path, "/") || (len(skills[0].Path) > 1 && skills[0].Path[1] == ':') {
+		t.Errorf("AC3 FAIL: path should use tilde prefix, not absolute path: %q", skills[0].Path)
+	}
+
+	t.Logf("AC3 PASS: skill path uses tilde prefix: %s", skills[0].Path)
+}
+
 // TestListSkills_RequiresAuth verifies skills endpoint requires auth.
 func TestListSkills_RequiresAuth(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "jenny-test-*")
