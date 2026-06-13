@@ -2,6 +2,15 @@
 
 ## Changes
 
+## WebUI Portal (v0.4.0)
+- **Status: Production Ready**
+- Full implementation of all 7 tabs (Dashboard, Sessions, Skills, MCP, Plugins, Cost, Settings)
+- Embedded frontend in Go binary for single-executable distribution
+- Cross-platform support for Darwin, Linux, and Windows
+- SSE streaming for real-time session updates
+- Secure token-based authentication
+- Multi-language support (en, zh-Hans, zh-Hant)
+
 ### Responses API Support
 - New provider: `openAIResponsesProvider` for `/v1/responses` endpoint
 - Types: `OpenAIResponsesRequest/OpenAIResponsesResponse` with request/response structs
