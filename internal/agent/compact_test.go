@@ -622,11 +622,6 @@ func TestAC1_InSessionCompact_Skipped_WhenMessagesTooLarge(t *testing.T) {
 		t.Fatalf("test setup: estimated %d should exceed maxMessagesTokens %d", estimated, maxMessagesTokens)
 	}
 
-	// Verify the pre-flight condition: estimated > maxMessagesTokens
-	if estimated <= maxMessagesTokens {
-		t.Errorf("AC1 FAIL: messages should be detected as too large for in-session compact")
-	}
-
 	t.Log("AC1 PASS: messages correctly identified as too large for in-session compact")
 }
 
@@ -650,11 +645,6 @@ func TestAC1_InSessionCompact_Used_WhenMessagesWithinLimit(t *testing.T) {
 	estimated := estimateTokens(messages)
 	if estimated > maxMessagesTokens {
 		t.Fatalf("test setup: estimated %d should be within maxMessagesTokens %d", estimated, maxMessagesTokens)
-	}
-
-	// Verify the pre-flight condition: estimated <= maxMessagesTokens
-	if estimated > maxMessagesTokens {
-		t.Errorf("AC1 FAIL: messages should be within limit for in-session compact")
 	}
 
 	t.Log("AC1 PASS: messages correctly identified as within limit for in-session compact")
