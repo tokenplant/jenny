@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
-	"path/filepath"
 	"runtime"
 	"syscall"
 
@@ -48,9 +47,7 @@ func runPortal(ctx context.Context) error {
 
 	// Write URL to file for non-interactive (GUI double-click) mode
 	if !isInteractive() {
-		jennyDir := constants.JennyHomeDir()
-		urlFile := filepath.Join(jennyDir, "portal.url")
-		if err := os.WriteFile(urlFile, []byte(url+"\n"), 0644); err != nil {
+		if err := p.WritePortalURLFile(); err != nil {
 			log.Printf("Warning: could not write portal URL file: %v", err)
 		}
 

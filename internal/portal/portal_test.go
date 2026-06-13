@@ -645,6 +645,54 @@ func TestAC3_URLFileCleanup(t *testing.T) {
 	t.Log("AC3 PASS: portal URL file is deleted on shutdown")
 }
 
+// TestAC2_WritePortalURLFile verifies AC2: WritePortalURLFile helper creates URL file correctly.
+// This test exercises the WritePortalURLFile method that cmd/jenny/portal.go uses in non-interactive mode.
+func TestAC2_WritePortalURLFile(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "jenny-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	ctx := context.Background()
+	p, err := startWithConfig(ctx, tmpDir, 10*time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Call WritePortalURLFile to write the URL file (what cmd/jenny/portal.go does)
+	if err := p.WritePortalURLFile(); err != nil {
+		t.Fatal("AC2 FAIL: WritePortalURLFile failed: ", err)
+	}
+
+	// Verify the URL file was created
+	urlFile := p.PortalURLFile()
+	if _, err := os.Stat(urlFile); os.IsNotExist(err) {
+		t.Fatal("AC2 FAIL: URL file should exist after WritePortalURLFile")
+	}
+
+	// Verify the URL file has the expected content
+	content, err := os.ReadFile(urlFile)
+	if err != nil {
+		t.Fatal("AC2 FAIL: could not read portal.url file")
+	}
+
+	expectedURL := fmt.Sprintf("http://127.0.0.1:%d?token=%s", p.port, p.authToken)
+	if !strings.Contains(string(content), expectedURL) {
+		t.Errorf("AC2 FAIL: URL file should contain '%s', got: %s", expectedURL, string(content))
+	}
+
+	// Shutdown portal
+	p.Shutdown(ctx)
+
+	// Verify URL file is deleted after shutdown
+	if _, err := os.Stat(urlFile); !os.IsNotExist(err) {
+		t.Error("AC2 FAIL: portal.url should be deleted after shutdown")
+	}
+
+	t.Log("AC2 PASS: WritePortalURLFile creates URL file correctly")
+}
+
 // TestAC2_NonInteractiveURLWrite verifies AC2: portal writes URL file in non-interactive mode.
 // This tests the actual code path that cmd/jenny/portal.go uses when !isInteractive().
 func TestAC2_NonInteractiveURLWrite(t *testing.T) {

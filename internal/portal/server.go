@@ -258,6 +258,13 @@ func (p *Portal) PortalURLFile() string {
 	return p.lockPath[:len(p.lockPath)-len("portal.lock")] + "portal.url"
 }
 
+// WritePortalURLFile writes the portal URL to the URL file for non-interactive mode.
+// This is used by cmd/jenny/portal.go when !isInteractive().
+func (p *Portal) WritePortalURLFile() error {
+	url := fmt.Sprintf("http://127.0.0.1:%d?token=%s", p.port, p.authToken)
+	return os.WriteFile(p.PortalURLFile(), []byte(url+"\n"), 0644)
+}
+
 // resetIdleTimer resets the idle timeout timer.
 func (p *Portal) resetIdleTimer() {
 	p.mu.Lock()
@@ -294,7 +301,10 @@ func (p *Portal) runIdleMonitor(ctx context.Context) {
 			idle := time.Since(p.lastAccess)
 			p.mu.Unlock()
 			if idle >= p.idleTimeout {
+				// Clean up lockfile first, then URL file
 				os.Remove(p.lockPath)
+				urlPath := p.lockPath[:len(p.lockPath)-len("portal.lock")] + "portal.url"
+				os.Remove(urlPath)
 				if p.exitFunc != nil {
 					p.exitFunc()
 				} else {
