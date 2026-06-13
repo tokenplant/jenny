@@ -14,7 +14,6 @@ import (
 	"github.com/ipy/jenny/internal/log"
 	"github.com/ipy/jenny/internal/memdir"
 	"github.com/ipy/jenny/internal/session"
-	"github.com/ipy/jenny/internal/tool"
 )
 
 // SubmitMessage runs a single query turn: persist message, run agent loop,
