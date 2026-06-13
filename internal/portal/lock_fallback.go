@@ -18,8 +18,8 @@ func flock(path string) (*os.File, error) {
 		}
 		return nil, err
 	}
-	// We got the exclusive lock via O_EXCL - close immediately but keep the file as "locked"
-	// The existence of the file serves as the lock indicator
-	f.Close()
+	// Keep the file handle open to hold the OS-level lock.
+	// The existence of the file with O_EXCL provides atomic create-or-fail semantics.
+	// server.go's defer lockFile.Close() handles cleanup on shutdown.
 	return f, nil
 }
