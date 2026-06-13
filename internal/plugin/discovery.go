@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ipy/jenny/internal/constants"
 	"github.com/ipy/jenny/internal/mcp"
 	"github.com/ipy/jenny/internal/skills"
 )
@@ -23,7 +24,7 @@ const (
 )
 
 // pluginDirNames lists marker directories in priority order.
-var pluginDirNames = []string{".jenny-plugin", ".claude-plugin", ".codex-plugin"}
+var pluginDirNames = []string{constants.PluginDirName, ".claude-plugin", ".codex-plugin"}
 
 // PluginDirNames returns the marker directory names in priority order.
 func PluginDirNames() []string { return pluginDirNames }

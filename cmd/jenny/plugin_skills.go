@@ -3,6 +3,7 @@ package main
 import (
 	"path/filepath"
 
+	"github.com/ipy/jenny/internal/constants"
 	"github.com/ipy/jenny/internal/mcp"
 	"github.com/ipy/jenny/internal/plugin"
 	"github.com/ipy/jenny/internal/skills"
@@ -67,7 +68,7 @@ func loadPluginMCPServers(cwd, homeDir string) map[string]mcp.MCPServerDef {
 
 	roots := plugin.FindPluginRoots(cwd)
 	if homeDir != "" {
-		homePluginRoots := plugin.FindPluginRoots(filepath.Join(homeDir, ".jenny"))
+		homePluginRoots := plugin.FindPluginRoots(constants.JennyHomeDir())
 		roots = append(roots, homePluginRoots...)
 	}
 

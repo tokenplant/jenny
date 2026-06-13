@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/ipy/jenny/internal/constants"
 )
 
 func TestDiscover_SingleDirectory(t *testing.T) {
@@ -236,7 +238,7 @@ A test skill for deduplication.
 
 func TestSkill_MatchesPath_WithinRoot(t *testing.T) {
 	tmpDir := t.TempDir()
-	skillRoot := filepath.Join(tmpDir, ".jenny", "skills", "test-skill")
+	skillRoot := filepath.Join(tmpDir, constants.ProjectDirName, "skills", "test-skill")
 	skill := Skill{
 		Name:     "test-skill",
 		RootPath: skillRoot,
@@ -255,7 +257,7 @@ func TestSkill_MatchesPath_WithinRoot(t *testing.T) {
 
 func TestSkill_MatchesPath_WithActivationGlob(t *testing.T) {
 	tmpDir := t.TempDir()
-	skillRoot := filepath.Join(tmpDir, ".jenny", "skills", "go-helper")
+	skillRoot := filepath.Join(tmpDir, constants.ProjectDirName, "skills", "go-helper")
 	skill := Skill{
 		Name:           "go-helper",
 		RootPath:       skillRoot,
@@ -275,7 +277,7 @@ func TestSkill_MatchesPath_WithActivationGlob(t *testing.T) {
 
 func TestSkill_MatchesPath_NoActivationGlob(t *testing.T) {
 	tmpDir := t.TempDir()
-	skillRoot := filepath.Join(tmpDir, ".jenny", "skills", "no-glob-skill")
+	skillRoot := filepath.Join(tmpDir, constants.ProjectDirName, "skills", "no-glob-skill")
 	skill := Skill{
 		Name:     "no-glob-skill",
 		RootPath: skillRoot,

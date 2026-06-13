@@ -44,7 +44,7 @@ func TestJennyHomeDir(t *testing.T) {
 	// Test with home directory
 	home, err := os.UserHomeDir()
 	if err == nil {
-		expected := filepath.Join(home, ".jenny")
+		expected := filepath.Join(home, ProjectDirName)
 		if JennyHomeDir() != expected {
 			t.Errorf("expected %s, got %s", expected, JennyHomeDir())
 		}
@@ -58,5 +58,31 @@ func TestJennyHomeDir_Env(t *testing.T) {
 
 	if JennyHomeDir() != tmpDir {
 		t.Errorf("expected %s, got %s", tmpDir, JennyHomeDir())
+	}
+}
+
+func TestProjectDirName(t *testing.T) {
+	if ProjectDirName != ".jenny" {
+		t.Errorf("ProjectDirName = %q, want .jenny", ProjectDirName)
+	}
+}
+
+func TestPluginDirName(t *testing.T) {
+	if PluginDirName != ".jenny-plugin" {
+		t.Errorf("PluginDirName = %q, want .jenny-plugin", PluginDirName)
+	}
+}
+
+func TestIgnoreFileName(t *testing.T) {
+	if IgnoreFileName != ".jennyignore" {
+		t.Errorf("IgnoreFileName = %q, want .jennyignore", IgnoreFileName)
+	}
+}
+
+func TestProjectJennyDir(t *testing.T) {
+	cwd := "/some/project"
+	expected := filepath.Join(cwd, ProjectDirName)
+	if got := ProjectJennyDir(cwd); got != expected {
+		t.Errorf("ProjectJennyDir(%q) = %q, want %q", cwd, got, expected)
 	}
 }

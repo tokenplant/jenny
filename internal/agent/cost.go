@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/ipy/jenny/internal/api"
+	"github.com/ipy/jenny/internal/constants"
 	"github.com/ipy/jenny/internal/log"
 )
 
@@ -310,7 +311,7 @@ var customPricingModTime int64 // mtime of last loaded file
 // over DefaultPricing. Malformed JSON produces a logged warning (not fatal).
 // Safe to call multiple times; re-reads the file if it has changed since last load.
 func LoadCustomPricing(projectDir string) {
-	configPath := filepath.Join(projectDir, ".jenny", "pricing.json")
+	configPath := filepath.Join(constants.ProjectJennyDir(projectDir), "pricing.json")
 
 	// Quick path: check if file has changed without locking
 	customPricingMu.RLock()

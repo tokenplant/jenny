@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ipy/jenny/internal/constants"
 )
 
 func TestTaskOutputTool_Name(t *testing.T) {
@@ -194,7 +196,7 @@ func TestTaskOutputTool_Execute_BlockNonBlocking(t *testing.T) {
 	tm.Store("test-task-2", &TaskInfo{
 		TaskID:     "test-task-2",
 		State:      TaskStateRunning,
-		OutputFile: filepath.Join(tmpDir, ".jenny", "tasks", "test-task-2.output"),
+		OutputFile: filepath.Join(tmpDir, constants.ProjectDirName, "tasks", "test-task-2.output"),
 		StartTime:  time.Now(),
 		Command:    "echo test",
 	})
@@ -226,7 +228,7 @@ func TestTaskOutputTool_Execute_Timeout(t *testing.T) {
 	tm.Store("test-task-timeout", &TaskInfo{
 		TaskID:     "test-task-timeout",
 		State:      TaskStateRunning,
-		OutputFile: filepath.Join(tmpDir, ".jenny", "tasks", "test-task-timeout.output"),
+		OutputFile: filepath.Join(tmpDir, constants.ProjectDirName, "tasks", "test-task-timeout.output"),
 		StartTime:  time.Now(),
 		Command:    "sleep 10",
 	})
@@ -263,7 +265,7 @@ func TestTaskOutputTool_Execute_FileOutput(t *testing.T) {
 	tm := NewTaskManager().WithProjectRoot(tmpDir)
 
 	// Create output file with task result
-	outputPath := filepath.Join(tmpDir, ".jenny", "tasks", "test-task-file.output")
+	outputPath := filepath.Join(tmpDir, constants.ProjectDirName, "tasks", "test-task-file.output")
 	err := os.MkdirAll(filepath.Dir(outputPath), 0755)
 	if err != nil {
 		t.Fatalf("MkdirAll() error = %v", err)
@@ -317,7 +319,7 @@ func TestTaskOutputTool_Execute_MaxTimeout(t *testing.T) {
 	tm.Store("test-task-never-completes", &TaskInfo{
 		TaskID:     "test-task-never-completes",
 		State:      TaskStateRunning,
-		OutputFile: filepath.Join(tmpDir, ".jenny", "tasks", "test-task-never-completes.output"),
+		OutputFile: filepath.Join(tmpDir, constants.ProjectDirName, "tasks", "test-task-never-completes.output"),
 		StartTime:  time.Now(),
 		Command:    "sleep 300",
 	})

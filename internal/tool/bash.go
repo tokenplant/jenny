@@ -298,9 +298,9 @@ func (t *BashTool) writeSpillFile(output string) (string, error) {
 
 	// 2. Try project .jenny/spills directory (or .jenny/sessions/<id>/spills if we wanted to be consistent,
 	// but usually project-local .jenny is simpler)
-	projectSpillsDir := filepath.Join(t.projectRoot, ".jenny", "spills")
+	projectSpillsDir := filepath.Join(constants.ProjectJennyDir(t.projectRoot), "spills")
 	if t.sessionID != "" {
-		projectSpillsDir = filepath.Join(t.projectRoot, ".jenny", "sessions", t.sessionID, "spills")
+		projectSpillsDir = filepath.Join(constants.ProjectJennyDir(t.projectRoot), "sessions", t.sessionID, "spills")
 	}
 	if dirExists(projectSpillsDir) || mkdirAll(projectSpillsDir, 0755) == nil {
 		f, err := os.CreateTemp(projectSpillsDir, "spill-*")

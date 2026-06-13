@@ -42,7 +42,7 @@ func loadEnvFiles(cwd string) {
 	}
 	candidates := []string{
 		filepath.Join(cwd, ".env"),
-		filepath.Join(cwd, ".jenny", ".env"),
+		filepath.Join(constants.ProjectJennyDir(cwd), ".env"),
 	}
 	for _, p := range candidates {
 		if _, err := os.Stat(p); err != nil {
@@ -246,14 +246,13 @@ func run() error {
 
 	// AC4: Bare mode skips all skill discovery
 	if !flags.Bare {
-		projectSkillsDir := filepath.Join(cwd, ".jenny", "skills")
+		projectSkillsDir := filepath.Join(constants.ProjectJennyDir(cwd), "skills")
 
 		// Bundled default skills directory (user-level)
 		bundledSkillsDir := ""
-		if homeDir, err := os.UserHomeDir(); err == nil {
-			bundledSkillsDir = filepath.Join(homeDir, ".jenny", "skills")
+		if _, err := os.UserHomeDir(); err == nil {
+			bundledSkillsDir = filepath.Join(constants.JennyHomeDir(), "skills")
 		}
-
 		// Discover from both directories (AC6: discovery from multiple directories)
 		discoveredSkills, err = skills.Discover(projectSkillsDir, bundledSkillsDir)
 		if err != nil {
@@ -263,10 +262,8 @@ func run() error {
 		// Discover plugin skills and merge with discovered skills
 		// Plugin skills have lower priority than project/user skills (dedup by name)
 		pluginRoots := plugin.FindPluginRoots(cwd)
-		if homeDir, err := os.UserHomeDir(); err == nil {
-			homePluginRoots := plugin.FindPluginRoots(filepath.Join(homeDir, ".jenny"))
-			pluginRoots = append(pluginRoots, homePluginRoots...)
-		}
+		homePluginRoots := plugin.FindPluginRoots(constants.JennyHomeDir())
+		pluginRoots = append(pluginRoots, homePluginRoots...)
 
 		discoveredSkills = discoverAndMergePluginSkills(discoveredSkills, pluginRoots)
 	}

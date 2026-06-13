@@ -9,6 +9,8 @@ import (
 	"runtime"
 	"sync"
 	"time"
+
+	"github.com/ipy/jenny/internal/constants"
 )
 
 // TaskState represents the state of a background task.
@@ -75,14 +77,10 @@ func (tm *TaskManager) TasksDir() (string, error) {
 	var tasksDir string
 	if tm.projectRoot != "" {
 		// Use project-relative .jenny/tasks directory
-		tasksDir = filepath.Join(tm.projectRoot, ".jenny", "tasks")
+		tasksDir = filepath.Join(constants.ProjectJennyDir(tm.projectRoot), "tasks")
 	} else {
 		// Fall back to ~/.jenny/tasks
-		homeDir, _ := os.UserHomeDir()
-		if homeDir == "" {
-			homeDir = "."
-		}
-		tasksDir = filepath.Join(homeDir, ".jenny", "tasks")
+		tasksDir = filepath.Join(constants.JennyHomeDir(), "tasks")
 	}
 
 	if err := os.MkdirAll(tasksDir, 0755); err != nil {

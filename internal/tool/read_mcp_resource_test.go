@@ -284,7 +284,7 @@ func TestReadMcpResourceTool_AC3_BlobPersist(t *testing.T) {
 	// Override JennyHomeDir to use temp dir/.jenny for testing
 	originalFunc := constants.JennyHomeDirFunc
 	constants.JennyHomeDirFunc = func() string {
-		return filepath.Join(cwd, ".jenny")
+		return filepath.Join(cwd, constants.ProjectDirName)
 	}
 	defer func() {
 		constants.JennyHomeDirFunc = originalFunc
@@ -331,7 +331,7 @@ func TestReadMcpResourceTool_AC3_BlobPersist(t *testing.T) {
 	}
 
 	// Verify file is in the correct directory (under JennyHomeDir/mcp-resources)
-	expectedDir := filepath.Join(cwd, ".jenny", "mcp-resources")
+	expectedDir := filepath.Join(cwd, constants.ProjectDirName, "mcp-resources")
 	if filepath.Dir(output.Contents[0].BlobSavedTo) != expectedDir {
 		t.Errorf("expected file in %s, got %s", expectedDir, filepath.Dir(output.Contents[0].BlobSavedTo))
 	}

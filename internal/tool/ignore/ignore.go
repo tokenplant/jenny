@@ -14,6 +14,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/ipy/jenny/internal/constants"
 )
 
 // LoadPatterns reads .gitignore and .jennyignore from dir and returns the
@@ -21,7 +23,7 @@ import (
 func LoadPatterns(dir string) []string {
 	var out []string
 	out = append(out, readIgnoreFile(filepath.Join(dir, ".gitignore"))...)
-	out = append(out, readIgnoreFile(filepath.Join(dir, ".jennyignore"))...)
+	out = append(out, readIgnoreFile(filepath.Join(dir, constants.IgnoreFileName))...)
 	return out
 }
 

@@ -106,7 +106,7 @@ jobs:
         ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL }}
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        rm -fr ~/.jenny || true
+        rm -fr "${HOME}/.jenny" || true
 
         ./jenny-linux-amd64 --verbose --dangerously-skip-permissions "You are a release assistant.
         1. Check the latest GitHub release version using 'gh release list'.
@@ -120,5 +120,5 @@ jobs:
         Do not modify any files in the repository."
 
         echo ""
-        echo "Contents of ~/.jenny:"
-        find ~/.jenny -type f -exec sh -c 'printf "\n--- %s ---\n" "$1"; cat "$1"' _ {} \;
+        echo "Contents of ${HOME}/.jenny:"
+        find "${HOME}/.jenny" -type f -exec sh -c 'printf "\n--- %s ---\n" "$1"; cat "$1"' _ {} \;

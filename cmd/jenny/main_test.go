@@ -258,7 +258,7 @@ func TestPluginSkillsWiring(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create project skill
-	projectSkillDir := filepath.Join(tmpDir, ".jenny", "skills", "project-skill")
+	projectSkillDir := filepath.Join(tmpDir, constants.ProjectDirName, "skills", "project-skill")
 	if err := os.MkdirAll(projectSkillDir, 0755); err != nil {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}
@@ -302,7 +302,7 @@ A plugin-level skill.
 	}
 
 	// Discover project skills
-	projectSkillsDir := filepath.Join(tmpDir, ".jenny", "skills")
+	projectSkillsDir := filepath.Join(tmpDir, constants.ProjectDirName, "skills")
 	discoveredSkills, err := skills.Discover(projectSkillsDir)
 	if err != nil {
 		t.Fatalf("skills.Discover() error = %v", err)
@@ -342,7 +342,7 @@ func TestPluginSkillsDedup(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create project skill
-	projectSkillDir := filepath.Join(tmpDir, ".jenny", "skills", "shared-skill")
+	projectSkillDir := filepath.Join(tmpDir, constants.ProjectDirName, "skills", "shared-skill")
 	if err := os.MkdirAll(projectSkillDir, 0755); err != nil {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}
@@ -387,7 +387,7 @@ A plugin-level shared skill.
 	}
 
 	// Discover project skills
-	projectSkillsDir := filepath.Join(tmpDir, ".jenny", "skills")
+	projectSkillsDir := filepath.Join(tmpDir, constants.ProjectDirName, "skills")
 	discoveredSkills, err := skills.Discover(projectSkillsDir)
 	if err != nil {
 		t.Fatalf("skills.Discover() error = %v", err)
@@ -720,12 +720,12 @@ func TestLoadEnvFiles_MissingIsFine(t *testing.T) {
 // AC9: loadEnvFiles also picks up .jenny/.env.
 func TestLoadEnvFiles_PicksUpJennyEnv(t *testing.T) {
 	dir := t.TempDir()
-	jennyDir := filepath.Join(dir, ".jenny")
+	jennyDir := filepath.Join(dir, constants.ProjectDirName)
 	if err := os.MkdirAll(jennyDir, 0755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(jennyDir, ".env"), []byte("JENNY_TEST_JENNYENV=from-jenny-env\n"), 0600); err != nil {
-		t.Fatalf("write .jenny/.env: %v", err)
+		t.Fatalf("write %s/.env: %v", constants.ProjectDirName, err)
 	}
 
 	os.Unsetenv("JENNY_TEST_JENNYENV")

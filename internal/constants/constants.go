@@ -9,6 +9,20 @@ import (
 // ProjectName is the canonical name of the binary.
 const ProjectName = "jenny"
 
+// ProjectDirName is the project-local directory name (derived from ProjectName).
+const ProjectDirName = "." + ProjectName // ".jenny"
+
+// PluginDirName is the plugin marker directory name.
+const PluginDirName = "." + ProjectName + "-plugin" // ".jenny-plugin"
+
+// IgnoreFileName is the jenny-specific ignore file name.
+const IgnoreFileName = "." + ProjectName + "ignore" // ".jennyignore"
+
+// ProjectJennyDir returns the project-local .jenny directory path for the given cwd.
+func ProjectJennyDir(cwd string) string {
+	return filepath.Join(cwd, ProjectDirName)
+}
+
 // Version is the current version of jenny. Overridable at build time via
 // `-ldflags '-X github.com/ipy/jenny/internal/constants.Version=<value>'`.
 var Version = "0.1.0"

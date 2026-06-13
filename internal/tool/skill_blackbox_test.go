@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ipy/jenny/internal/constants"
 	"github.com/ipy/jenny/internal/skills"
 	"github.com/ipy/jenny/internal/testutil"
 )
@@ -22,7 +23,7 @@ var captureStdout = testutil.CaptureStdout
 func TestAC1_ReadTool_ActivatesSkillOnPathAccess(t *testing.T) {
 	// Create a skill directory under .jenny/skills/
 	tmpDir := t.TempDir()
-	skillDir := filepath.Join(tmpDir, ".jenny", "skills", "my-skill")
+	skillDir := filepath.Join(tmpDir, constants.ProjectDirName, "skills", "my-skill")
 	if err := os.MkdirAll(skillDir, 0755); err != nil {
 		t.Fatalf("failed to create skill dir: %v", err)
 	}
@@ -40,7 +41,7 @@ func TestAC1_ReadTool_ActivatesSkillOnPathAccess(t *testing.T) {
 	}
 
 	// Discover skills
-	discovered, err := skills.Discover(filepath.Join(tmpDir, ".jenny", "skills"))
+	discovered, err := skills.Discover(filepath.Join(tmpDir, constants.ProjectDirName, "skills"))
 	if err != nil {
 		t.Fatalf("discover error: %v", err)
 	}
@@ -82,7 +83,7 @@ func TestAC1_ReadTool_ActivatesSkillOnPathAccess(t *testing.T) {
 func TestAC1_WriteTool_ActivatesSkillOnPathAccess(t *testing.T) {
 	// Create a skill directory
 	tmpDir := t.TempDir()
-	skillDir := filepath.Join(tmpDir, ".jenny", "skills", "my-skill")
+	skillDir := filepath.Join(tmpDir, constants.ProjectDirName, "skills", "my-skill")
 	if err := os.MkdirAll(skillDir, 0755); err != nil {
 		t.Fatalf("failed to create skill dir: %v", err)
 	}
@@ -99,7 +100,7 @@ func TestAC1_WriteTool_ActivatesSkillOnPathAccess(t *testing.T) {
 	}
 
 	// Discover skills
-	discovered, err := skills.Discover(filepath.Join(tmpDir, ".jenny", "skills"))
+	discovered, err := skills.Discover(filepath.Join(tmpDir, constants.ProjectDirName, "skills"))
 	if err != nil {
 		t.Fatalf("discover error: %v", err)
 	}
@@ -138,7 +139,7 @@ func TestAC1_WriteTool_ActivatesSkillOnPathAccess(t *testing.T) {
 
 func TestAC1_EditTool_ActivatesSkillOnPathAccess(t *testing.T) {
 	tmpDir := t.TempDir()
-	skillDir := filepath.Join(tmpDir, ".jenny", "skills", "my-skill")
+	skillDir := filepath.Join(tmpDir, constants.ProjectDirName, "skills", "my-skill")
 	if err := os.MkdirAll(skillDir, 0755); err != nil {
 		t.Fatalf("failed to create skill dir: %v", err)
 	}
@@ -153,7 +154,7 @@ func TestAC1_EditTool_ActivatesSkillOnPathAccess(t *testing.T) {
 		t.Fatalf("failed to write test file: %v", err)
 	}
 
-	discovered, err := skills.Discover(filepath.Join(tmpDir, ".jenny", "skills"))
+	discovered, err := skills.Discover(filepath.Join(tmpDir, constants.ProjectDirName, "skills"))
 	if err != nil {
 		t.Fatalf("discover error: %v", err)
 	}
@@ -196,7 +197,7 @@ func TestAC2_ReadTool_GlobActivatesOnMatchingPath(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create skill with activation_glob in frontmatter
-	skillDir := filepath.Join(tmpDir, ".jenny", "skills", "markdown-helper")
+	skillDir := filepath.Join(tmpDir, constants.ProjectDirName, "skills", "markdown-helper")
 	if err := os.MkdirAll(skillDir, 0755); err != nil {
 		t.Fatalf("failed to create skill dir: %v", err)
 	}
@@ -215,7 +216,7 @@ Helps with Markdown files.
 	}
 
 	// Discover the skill
-	discovered, err := skills.Discover(filepath.Join(tmpDir, ".jenny", "skills"))
+	discovered, err := skills.Discover(filepath.Join(tmpDir, constants.ProjectDirName, "skills"))
 	if err != nil {
 		t.Fatalf("discover error: %v", err)
 	}
@@ -265,7 +266,7 @@ Helps with Markdown files.
 func TestAC2_ReadTool_GlobDoesNotActivateOnNonMatchingPath(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	skillDir := filepath.Join(tmpDir, ".jenny", "skills", "markdown-helper")
+	skillDir := filepath.Join(tmpDir, constants.ProjectDirName, "skills", "markdown-helper")
 	if err := os.MkdirAll(skillDir, 0755); err != nil {
 		t.Fatalf("failed to create skill dir: %v", err)
 	}
@@ -281,7 +282,7 @@ activation_glob: "**/*.md"
 		t.Fatalf("failed to write SKILL.md: %v", err)
 	}
 
-	discovered, err := skills.Discover(filepath.Join(tmpDir, ".jenny", "skills"))
+	discovered, err := skills.Discover(filepath.Join(tmpDir, constants.ProjectDirName, "skills"))
 	if err != nil {
 		t.Fatalf("discover error: %v", err)
 	}
@@ -322,7 +323,7 @@ func TestAC2_SkillWithoutGlob_OnlyActivatesWithinRoot(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Skill without activation_glob
-	skillDir := filepath.Join(tmpDir, ".jenny", "skills", "no-glob-skill")
+	skillDir := filepath.Join(tmpDir, constants.ProjectDirName, "skills", "no-glob-skill")
 	if err := os.MkdirAll(skillDir, 0755); err != nil {
 		t.Fatalf("failed to create skill dir: %v", err)
 	}
@@ -332,7 +333,7 @@ func TestAC2_SkillWithoutGlob_OnlyActivatesWithinRoot(t *testing.T) {
 		t.Fatalf("failed to write SKILL.md: %v", err)
 	}
 
-	discovered, err := skills.Discover(filepath.Join(tmpDir, ".jenny", "skills"))
+	discovered, err := skills.Discover(filepath.Join(tmpDir, constants.ProjectDirName, "skills"))
 	if err != nil {
 		t.Fatalf("discover error: %v", err)
 	}
@@ -408,7 +409,7 @@ func TestAC4_BareMode_NoSkillTool(t *testing.T) {
 	// AC4: Bare mode skips skill discovery
 	// When bare mode is active, no skill_activated events should occur
 	tmpDir := t.TempDir()
-	skillDir := filepath.Join(tmpDir, ".jenny", "skills", "test-skill")
+	skillDir := filepath.Join(tmpDir, constants.ProjectDirName, "skills", "test-skill")
 	if err := os.MkdirAll(skillDir, 0755); err != nil {
 		t.Fatalf("failed to create skill dir: %v", err)
 	}
@@ -476,7 +477,7 @@ func TestAC4_BareMode_NoSkillTool(t *testing.T) {
 
 func TestRegistry_SkillsFramework_WiresActivatorToTools(t *testing.T) {
 	tmpDir := t.TempDir()
-	skillDir := filepath.Join(tmpDir, ".jenny", "skills", "test-skill")
+	skillDir := filepath.Join(tmpDir, constants.ProjectDirName, "skills", "test-skill")
 	if err := os.MkdirAll(skillDir, 0755); err != nil {
 		t.Fatalf("failed to create skill dir: %v", err)
 	}
@@ -485,7 +486,7 @@ func TestRegistry_SkillsFramework_WiresActivatorToTools(t *testing.T) {
 		t.Fatalf("failed to write SKILL.md: %v", err)
 	}
 
-	discovered, err := skills.Discover(filepath.Join(tmpDir, ".jenny", "skills"))
+	discovered, err := skills.Discover(filepath.Join(tmpDir, constants.ProjectDirName, "skills"))
 	if err != nil {
 		t.Fatalf("discover error: %v", err)
 	}
@@ -544,7 +545,7 @@ func TestRegistry_SkillsFramework_WiresActivatorToTools(t *testing.T) {
 
 func Test_CrossCutting_MultipleSkillsMatchSamePath(t *testing.T) {
 	tmpDir := t.TempDir()
-	skillsDir := filepath.Join(tmpDir, ".jenny", "skills")
+	skillsDir := filepath.Join(tmpDir, constants.ProjectDirName, "skills")
 
 	// Skill 1: matches all .go files via glob
 	skill1Dir := filepath.Join(skillsDir, "go-helper")

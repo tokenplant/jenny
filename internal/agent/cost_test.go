@@ -123,7 +123,7 @@ func TestAC2_SaveCostStatePersistsToDotJennyConfig(t *testing.T) {
 	// Override JennyHomeDir to use temp dir/.jenny for testing
 	originalFunc := constants.JennyHomeDirFunc
 	constants.JennyHomeDirFunc = func() string {
-		return filepath.Join(tmpDir, ".jenny")
+		return filepath.Join(tmpDir, constants.ProjectDirName)
 	}
 	defer func() {
 		constants.JennyHomeDirFunc = originalFunc
@@ -252,7 +252,7 @@ func TestAC2_PersistsEndTurnPath(t *testing.T) {
 	// Override JennyHomeDir to use temp dir/.jenny for testing
 	originalFunc := constants.JennyHomeDirFunc
 	constants.JennyHomeDirFunc = func() string {
-		return filepath.Join(tmpDir, ".jenny")
+		return filepath.Join(tmpDir, constants.ProjectDirName)
 	}
 	defer func() {
 		constants.JennyHomeDirFunc = originalFunc
@@ -277,7 +277,7 @@ func TestAC2_PersistsEndTurnPath(t *testing.T) {
 	}
 
 	// Verify .jenny/sessions/<id>/config was created
-	configPath := filepath.Join(tmpDir, ".jenny", "sessions", sessionID, "config")
+	configPath := filepath.Join(tmpDir, constants.ProjectDirName, "sessions", sessionID, "config")
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		t.Fatalf("AC2 FAIL: .jenny/sessions/%s/config not created after RunStream end_turn", sessionID)
@@ -616,7 +616,7 @@ func TestAC5_BudgetStopInRunStream(t *testing.T) {
 	// Override JennyHomeDir to use temp dir/.jenny for testing
 	originalFunc := constants.JennyHomeDirFunc
 	constants.JennyHomeDirFunc = func() string {
-		return filepath.Join(tmpDir, ".jenny")
+		return filepath.Join(tmpDir, constants.ProjectDirName)
 	}
 	defer func() {
 		constants.JennyHomeDirFunc = originalFunc
@@ -625,7 +625,7 @@ func TestAC5_BudgetStopInRunStream(t *testing.T) {
 	// Pre-seed config with cost that already exceeds the budget.
 	// This simulates a resumed session where the restored cost exceeds MaxBudgetUSD,
 	// which is the scenario where budget enforcement kicks in before the first API call.
-	costDir := filepath.Join(tmpDir, ".jenny", "sessions", "sess_budget_test")
+	costDir := filepath.Join(tmpDir, constants.ProjectDirName, "sessions", "sess_budget_test")
 	if err := os.MkdirAll(costDir, 0755); err != nil {
 		t.Fatalf("creating session dir: %v", err)
 	}
@@ -991,7 +991,7 @@ func TestPricing_AC7_CustomPricingOverride(t *testing.T) {
 	defer os.Chdir(origWd)
 
 	// Override valid JSON
-	jennyDir := filepath.Join(tmpDir, ".jenny")
+	jennyDir := filepath.Join(tmpDir, constants.ProjectDirName)
 	os.MkdirAll(jennyDir, 0755)
 	overrideData := map[string]ModelPricing{
 		"claude-sonnet-4-20250514": {InputUSD: 0.000001, OutputUSD: 0.000008},

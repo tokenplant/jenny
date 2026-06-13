@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ipy/jenny/internal/constants"
 	"github.com/ipy/jenny/internal/testutil/mockapi"
 )
 
@@ -172,7 +173,7 @@ func (sr *SuiteRunner) buildEnv(tc *TestCase, workDir string) []string {
 	var env []string
 
 	// Set JENNY_HOME to a subdirectory within the work directory to ensure isolation.
-	env = append(env, "JENNY_HOME="+filepath.Join(workDir, ".jenny"))
+	env = append(env, "JENNY_HOME="+constants.ProjectJennyDir(workDir))
 
 	// For prompt-kind tests, start mock server and set base URL
 	if tc.Target.Kind == "prompt" && sr.Config.CassetteDir != "" {
