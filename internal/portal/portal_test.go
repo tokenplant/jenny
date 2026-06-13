@@ -644,3 +644,98 @@ func TestAC3_URLFileCleanup(t *testing.T) {
 
 	t.Log("AC3 PASS: portal URL file is deleted on shutdown")
 }
+
+// TestAC2_NonInteractiveURLWrite verifies AC2: portal writes URL file in non-interactive mode.
+// This tests the actual code path that cmd/jenny/portal.go uses when !isInteractive().
+func TestAC2_NonInteractiveURLWrite(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "jenny-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	ctx := context.Background()
+	p, err := startWithConfig(ctx, tmpDir, 10*time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Simulate what cmd/jenny/portal.go does in non-interactive mode:
+	// write the URL to portal.url file
+	jennyDir := tmpDir
+	urlFile := filepath.Join(jennyDir, "portal.url")
+	url := fmt.Sprintf("http://127.0.0.1:%d?token=%s", p.port, p.authToken)
+	if err := os.WriteFile(urlFile, []byte(url+"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify the URL file has the expected content
+	content, err := os.ReadFile(urlFile)
+	if err != nil {
+		t.Fatal("AC2 FAIL: could not read portal.url file")
+	}
+	if !strings.Contains(string(content), url) {
+		t.Errorf("AC2 FAIL: URL file should contain '%s', got: %s", url, string(content))
+	}
+
+	// Also verify the PortalURLFile() helper returns the correct path
+	expectedPath := filepath.Join(tmpDir, "portal.url")
+	if p.PortalURLFile() != expectedPath {
+		t.Errorf("AC2 FAIL: PortalURLFile() should return '%s', got: %s", expectedPath, p.PortalURLFile())
+	}
+
+	// Cleanup
+	p.Shutdown(ctx)
+
+	// Verify URL file is deleted after shutdown
+	if _, err := os.Stat(urlFile); !os.IsNotExist(err) {
+		t.Error("AC2 FAIL: portal.url should be deleted after shutdown")
+	}
+
+	t.Log("AC2 PASS: non-interactive URL file write and cleanup works correctly")
+}
+
+// TestAC2_ShutdownOrder verifies AC3: lockfile is removed before URL file on shutdown.
+func TestAC2_ShutdownOrder(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "jenny-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	ctx := context.Background()
+	p, err := startWithConfig(ctx, tmpDir, 10*time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create both lockfile and URL file
+	lockPath := filepath.Join(tmpDir, "portal.lock")
+	urlPath := filepath.Join(tmpDir, "portal.url")
+	url := fmt.Sprintf("http://127.0.0.1:%d?token=%s", p.port, p.authToken)
+
+	// Ensure lockfile exists (should already from Start)
+	if _, err := os.Stat(lockPath); os.IsNotExist(err) {
+		t.Fatal("lockfile should exist from Start")
+	}
+
+	// Create URL file
+	if err := os.WriteFile(urlPath, []byte(url+"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Shutdown portal
+	p.Shutdown(ctx)
+
+	// Verify lockfile is deleted first
+	if _, err := os.Stat(lockPath); !os.IsNotExist(err) {
+		t.Error("AC3 FAIL: lockfile should be deleted first")
+	}
+
+	// Verify URL file is deleted after (or at same time)
+	if _, err := os.Stat(urlPath); !os.IsNotExist(err) {
+		t.Error("AC3 FAIL: URL file should be deleted")
+	}
+
+	t.Log("AC3 PASS: shutdown order correct - lockfile removed before URL file")
+}

@@ -8,17 +8,27 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "lint": "biome lint .",
+    "format": "biome format --write .",
+    "check": "biome check ."
   },
   "peerDependencies": {
     "preact": ">=10"
   },
   "devDependencies": {
-    "@types/react": "^18.0.0",
     "@preact/preset-vite": "^2.9.1",
+    "@types/react": "^18.0.0",
+    "biome": "^0.3.3",
     "preact": "^10.29.1",
     "typescript": "^5.8.2",
     "vite": "^6.3.2"
   },
-  "keywords": ["ui", "components", "glassmorphism", "preact", "dark-mode"]
+  "keywords": [
+    "ui",
+    "components",
+    "glassmorphism",
+    "preact",
+    "dark-mode"
+  ]
 }
