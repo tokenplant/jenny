@@ -25,7 +25,7 @@ func ProjectJennyDir(cwd string) string {
 
 // Version is the current version of jenny. Overridable at build time via
 // `-ldflags '-X github.com/ipy/jenny/internal/constants.Version=<value>'`.
-var Version = "0.2.0"
+var Version = "0.3.0"
 
 // JennyHomeDirFunc is the function that returns the jenny home directory.
 // It can be overridden in tests.
