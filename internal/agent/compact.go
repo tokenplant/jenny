@@ -212,12 +212,23 @@ func readEnvInt(key string, defaultVal int) int {
 func (e *QueryEngine) compactMessages(ctx context.Context, messages []api.Message, cfg CompactConfig, systemPrompt string) ([]api.Message, error) {
 	log.Debug("Starting context compaction", "messageCount", len(messages))
 
-	// Step 1: In-session compaction — reuses the cached system prompt + tools prefix
-	compacted, err := e.inSessionCompact(ctx, messages, systemPrompt)
-	if err == nil {
-		return compacted, nil
+	// AC1: Pre-flight check — skip in-session compaction if messages are too large.
+	// Reserve MIN_SAFETY_OVERHEAD for system prompt + tools + compaction instruction,
+	// plus SUMMARY_MAX_TOKENS for the summary output.
+	maxMessagesTokens := cfg.effectiveContextWindow() - MIN_SAFETY_OVERHEAD - SUMMARY_MAX_TOKENS
+	estimated := estimateTokens(messages)
+
+	if estimated <= maxMessagesTokens {
+		// Step 1: In-session compaction — reuses the cached system prompt + tools prefix
+		compacted, err := e.inSessionCompact(ctx, messages, systemPrompt)
+		if err == nil {
+			return compacted, nil
+		}
+		log.Debug("In-session compaction failed, trying fallback", "error", err)
+	} else {
+		log.Debug("In-session compaction skipped: messages too large for context window",
+			"estimatedTokens", estimated, "maxMessagesTokens", maxMessagesTokens)
 	}
-	log.Debug("In-session compaction failed, trying fallback", "error", err)
 
 	// Step 2: Session-memory compaction (when enabled)
 	if cfg.SessionMemoryEnabled {

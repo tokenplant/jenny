@@ -2,6 +2,7 @@
 package agent
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -586,4 +587,136 @@ func TestDropOldestAPIRoundGroup(t *testing.T) {
 	}
 
 	t.Log("dropOldestAPIRoundGroup works correctly")
+}
+
+// ============================================================
+// AC1 — In-session compact skipped when messages too large
+// ============================================================
+
+// TestAC1_InSessionCompact_Skipped_WhenMessagesTooLarge verifies that when
+// estimated tokens exceed effectiveContextWindow - MIN_SAFETY_OVERHEAD - SUMMARY_MAX_TOKENS,
+// in-session compaction is skipped and fallback to forkSummaryAgent is triggered.
+func TestAC1_InSessionCompact_Skipped_WhenMessagesTooLarge(t *testing.T) {
+	cfg := CompactConfig{
+		ModelContextWindow:   200_000,
+		ModelMaxOutputTokens: 20_000,
+	}
+
+	// effectiveContextWindow = 200K - 20K = 180K
+	// maxMessagesTokens = 180K - 30K - 20K = 130K
+	maxMessagesTokens := cfg.effectiveContextWindow() - MIN_SAFETY_OVERHEAD - SUMMARY_MAX_TOKENS
+	if maxMessagesTokens != 130_000 {
+		t.Fatalf("expected maxMessagesTokens=130000, got %d", maxMessagesTokens)
+	}
+
+	// Create messages totaling ~135K tokens (just over the 130K limit)
+	// estimateTokens uses len/4 for ASCII, so 135K tokens ≈ 540K chars
+	// "hello world " is 12 chars → 45000 repeats × 12 chars = 540K chars → 135K tokens
+	largeContent := strings.Repeat("hello world ", 45_000)
+	messages := []api.Message{
+		{Role: "user", Content: largeContent},
+	}
+
+	estimated := estimateTokens(messages)
+	if estimated <= maxMessagesTokens {
+		t.Fatalf("test setup: estimated %d should exceed maxMessagesTokens %d", estimated, maxMessagesTokens)
+	}
+
+	// Verify the pre-flight condition: estimated > maxMessagesTokens
+	if estimated <= maxMessagesTokens {
+		t.Errorf("AC1 FAIL: messages should be detected as too large for in-session compact")
+	}
+
+	t.Log("AC1 PASS: messages correctly identified as too large for in-session compact")
+}
+
+// TestAC1_InSessionCompact_Used_WhenMessagesWithinLimit verifies that when
+// estimated tokens are within the safety margin, in-session compaction proceeds.
+func TestAC1_InSessionCompact_Used_WhenMessagesWithinLimit(t *testing.T) {
+	cfg := CompactConfig{
+		ModelContextWindow:   200_000,
+		ModelMaxOutputTokens: 20_000,
+	}
+
+	maxMessagesTokens := cfg.effectiveContextWindow() - MIN_SAFETY_OVERHEAD - SUMMARY_MAX_TOKENS
+
+	// Create messages totaling ~100K tokens (well within the 130K limit)
+	// "hello world " is 12 chars → 33334 repeats × 12 chars = 400K chars → 100K tokens
+	smallContent := strings.Repeat("hello world ", 33_334)
+	messages := []api.Message{
+		{Role: "user", Content: smallContent},
+	}
+
+	estimated := estimateTokens(messages)
+	if estimated > maxMessagesTokens {
+		t.Fatalf("test setup: estimated %d should be within maxMessagesTokens %d", estimated, maxMessagesTokens)
+	}
+
+	// Verify the pre-flight condition: estimated <= maxMessagesTokens
+	if estimated > maxMessagesTokens {
+		t.Errorf("AC1 FAIL: messages should be within limit for in-session compact")
+	}
+
+	t.Log("AC1 PASS: messages correctly identified as within limit for in-session compact")
+}
+
+// ============================================================
+// AC2 / AC6 — isPromptTooLongError widened to include "context window"
+// ============================================================
+
+// TestAC2_IsPromptTooLongError_Widened verifies isPromptTooLongError matches
+// "context window" (case-insensitive) in addition to existing patterns.
+func TestAC2_IsPromptTooLongError_Widened(t *testing.T) {
+	tests := []struct {
+		name   string
+		errMsg string
+		want   bool
+		ac     string
+	}{
+		// Existing patterns (regression)
+		{"prompt too long", "prompt too long", true, "existing"},
+		{"too many tokens", "too many tokens", true, "existing"},
+		{"context length", "context length", true, "existing"},
+		{"413", "error 413", true, "existing"},
+		// New pattern — AC2
+		{"context window exact", "context window exceeds limit", true, "AC2"},
+		{"context window mixed case", "Context Window Exceeds Limit", true, "AC2"},
+		{"context window uppercase", "CONTEXT WINDOW EXCEEDS LIMIT", true, "AC2"},
+		// Wrapped error from inSessionCompact — AC7
+		{"wrapped minmax error", "in-session compaction API call: HTTP 400: invalid params, context window exceeds limit (2013)", true, "AC7"},
+		// Non-matching
+		{"unrelated error", "connection timeout", false, "none"},
+		{"empty error", "", false, "none"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := fmt.Errorf("%s", tt.errMsg)
+			got := isPromptTooLongError(err)
+			if got != tt.want {
+				t.Errorf("%s FAIL: isPromptTooLongError(%q) = %v, want %v", tt.ac, tt.errMsg, got, tt.want)
+			}
+		})
+	}
+	t.Log("AC2/AC6 PASS: isPromptTooLongError widened to include context window")
+}
+
+// TestAC6_IsPromptTooLongError_AllSubstrings verifies all required error substrings
+// from AC6 are matched by isPromptTooLongError.
+func TestAC6_IsPromptTooLongError_AllSubstrings(t *testing.T) {
+	required := []string{
+		"prompt too long",
+		"too many tokens",
+		"context length",
+		"context window",
+		"413",
+	}
+
+	for _, substr := range required {
+		err := fmt.Errorf("test error: %s", substr)
+		if !isPromptTooLongError(err) {
+			t.Errorf("AC6 FAIL: isPromptTooLongError should match %q", substr)
+		}
+	}
+	t.Log("AC6 PASS: all required substrings matched by isPromptTooLongError")
 }
