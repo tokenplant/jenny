@@ -43,6 +43,12 @@ internal/portal/webui/dist/assets/
 /jenny-*
 /jenny_*
 .jenny/
+
+# Plugin marker directories (workspace artifacts)
+.jenny-plugin/
+.claude-plugin/
+.codex-plugin/
+
 **/fake-mcp-server
 
 references/
