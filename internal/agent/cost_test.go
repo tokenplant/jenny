@@ -148,7 +148,7 @@ func TestAC2_SaveCostStatePersistsToDotJennyConfig(t *testing.T) {
 	}
 
 	// Verify file exists
-	configPath := filepath.Join(".jenny", "sessions", "sess_test_ac2", "config")
+	configPath := filepath.Join(constants.ProjectDirName, "sessions", "sess_test_ac2", "config")
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		t.Fatalf("AC2 FAIL: cannot read .jenny/sessions/sess_test_ac2/config: %v", err)
