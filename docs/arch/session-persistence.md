@@ -108,7 +108,31 @@ When persistence is disabled (e.g. `--no-session-persistence`):
 - **AC6:** The `session_id` emitted in the stream-json `system` event and `result` event equals the stem of the `.jsonl` transcript file created in the same run.
 - **AC7:** Every transcript line has a non-empty `cwd` field equal to the absolute path of the directory from which jenny was invoked.
 
-## Related
+## Session Listing
+
+The `Manager.ListSessions()` method returns session IDs sorted by modification time (most recent first). It is used by:
+- The `--continue` CLI flag to find the most recent session.
+- The Portal's `GET /api/sessions` endpoint.
+
+### Behavior
+
+1. Scans the `sessions/` subdirectory (under the configured jenny dir).
+2. Skips non-directory entries.
+3. For each subdirectory, checks for the existence of `transcript.jsonl`.
+4. Directories without `transcript.jsonl` are silently skipped.
+5. Results are sorted by `transcript.jsonl` modification time, descending (most recent first).
+6. Returns `nil` (not an empty slice) when no sessions exist or directory is absent.
+7. Thread-safe: holds a read lock during directory scan.
+
+### Acceptance Criteria
+
+- **AC8:** `ListSessions` returns sessions sorted by most recent `transcript.jsonl` mtime first.
+- **AC9:** Empty `sessions/` directory returns `nil`.
+- **AC10:** Non-existent `sessions/` directory returns `nil` (no error).
+- **AC11:** Directories without `transcript.jsonl` are excluded from results.
+- **AC12:** Non-directory entries in `sessions/` are ignored.
+
+### Related
 
 - Resume behavior: [`session-resume.md`](./session-resume.md)
 - Cost restore: [`cost-tracking.md`](./cost-tracking.md)

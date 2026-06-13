@@ -662,16 +662,16 @@ func TestManager_ListSessions_FiltersNonJsonl(t *testing.T) {
 		t.Fatalf("AppendEntry() error = %v", err)
 	}
 
-	// Create a non-jsonl file in the transcript dir
-	nonJSONLPath := filepath.Join(tmpDir, "sess_notjson.txt")
-	if err := os.WriteFile(nonJSONLPath, []byte("not a session"), 0644); err != nil {
-		t.Fatalf("WriteFile() error = %v", err)
+	// Create a subdirectory inside sessions/ that has no transcript.jsonl (AC11)
+	emptyDir := filepath.Join(tmpDir, "sessions", "sess_no_transcript")
+	if err := os.MkdirAll(emptyDir, 0755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
 	}
 
-	// Create a subdirectory (should be skipped)
-	subDir := filepath.Join(tmpDir, "sess_subdir")
-	if err := os.MkdirAll(subDir, 0755); err != nil {
-		t.Fatalf("MkdirAll() error = %v", err)
+	// Create a non-directory file inside sessions/ (AC12)
+	nonDirFile := filepath.Join(tmpDir, "sessions", "not_a_dir.txt")
+	if err := os.WriteFile(nonDirFile, []byte("not a session"), 0644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
 	}
 
 	sessions, err := m.ListSessions()
@@ -680,7 +680,101 @@ func TestManager_ListSessions_FiltersNonJsonl(t *testing.T) {
 	}
 
 	if len(sessions) != 1 {
-		t.Errorf("ListSessions() returned %d sessions, want 1 (filtered non-.jsonl and dirs)", len(sessions))
+		t.Errorf("ListSessions() returned %d sessions, want 1 (filtered non-transcript and non-dir)", len(sessions))
+	}
+	if sessions[0] != "sess_valid" {
+		t.Errorf("ListSessions()[0] = %s, want sess_valid", sessions[0])
+	}
+}
+
+// TestAC8_ListSessions_Ordering tests AC8: sessions sorted by most recent transcript.jsonl mtime first.
+func TestAC8_ListSessions_Ordering(t *testing.T) {
+	TestManager_ListSessions_Ordering(t)
+}
+
+// TestAC9_ListSessions_EmptyDir tests AC9: empty sessions/ directory returns nil.
+func TestAC9_ListSessions_EmptyDir(t *testing.T) {
+	TestManager_ListSessions_EmptyDir(t)
+}
+
+// TestAC10_ListSessions_NonExistentDir tests AC10: non-existent sessions/ directory returns nil.
+func TestAC10_ListSessions_NonExistentDir(t *testing.T) {
+	TestManager_ListSessions_NonExistentDir(t)
+}
+
+// TestAC11_ListSessions_ExcludesDirsWithoutTranscript tests AC11: directories without transcript.jsonl excluded.
+func TestAC11_ListSessions_ExcludesDirsWithoutTranscript(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "jenny-test-*")
+	if err != nil {
+		t.Fatalf("MkdirTemp() error = %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	m, err := NewManager(tmpDir, false)
+	if err != nil {
+		t.Fatalf("NewManager() error = %v", err)
+	}
+
+	// Create a valid session with transcript.jsonl
+	if err := m.AppendEntry("sess_valid", TranscriptEntry{Type: "user", Content: "test"}); err != nil {
+		t.Fatalf("AppendEntry() error = %v", err)
+	}
+
+	// Create empty session directories inside sessions/ (no transcript.jsonl)
+	for _, empty := range []string{"sess_empty1", "sess_empty2"} {
+		emptyDir := filepath.Join(tmpDir, "sessions", empty)
+		if err := os.MkdirAll(emptyDir, 0755); err != nil {
+			t.Fatalf("MkdirAll(%s) error = %v", empty, err)
+		}
+	}
+
+	sessions, err := m.ListSessions()
+	if err != nil {
+		t.Fatalf("ListSessions() error = %v", err)
+	}
+
+	if len(sessions) != 1 {
+		t.Errorf("ListSessions() returned %d sessions, want 1 (empty dirs without transcript.jsonl excluded)", len(sessions))
+	}
+	if sessions[0] != "sess_valid" {
+		t.Errorf("ListSessions()[0] = %s, want sess_valid", sessions[0])
+	}
+}
+
+// TestAC12_ListSessions_IgnoresNonDirEntries tests AC12: non-directory entries in sessions/ are ignored.
+func TestAC12_ListSessions_IgnoresNonDirEntries(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "jenny-test-*")
+	if err != nil {
+		t.Fatalf("MkdirTemp() error = %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	m, err := NewManager(tmpDir, false)
+	if err != nil {
+		t.Fatalf("NewManager() error = %v", err)
+	}
+
+	// Create a valid session
+	if err := m.AppendEntry("sess_valid", TranscriptEntry{Type: "user", Content: "test"}); err != nil {
+		t.Fatalf("AppendEntry() error = %v", err)
+	}
+
+	// Create non-directory entries directly inside sessions/
+	sessionsDir := filepath.Join(tmpDir, "sessions")
+	for _, name := range []string{"sess_notjson.txt", "sess_notes.md", "random_file"} {
+		path := filepath.Join(sessionsDir, name)
+		if err := os.WriteFile(path, []byte("not a session"), 0644); err != nil {
+			t.Fatalf("WriteFile(%s) error = %v", name, err)
+		}
+	}
+
+	sessions, err := m.ListSessions()
+	if err != nil {
+		t.Fatalf("ListSessions() error = %v", err)
+	}
+
+	if len(sessions) != 1 {
+		t.Errorf("ListSessions() returned %d sessions, want 1 (non-directory entries should be ignored)", len(sessions))
 	}
 	if sessions[0] != "sess_valid" {
 		t.Errorf("ListSessions()[0] = %s, want sess_valid", sessions[0])
