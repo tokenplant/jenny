@@ -36,6 +36,8 @@ Thumbs.db
 bin/
 dist/
 !internal/portal/webui/dist/
+# Portal assets change on every webui rebuild - don't track them
+internal/portal/webui/dist/assets/
 
 /jenny
 /jenny-*
