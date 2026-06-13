@@ -22,7 +22,7 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
       return stored as Locale;
     }
     const browser = navigator.language;
-    if (browser.startsWith('zh')) return 'zh-CN';
+    if (browser.startsWith('zh')) return 'zh-Hans';
     return 'en';
   });
 

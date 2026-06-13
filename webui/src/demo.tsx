@@ -157,7 +157,7 @@ function DemoApp() {
                           onChange={() => {}}
                           options={[
                             { value: 'en', label: 'English' },
-                            { value: 'zh-CN', label: '中文 (简体)' },
+                            { value: 'zh-Hans', label: '中文 (简体)' },
                             { value: 'ja', label: '日本語' },
                           ]}
                         />
@@ -403,7 +403,7 @@ function I18nDemo() {
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           <Button size="sm" variant={locale === 'en' ? 'primary' : 'default'} onClick={() => setLocale('en')}>English</Button>
-          <Button size="sm" variant={locale === 'zh-CN' ? 'primary' : 'default'} onClick={() => setLocale('zh-CN')}>中文</Button>
+          <Button size="sm" variant={locale === 'zh-Hans' ? 'primary' : 'default'} onClick={() => setLocale('zh-Hans')}>中文</Button>
         </div>
         <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: '0.75rem' }}>
           <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', marginBottom: '0.5rem' }}>Translations:</p>

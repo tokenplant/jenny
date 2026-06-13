@@ -135,7 +135,7 @@ export function Header({
               cursor: 'pointer',
             }}
             onClick={() =>
-              onLocaleChange(locale === 'en' ? 'zh-CN' : 'en')
+              onLocaleChange(locale === 'en' ? 'zh-Hans' : 'en')
             }
           >
             {locale === 'en' ? '中文' : 'EN'}

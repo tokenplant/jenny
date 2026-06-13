@@ -256,7 +256,7 @@ function LocaleSwitcher({
       }}
     >
       {[
-        { value: 'zh-CN', label: '中文' },
+        { value: 'zh-Hans', label: '中文' },
         { value: 'en', label: 'EN' },
       ].map((opt) => {
         const active = locale === opt.value;

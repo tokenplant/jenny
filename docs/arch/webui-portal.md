@@ -1,58 +1,112 @@
-# Jenny WebUI Portal Architecture
+---
+title: WebUI Portal
+slug: webui-portal
+priority: P1
+status: in-progress
+spec: complete
+code: in-progress
+package: internal/portal
+depends_on:
+  - agent-loop
+  - session-persistence
+  - sse-streaming
+---
 
-## 1. Overview & Rationale
+# WebUI Portal
 
-Jenny is designed to be a pure, headless CLI agent. While the CLI excels at focused, atomic task execution, it inherently lacks the visual bandwidth to effectively display multi-dimensional data such as long-term cost trends, complex MCP topologies, or deep conversation histories.
+## Overview
 
-To solve this without compromising the core CLI experience or introducing a heavy Terminal User Interface (TUI), we are introducing the **Jenny WebUI Portal**. The Portal acts as an out-of-band "Command Center"—a lightweight, sidecar HTTP server that provides a rich visual interface for configuration, monitoring, and session management, while leaving the core agent loop untouched.
+The Jenny WebUI Portal is a lightweight, out-of-band "Command Center" for the Jenny CLI. It provides a visual interface for monitoring agent activity, managing sessions, configuring projects, and installing extensions (Skills/MCPs). 
 
-## 2. Core Architectural Principles
+The Portal adheres to the principle of "Observation over Interaction," maintaining the pure headless nature of the core agent while providing the rich visual bandwidth needed for professional workflows.
 
-### 2.1 The "Sidecar" Observer Model
-The `jenny` core process remains entirely unaware of the Portal. The Portal functions purely as a file-system observer and a process launcher. 
+## Architecture
 
-*   **No Database:** We strictly avoid SQLite or heavy databases to minimize binary bloat. The file system (`~/.jenny/sessions`) is the single source of truth.
-*   **UUID v7 as Index:** By utilizing UUID v7 for session IDs, directories are naturally time-sorted. The Portal can list sessions chronologically simply by running a directory read, without needing to store or parse timestamps.
-*   **State Derivation:** Session states (Running vs. Exited) are derived dynamically. The Portal reads the `pid` file within a session directory and checks process liveness (e.g., via signal 0) rather than relying on the session to explicitly report its status.
+The Portal operates as a **Sidecar Observer** that interacts with the filesystem and process table without modifying the core agent logic.
 
-### 2.2 Headless Interaction Flow
-Because `jenny` operates in a headless batch mode (accepting an initial prompt and running until completion without standard input interaction), the Portal's interaction model is simplified:
+```
+[ Browser (WebUI) ] <--- SSE / HTTP ---> [ Jenny Portal Server ]
+                                               |
+                                     +---------+---------+
+                                     |                   |
+                              [ Filesystem ]      [ Process Table ]
+                            ~/.jenny/sessions/     (fork/kill/signal)
+                                     |                   |
+                              [ Jenny Agent ] <----------+
+                               (Headless)
+```
 
-*   **Start:** Creating a new session via the WebUI triggers the Portal to spawn a detached `jenny -p "..."` process.
-*   **Observe:** The WebUI receives updates via Server-Sent Events (SSE). The Portal tails the active session's transcript file and streams the events to the browser.
-*   **Resume:** Resuming a session means appending a new prompt to an exited session. The Portal spawns a new detached process via `jenny -r <uuid> -p "<new_prompt>"`.
+## Core Principles
 
-## 3. UI Structure & Layout
+### 1. Sidecar Observer Model
+The Portal is decoupled from the agent. It derives state by observing the filesystem and the system's process table.
+- **No Database:** To maintain a small binary footprint, the Portal uses the existing `~/.jenny/sessions` structure.
+- **UUID v7 Indexing:** Sessions are identified by UUID v7, which embeds a timestamp. The Portal lists sessions in chronological order by simply reading the directory names, avoiding the need for a separate index or database.
+- **Liveness Detection:** The Portal determines if a session is "Running" or "Exited" by reading the `pid` file in the session directory and checking the process status (e.g., via `os.FindProcess(pid).Signal(0)` on Unix).
 
-The frontend is a Single Page Application (SPA) built with Vite and React, embedded directly into the Jenny binary. It supports internationalization (i18n) for global accessibility.
+### 2. Headless Interaction Flow
+Jenny is a headless CLI. The Portal manages this through detached process orchestration:
+- **Starting Sessions:** The Portal spawns a new detached process: `jenny -p "prompt" --output-format stream-json`.
+- **Real-time Observation:** The Portal uses `fsnotify` to monitor the session's transcript file. New events are streamed to the WebUI via **Server-Sent Events (SSE)**.
+- **Resuming Sessions:** Resuming involves forking a new process with the `-r` flag: `jenny -r <id> -p "new prompt"`.
 
-The UI follows a Master-Detail layout optimized for observability:
+## UI Structure & Layout
 
-1.  **Dashboard (Start):**
-    *   Centralized prompt input for launching new sessions.
-    *   Contextual configuration for Working Directory, Model Profiles, and global settings.
-    *   Aggregated metrics: Active sessions, total token cost, and cache efficiency.
-2.  **Sessions View:**
-    *   **Master List:** A chronological sidebar of sessions with status indicators (Running/Exited).
-    *   **Detail View:** A rich transcript renderer. It displays the conversation stream, tool execution logs, thinking process, and cost per turn.
-    *   **Control Bar:** Contextual actions like "Stop" (SIGTERM), "Delete", and "New Prompt" (Resume).
-3.  **Projects View:**
-    *   Grouped views based on working directories.
-    *   Project-level configurations (e.g., `AGENTS.md` editing) and aggregated cost reports.
-4.  **Marketplace & Asset Management:**
-    *   Unified interface for managing globally installed Skills, MCPs, and Plugins.
-    *   Browse and install new capabilities from remote repositories.
+The UI uses a **Master-Detail** layout, optimized for high-density information display.
 
-## 4. Security & Lifecycle Management
+### 1. Dashboard (Start)
+The landing page for launching new work.
+- **Global Stats:** Cards showing total sessions, active count, total token cost, and cache hit rates.
+- **Prompt Input:** A large, focused area for entering the initial agent prompt.
+- **Context Selectors:** Quick pickers for the Working Directory, Model Profiles, and global configurations.
+- **Recent Projects:** A grid of frequently used project paths.
 
-*   **Localhost Binding:** The HTTP server binds exclusively to `127.0.0.1`.
-*   **Dynamic High-Port & Lockfile:** The Portal binds to a random high port. Connection details (Port, PID, and a randomly generated Auth Token) are written to `~/.jenny/portal.lock`.
-*   **Token Authentication:** All API requests and SSE streams must include the Auth Token, preventing unauthorized access from other local applications.
-*   **Auto-Exit (Ephemeral Lifetime):** The Portal shuts down when inactive to save resources.
-    *   The browser sends periodic heartbeat pings via HTTP.
-    *   If no heartbeat is received for a set duration (e.g., 10 minutes), the Portal server cleans up the lockfile and exits.
-*   **Single Instance Enforcement:** Launching the Portal checks for an existing lockfile. If found and the process is alive, it opens the browser to the active session and exits.
+### 2. Sessions (Master-Detail)
+The primary monitoring interface, inspired by advanced log viewers.
+- **Master Sidebar:** A scrollable list of sessions (UUID v7 sorted), showing status indicators and brief activity summaries.
+- **Detail Panel:**
+  - **Metrics Row:** Real-time cost, token usage, turn count, and model name.
+  - **Event Timeline:** A sequence of high-level events (Init, User Prompt, Tool Use, Result).
+  - **Stream View:** A tail-style view of the raw transcript/stdout, rendered with Markdown and code highlighting.
+  - **Control Bar:** Actions to "Stop" (SIGTERM), "Delete", or "Resume" (append prompt).
 
-## 5. Deployment
+### 3. Projects View
+Focuses on the long-term health and configuration of specific codebases.
+- **Path Grouping:** Automatically groups sessions by their working directory (`cwd`).
+- **Instruction Management:** Inline editor for project-level instructions like `AGENTS.md` or `CLAUDE.md`.
+- **Project Assets:** View of Skills and MCPs active specifically for the selected project.
 
-The WebUI assets are bundled and injected into the Go binary using `//go:embed`, maintaining the "single executable" philosophy of Jenny.
+### 4. Marketplace & Assets
+Management interface for the Jenny ecosystem.
+- **Installed Assets:** Tabs for globally installed Skills, MCP servers, and Plugins.
+- **Marketplace:** Interface to browse and install extensions from remote sources (e.g., GitHub).
+- **Security:** Installation previews showing required permissions and README content.
+
+## Technical Specifications
+
+### Server Lifecycle
+- **Single Instance:** The Portal uses `~/.jenny/portal.lock` to ensure only one server runs. 
+- **Lockfile Schema:** A JSON file containing `{ "pid": int, "port": int, "auth_token": "string" }`.
+- **Auto-Exit:** The server implements an ephemeral lifetime. If no browser heartbeats (HTTP pings) are received for 10 minutes, the server deletes the lockfile and exits.
+- **Port Selection:** The server attempts to bind to a random high-range port (e.g., starting at 33669).
+
+### Communication
+- **SSE (Server-Sent Events):** Used for uni-directional streaming of session logs and status updates.
+- **HTTP/JSON:** Used for control actions (Start, Resume, Kill) and fetching historical data.
+- **I18n:** The frontend supports internationalization with `en` and `zh-Hans` locales pre-configured.
+
+### Security
+- **Localhost Only:** The server binds strictly to `127.0.0.1`.
+- **Auth Token:** Every request from the WebUI must include the `auth_token` found in the lockfile (passed via URL parameter on initial load).
+
+## Deployment
+
+The WebUI is built as a React Single Page Application (SPA) using Vite. The production build is embedded into the Go executable using `//go:embed`.
+
+```go
+// internal/portal/server.go
+//go:embed webui/dist/*
+var webuiDist embed.FS
+```
+
+This ensures `jenny` remains a single-binary distribution.

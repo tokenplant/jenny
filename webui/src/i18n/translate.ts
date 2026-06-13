@@ -3,10 +3,10 @@
 // Simple key-value translation with param replacement
 // ============================================
 
-export type Locale = 'en' | 'zh-CN';
+export type Locale = 'en' | 'zh-Hans';
 
 export const DEFAULT_LOCALE: Locale = 'en';
-export const SUPPORTED_LOCALES: Locale[] = ['en', 'zh-CN'];
+export const SUPPORTED_LOCALES: Locale[] = ['en', 'zh-Hans'];
 export const LOCALE_STORAGE_KEY = 'glimpse-ui-locale';
 
 export type Messages = Record<string, string>;
@@ -56,7 +56,7 @@ const translations: Record<Locale, Messages> = {
     'portal.coming_soon': 'Coming Soon',
     'portal.coming_soon.hint': 'This feature is under development.',
   },
-  'zh-CN': {
+  'zh-Hans': {
     // Common
     'common.cancel': '取消',
     'common.confirm': '确认',
@@ -126,7 +126,7 @@ export type Translator = ReturnType<typeof createTranslator>;
 export function assertKeyParity(): void {
   const keysByLocale: Record<Locale, Set<string>> = {
     en: new Set(Object.keys(translations.en)),
-    'zh-CN': new Set(Object.keys(translations['zh-CN'])),
+    'zh-Hans': new Set(Object.keys(translations['zh-Hans'])),
   };
 
   for (const locale of SUPPORTED_LOCALES) {
