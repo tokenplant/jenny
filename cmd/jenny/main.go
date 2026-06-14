@@ -6,6 +6,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/ipy/jenny/internal/agent"
 	"github.com/ipy/jenny/internal/cli"
@@ -55,10 +56,42 @@ func loadEnvFiles(cwd string) {
 }
 
 // shouldLaunchPortal returns true when the portal should be auto-launched:
-// - No arguments given (e.g., double-click in macOS Finder)
 // - Explicit "portal" subcommand is provided
+// - No arguments given AND running from a macOS .app bundle (double-click in Finder)
 func shouldLaunchPortal() bool {
-	return len(os.Args) < 2 || os.Args[1] == "portal"
+	// Explicit "portal" subcommand always works
+	if len(os.Args) >= 2 && os.Args[1] == "portal" {
+		return true
+	}
+	// When no arguments, check if running from a macOS .app bundle
+	if len(os.Args) < 2 {
+		exe, err := os.Executable()
+		if err != nil {
+			return false
+		}
+		// macOS .app bundles have paths like: .../Jenny Portal.app/Contents/MacOS/jenny
+		if strings.Contains(exe, ".app/Contents/MacOS/") {
+			return true
+		}
+	}
+	return false
+}
+
+// shouldLaunchPortalForTest is a test helper that accepts an explicit exe path
+// to test the .app bundle detection logic without calling os.Executable().
+func shouldLaunchPortalForTest(exePath string) bool {
+	// Explicit "portal" subcommand always works
+	if len(os.Args) >= 2 && os.Args[1] == "portal" {
+		return true
+	}
+	// When no arguments, check if running from a macOS .app bundle
+	if len(os.Args) < 2 {
+		// macOS .app bundles have paths like: .../Jenny Portal.app/Contents/MacOS/jenny
+		if strings.Contains(exePath, ".app/Contents/MacOS/") {
+			return true
+		}
+	}
+	return false
 }
 
 func run() error {

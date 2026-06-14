@@ -738,37 +738,28 @@ func TestLoadEnvFiles_PicksUpJennyEnv(t *testing.T) {
 	}
 }
 
-// TestAutoLaunchPortal_NoArgs tests AC1: launching with no arguments launches portal.
-// Uses os.Args manipulation to test the actual shouldLaunchPortal function.
-func TestAutoLaunchPortal_NoArgs(t *testing.T) {
+// TestAutoLaunchPortal_NoArgs_Terminal tests AC1: launching with no arguments from
+// a non-.app path (terminal invocation) should NOT launch portal.
+func TestAutoLaunchPortal_NoArgs_Terminal(t *testing.T) {
+	// Test cases where no arguments are provided but exe path is NOT a .app bundle
 	tests := []struct {
 		name string
 		args []string
-		want bool
 	}{
-		{"no arguments (macOS double-click)", []string{"jenny"}, true},
-		{"explicit portal subcommand", []string{"jenny", "portal"}, true},
-		{"flag -p (CLI mode)", []string{"jenny", "-p", "test"}, false},
-		{"flag --help (CLI mode)", []string{"jenny", "--help"}, false},
-		{"flag --version (CLI mode)", []string{"jenny", "--version"}, false},
-		{"flag -v (CLI mode)", []string{"jenny", "-v"}, false},
-		{"flag --continue (CLI mode)", []string{"jenny", "--continue"}, false},
-		{"unknown subcommand (CLI mode shows error)", []string{"jenny", "server"}, false},
-		{"version subcommand (CLI mode)", []string{"jenny", "version"}, false},
+		{"no arguments (terminal invocation)", []string{"jenny"}},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save original os.Args and restore after test
 			origArgs := os.Args
 			defer func() { os.Args = origArgs }()
 
-			// Set test args
 			os.Args = tt.args
-
+			// shouldLaunchPortal uses os.Executable() to detect .app bundle
+			// In test environment, this returns the test binary path which does NOT contain .app
 			got := shouldLaunchPortal()
-			if got != tt.want {
-				t.Errorf("shouldLaunchPortal() with args %v = %v, want %v", tt.args, got, tt.want)
+			if got {
+				t.Errorf("shouldLaunchPortal() with args %v = true, want false (terminal mode, not .app bundle)", tt.args)
 			}
 		})
 	}
@@ -801,5 +792,73 @@ func TestAutoLaunchPortal_OtherArgsStayCLIMode(t *testing.T) {
 		if shouldLaunchPortal() {
 			t.Errorf("shouldLaunchPortal() = true for args %v, want false (CLI mode)", args)
 		}
+	}
+}
+
+// TestShouldLaunchPortalFromAppBundle tests AC3: portal auto-launches when
+// exe path contains .app/Contents/MacOS/ (simulating .app bundle double-click).
+func TestShouldLaunchPortalFromAppBundle(t *testing.T) {
+	// Test the detection logic with a mock .app bundle path
+	tests := []struct {
+		name string
+		args []string
+		exe  string
+		want bool
+	}{
+		{
+			name: "no args from .app bundle path",
+			args: []string{"jenny"},
+			exe:  "/Applications/Jenny Portal.app/Contents/MacOS/jenny",
+			want: true,
+		},
+		{
+			name: "no args from user .app bundle path",
+			args: []string{"jenny"},
+			exe:  "/Users/user/Applications/Jenny Portal.app/Contents/MacOS/jenny",
+			want: true,
+		},
+		{
+			name: "no args from relative .app bundle path",
+			args: []string{"jenny"},
+			exe:  "./Jenny Portal.app/Contents/MacOS/jenny",
+			want: true,
+		},
+		{
+			name: "no args from non-.app path (terminal)",
+			args: []string{"jenny"},
+			exe:  "/usr/local/bin/jenny",
+			want: false,
+		},
+		{
+			name: "no args from relative path (terminal)",
+			args: []string{"jenny"},
+			exe:  "./jenny",
+			want: false,
+		},
+		{
+			name: "portal subcommand with .app path",
+			args: []string{"jenny", "portal"},
+			exe:  "/Applications/Jenny Portal.app/Contents/MacOS/jenny",
+			want: true,
+		},
+		{
+			name: "portal subcommand without .app path",
+			args: []string{"jenny", "portal"},
+			exe:  "/usr/local/bin/jenny",
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			origArgs := os.Args
+			defer func() { os.Args = origArgs }()
+
+			os.Args = tt.args
+			got := shouldLaunchPortalForTest(tt.exe)
+			if got != tt.want {
+				t.Errorf("shouldLaunchPortalForTest(%q) with args %v = %v, want %v", tt.exe, tt.args, got, tt.want)
+			}
+		})
 	}
 }
