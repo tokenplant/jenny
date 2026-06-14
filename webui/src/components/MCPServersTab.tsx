@@ -28,6 +28,7 @@ export function MCPServersTab({ servers, loading, selectedId, onSelect }: MCPSer
   const selectedServer = servers.find((s) => s.name === selectedId);
 
   return (
+    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
     <SplitPane
       masterWidth="360px"
       master={
@@ -102,5 +103,6 @@ export function MCPServersTab({ servers, loading, selectedId, onSelect }: MCPSer
         )
       }
     />
+    </div>
   );
 }

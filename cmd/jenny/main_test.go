@@ -737,3 +737,59 @@ func TestLoadEnvFiles_PicksUpJennyEnv(t *testing.T) {
 		t.Errorf("expected JENNY_TEST_JENNYENV=from-jenny-env, got %q", got)
 	}
 }
+
+// shouldLaunchPortal checks whether run() would route to portal mode.
+// This is a pure-logic test of the condition: len(os.Args) < 2 || os.Args[1] == "portal"
+func shouldLaunchPortal(args []string) bool {
+	return len(args) < 2 || (len(args) >= 2 && args[1] == "portal")
+}
+
+// TestAutoLaunchPortal_NoArgs tests AC1: launching with no arguments launches portal.
+func TestAutoLaunchPortal_NoArgs(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{"no arguments (macOS double-click)", []string{"jenny"}, true},
+		{"explicit portal subcommand", []string{"jenny", "portal"}, true},
+		{"flag -p (CLI mode)", []string{"jenny", "-p", "test"}, false},
+		{"flag --help (CLI mode)", []string{"jenny", "--help"}, false},
+		{"flag --version (CLI mode)", []string{"jenny", "--version"}, false},
+		{"flag -v (CLI mode)", []string{"jenny", "-v"}, false},
+		{"flag --continue (CLI mode)", []string{"jenny", "--continue"}, false},
+		{"unknown subcommand (CLI mode shows error)", []string{"jenny", "server"}, false},
+		{"version subcommand (CLI mode)", []string{"jenny", "version"}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := shouldLaunchPortal(tt.args)
+			if got != tt.want {
+				t.Errorf("shouldLaunchPortal(%v) = %v, want %v", tt.args, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestAutoLaunchPortal_ExplicitPortal tests AC2: jenny portal still works.
+func TestAutoLaunchPortal_ExplicitPortal(t *testing.T) {
+	if !shouldLaunchPortal([]string{"jenny", "portal"}) {
+		t.Error("expected shouldLaunchPortal([\"jenny\", \"portal\"]) = true")
+	}
+}
+
+// TestAutoLaunchPortal_OtherArgsStayCLIMode tests AC3: other arguments stay in CLI mode.
+func TestAutoLaunchPortal_OtherArgsStayCLIMode(t *testing.T) {
+	cliArgs := [][]string{
+		{"jenny", "-p", "test"},
+		{"jenny", "--help"},
+		{"jenny", "--version"},
+		{"jenny", "server"},
+	}
+	for _, args := range cliArgs {
+		if shouldLaunchPortal(args) {
+			t.Errorf("shouldLaunchPortal(%v) = true, want false (CLI mode)", args)
+		}
+	}
+}

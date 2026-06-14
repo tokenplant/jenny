@@ -28,6 +28,7 @@ export function PluginsTab({ plugins, loading, selectedId, onSelect }: PluginsTa
   const selectedPlugin = plugins.find((p) => p.root_path === selectedId);
 
   return (
+    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
     <SplitPane
       masterWidth="360px"
       master={
@@ -90,5 +91,6 @@ export function PluginsTab({ plugins, loading, selectedId, onSelect }: PluginsTa
         )
       }
     />
+    </div>
   );
 }

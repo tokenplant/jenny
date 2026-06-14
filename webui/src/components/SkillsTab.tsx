@@ -29,6 +29,7 @@ export function SkillsTab({ skills, loading, selectedId, onSelect }: SkillsTabPr
   const selectedSkill = skills.find((s) => s.name === selectedId);
 
   return (
+    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
     <SplitPane
       masterWidth="360px"
       master={
@@ -92,5 +93,6 @@ export function SkillsTab({ skills, loading, selectedId, onSelect }: SkillsTabPr
         )
       }
     />
+    </div>
   );
 }

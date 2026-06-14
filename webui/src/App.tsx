@@ -115,7 +115,7 @@ function AppContent() {
         onLocaleChange={setLocale}
       />
 
-      <main style={{ flex: 1, overflow: 'auto', padding: '0 2.5rem' }}>
+      <main style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', padding: '0 2.5rem' }}>
         {activeTab === 'start' && <StartTab onSessionCreated={handleSessionCreated} onOpenSettings={() => setShowSettings(true)} settings={settings} />}
         {activeTab === 'sessions' && <SessionsTab selectedId={selectedSessionId} onSelect={setSelectedSessionId} projectFilter={projectFilter} onFilterChange={setProjectFilter} />}
         {activeTab === 'projects' && <ProjectsTab onNavigate={(tab) => setActiveTab(tab as TabId)} onFilter={(cwd) => { setProjectFilter(cwd); setActiveTab('sessions'); }} />}
@@ -174,9 +174,9 @@ function StartTab({ onSessionCreated, onOpenSettings, settings }: StartTabProps)
   };
 
   return (
-    <div style={{ padding: '2.5rem 0', maxWidth: '100%', boxSizing: 'border-box' }}>
+    <div style={{ padding: '2.5rem 0' }}>
       {/* Stats row */}
-      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1rem', marginBottom: '2rem', maxWidth: '72rem' }}>
+      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
         <StatCard label="Total Sessions" value={loading ? '...' : String(stats?.total_sessions ?? 0)} />
         <StatCard label="Running" value={loading ? '...' : String(stats?.active_sessions ?? 0)} />
         <StatCard label="Total Cost" value={loading ? '...' : formatCost(stats?.total_cost_usd ?? 0)} />
@@ -184,7 +184,7 @@ function StartTab({ onSessionCreated, onOpenSettings, settings }: StartTabProps)
       </section>
 
       {/* New session panel */}
-      <GlassPanel style={{ padding: '1.75rem', marginBottom: '2rem', maxWidth: '52rem' }}>
+      <GlassPanel style={{ padding: '1.75rem', marginBottom: '2rem' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           <h2 style={{ fontSize: '1.125rem', fontWeight: 800, letterSpacing: '-0.02em', margin: 0 }}>{t('portal.new_session')}</h2>
           <TextField
@@ -258,6 +258,7 @@ function SessionsTab({ selectedId: externalSelectedId, onSelect: externalOnSelec
   };
 
   return (
+    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
     <SplitPane
       masterWidth="360px"
       master={
@@ -300,6 +301,7 @@ function SessionsTab({ selectedId: externalSelectedId, onSelect: externalOnSelec
         )
       }
     />
+    </div>
   );
 }
 
@@ -509,7 +511,7 @@ function ProjectsTab({ onNavigate, onFilter }: ProjectsTabProps) {
   }
 
   return (
-    <div style={{ padding: '2.5rem 0', maxWidth: '72rem' }}>
+    <div style={{ padding: '2.5rem 0' }}>
       {/* Page header */}
       <div style={{ marginBottom: '1.5rem' }}>
         <h2 style={{ marginBottom: '0.25rem' }}>{t('portal.projects')}</h2>
@@ -615,7 +617,7 @@ function MarketplaceTab({ onNavigate, onBrowse }: MarketplaceTabProps) {
   }
 
   return (
-    <div style={{ padding: '2.5rem 0', maxWidth: '72rem' }}>
+    <div style={{ padding: '2.5rem 0' }}>
       {/* Page header */}
       <div style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
@@ -764,7 +766,7 @@ function MarketplaceBrowseView({ onBack }: MarketplaceBrowseViewProps) {
 
   if (loading) {
     return (
-      <div style={{ padding: '2.5rem 0', maxWidth: '72rem' }}>
+      <div style={{ padding: '2.5rem 0' }}>
         {pageHeader}
         <div style={{ padding: '4rem 2rem', textAlign: 'center' }}>
           <LoadingState label="Loading marketplace…" variant="full" />
@@ -775,7 +777,7 @@ function MarketplaceBrowseView({ onBack }: MarketplaceBrowseViewProps) {
 
   if (error) {
     return (
-      <div style={{ padding: '2.5rem 0', maxWidth: '72rem' }}>
+      <div style={{ padding: '2.5rem 0' }}>
         {pageHeader}
         <EmptyState
           title="Marketplace source unreachable"
@@ -787,7 +789,7 @@ function MarketplaceBrowseView({ onBack }: MarketplaceBrowseViewProps) {
 
   if (items.length === 0) {
     return (
-      <div style={{ padding: '2.5rem 0', maxWidth: '72rem' }}>
+      <div style={{ padding: '2.5rem 0' }}>
         {pageHeader}
         <EmptyState
           title="No items available"
@@ -798,7 +800,7 @@ function MarketplaceBrowseView({ onBack }: MarketplaceBrowseViewProps) {
   }
 
   return (
-    <div style={{ padding: '2.5rem 0', maxWidth: '72rem' }}>
+    <div style={{ padding: '2.5rem 0' }}>
       {pageHeader}
 
       <div style={{ display: 'grid', gap: '1rem' }}>

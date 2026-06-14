@@ -55,8 +55,9 @@ func loadEnvFiles(cwd string) {
 }
 
 func run() error {
-	// Check for portal subcommand before parsing flags
-	if len(os.Args) >= 2 && os.Args[1] == "portal" {
+	// Auto-launch portal when no arguments given (e.g., double-click in macOS Finder).
+	// When arguments are provided, check for explicit "portal" subcommand.
+	if len(os.Args) < 2 || os.Args[1] == "portal" {
 		return runPortal(context.Background())
 	}
 
