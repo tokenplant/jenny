@@ -315,8 +315,6 @@ func (s StreamMessage) MarshalJSON() ([]byte, error) {
 	}
 	if s.ParentToolUseID != nil {
 		fields = append(fields, `"parent_tool_use_id":`+encodeString(*s.ParentToolUseID))
-	} else {
-		fields = append(fields, `"parent_tool_use_id":null`)
 	}
 	if s.Uuid != "" {
 		fields = append(fields, `"uuid":`+encodeString(s.Uuid))
