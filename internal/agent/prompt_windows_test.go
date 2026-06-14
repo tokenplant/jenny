@@ -15,7 +15,8 @@ func TestWindowsSystemPromptHint(t *testing.T) {
 	tools := []tool.Tool{}
 	cwd := "/tmp" // Outside git repo for simplicity
 
-	prompt := buildSystemPrompt(&cfg, tools, cwd)
+	blocks := buildSystemPrompt(&cfg, tools, cwd)
+	prompt := strings.Join(blocks, "\n\n")
 
 	if runtime.GOOS == "windows" {
 		// On Windows, the prompt should contain Windows-specific hints
