@@ -38,7 +38,8 @@ function getPortalConfig() {
 // API fetch wrapper
 export async function apiGet<T>(path: string): Promise<T> {
   const { apiUrl, token } = getPortalConfig();
-  const url = `${apiUrl}${path}?token=${token}`;
+  const separator = path.includes('?') ? '&' : '?';
+  const url = `${apiUrl}${path}${separator}token=${token}`;
 
   const res = await fetch(url);
   if (!res.ok) {

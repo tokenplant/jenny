@@ -24,7 +24,8 @@
     "biome": "^0.3.3",
     "preact": "^10.29.1",
     "typescript": "^5.8.2",
-    "vite": "^6.3.2"
+    "vite": "^6.3.2",
+    "vite-plugin-singlefile": "^2.3.3"
   },
   "keywords": [
     "ui",

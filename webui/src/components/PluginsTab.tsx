@@ -1,4 +1,4 @@
-import { GlassPanel, Badge, EmptyState, useLocale } from '../index';
+import { GlassPanel, Badge, EmptyState, LoadingState, SplitPane, DataList, useLocale } from '../index';
 
 // Plugin info type matching the API response
 export interface PluginInfo {
@@ -11,77 +11,84 @@ export interface PluginInfo {
 interface PluginsTabProps {
   plugins: PluginInfo[];
   loading: boolean;
+  selectedId: string | null;
+  onSelect: (id: string | null) => void;
 }
 
-export function PluginsTab({ plugins, loading }: PluginsTabProps) {
+export function PluginsTab({ plugins, loading, selectedId, onSelect }: PluginsTabProps) {
   const { t } = useLocale();
 
-  if (loading) {
-    return (
-      <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-dim)' }}>
-        {t('common.loading')}
-      </div>
-    );
-  }
+  const items = plugins.map((plugin) => ({
+    id: plugin.root_path,
+    title: plugin.name,
+    subtitle: plugin.version || '(no version)',
+    badge: plugin.version ? <Badge variant="default">{plugin.version}</Badge> : undefined,
+  }));
 
-  if (!plugins || plugins.length === 0) {
-    return (
-      <div style={{ padding: '4rem 2rem', textAlign: 'center' }}>
-        <EmptyState
-          title="No plugins installed"
-          hint="Plugins extend jenny's capabilities. Install plugins to add new functionality."
-        />
-      </div>
-    );
-  }
+  const selectedPlugin = plugins.find((p) => p.root_path === selectedId);
 
   return (
-    <div style={{ padding: '2rem', maxWidth: '800px', margin: '0 auto' }}>
-      <h2 style={{ marginBottom: '1.5rem' }}>{t('portal.plugins')}</h2>
-      <div style={{ display: 'grid', gap: '1rem' }}>
-        {plugins.map((plugin) => (
-          <GlassPanel key={plugin.root_path} style={{ padding: '1.25rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <div style={{ flex: 1, overflow: 'hidden' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <h3 style={{ margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {plugin.name}
-                  </h3>
-                  {plugin.version && (
-                    <Badge variant="default">{plugin.version}</Badge>
-                  )}
-                </div>
-                <p
-                  style={{
-                    margin: '0.5rem 0',
-                    color: 'var(--color-text-muted)',
-                    fontSize: '0.875rem',
-                    overflow: 'hidden',
-                    display: '-webkit-box',
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: 'vertical',
-                  }}
-                >
-                  {plugin.description || '(no description)'}
-                </p>
-                <code
-                  style={{
-                    fontSize: '11px',
-                    color: 'var(--color-text-dim)',
-                    display: 'block',
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                  }}
-                >
-                  {plugin.root_path}
-                </code>
+    <SplitPane
+      masterWidth="360px"
+      master={
+        <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, height: '100%' }}>
+          <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--color-border)', flexShrink: 0 }}>
+            <h2 style={{ margin: 0, fontSize: '0.9375rem', fontWeight: 800, letterSpacing: '-0.02em' }}>
+              {t('portal.plugins')}
+            </h2>
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+            {loading ? (
+              <div style={{ padding: '1.5rem', textAlign: 'center' }}>
+                <LoadingState label="Loading plugins…" variant="inline" />
               </div>
-              <Badge variant="success">Installed</Badge>
+            ) : plugins.length === 0 ? (
+              <div style={{ padding: '1.5rem', textAlign: 'center' }}>
+                <p style={{ color: 'var(--color-text-dim)', fontSize: '0.875rem' }}>No plugins installed</p>
+              </div>
+            ) : (
+              <DataList items={items} selectedId={selectedId} onSelect={onSelect} selectionLabel="plugin" />
+            )}
+          </div>
+        </div>
+      }
+      detail={
+        selectedPlugin ? (
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+            <header style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--color-border)', flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                <span style={{ fontSize: '1.25rem' }}>🧩</span>
+                <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, letterSpacing: '-0.01em' }}>{selectedPlugin.name}</h2>
+                {selectedPlugin.version && <Badge variant="default">{selectedPlugin.version}</Badge>}
+                <Badge variant="success">Installed</Badge>
+              </div>
+              <code style={{ fontSize: '11px', color: 'var(--color-text-dim)', fontFamily: 'var(--font-mono)' }}>
+                {selectedPlugin.root_path}
+              </code>
+            </header>
+            <div style={{ flex: 1, overflow: 'auto', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+              <div>
+                <p className="section-label" style={{ marginBottom: '0.5rem' }}>Description</p>
+                <p style={{ color: 'var(--color-text)', fontSize: '0.9375rem', lineHeight: 1.6 }}>
+                  {selectedPlugin.description || '(no description)'}
+                </p>
+              </div>
+              <div>
+                <p className="section-label" style={{ marginBottom: '0.5rem' }}>Root Path</p>
+                <GlassPanel style={{ padding: '0.75rem 1rem' }}>
+                  <code style={{ fontSize: '0.8125rem', color: 'var(--color-text)', fontFamily: 'var(--font-mono)' }}>
+                    {selectedPlugin.root_path}
+                  </code>
+                </GlassPanel>
+              </div>
             </div>
-          </GlassPanel>
-        ))}
-      </div>
-    </div>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--color-text-dim)', fontSize: '0.875rem' }}>
+            Select a plugin to view details
+          </div>
+        )
+      }
+    />
   );
 }

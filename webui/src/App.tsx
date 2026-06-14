@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   AppHeader,
   ToastProvider,
@@ -9,13 +9,13 @@ import {
   SplitPane,
   DataList,
   Badge,
-  SessionEventsPanel,
   StreamPanel,
   StatCard,
   GlassPanel,
   TextField,
   Button,
   EmptyState,
+  LoadingState,
   useStats,
   useSessions,
   useSessionStream,
@@ -29,6 +29,7 @@ import {
   type SessionMetadata,
 } from './index';
 import { useSettings, type PortalSettings } from './components/feedback/SettingsDialog';
+import { MarketplaceURLBar } from './components/layout/Marketplace/MarketplaceURLBar';
 import { SkillsTab, type SkillInfo } from './components/SkillsTab';
 import { MCPServersTab, type MCPServerInfo } from './components/MCPServersTab';
 import { PluginsTab, type PluginInfo } from './components/PluginsTab';
@@ -71,6 +72,9 @@ function AppContent() {
   const [projectFilter, setProjectFilter] = useState<string>('');
   const [showSettings, setShowSettings] = useState(false);
   const [marketplaceBrowseView, setMarketplaceBrowseView] = useState(false);
+  const [selectedSkill, setSelectedSkill] = useState<string | null>(null);
+  const [selectedMcp, setSelectedMcp] = useState<string | null>(null);
+  const [selectedPlugin, setSelectedPlugin] = useState<string | null>(null);
 
   // Fetch skills data for the Skills tab
   const { data: skills, loading: skillsLoading } = useApi<SkillInfo[]>('/api/skills');
@@ -111,13 +115,13 @@ function AppContent() {
         onLocaleChange={setLocale}
       />
 
-      <main style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+      <main style={{ flex: 1, overflow: 'auto', padding: '0 2.5rem' }}>
         {activeTab === 'start' && <StartTab onSessionCreated={handleSessionCreated} onOpenSettings={() => setShowSettings(true)} settings={settings} />}
         {activeTab === 'sessions' && <SessionsTab selectedId={selectedSessionId} onSelect={setSelectedSessionId} projectFilter={projectFilter} onFilterChange={setProjectFilter} />}
         {activeTab === 'projects' && <ProjectsTab onNavigate={(tab) => setActiveTab(tab as TabId)} onFilter={(cwd) => { setProjectFilter(cwd); setActiveTab('sessions'); }} />}
-        {activeTab === 'skills' && <SkillsTab skills={skills ?? []} loading={skillsLoading} />}
-        {activeTab === 'mcp' && <MCPServersTab servers={mcpServers ?? []} loading={mcpServersLoading} />}
-        {activeTab === 'plugins' && <PluginsTab plugins={plugins ?? []} loading={pluginsLoading} />}
+        {activeTab === 'skills' && <SkillsTab skills={skills ?? []} loading={skillsLoading} selectedId={selectedSkill} onSelect={setSelectedSkill} />}
+        {activeTab === 'mcp' && <MCPServersTab servers={mcpServers ?? []} loading={mcpServersLoading} selectedId={selectedMcp} onSelect={setSelectedMcp} />}
+        {activeTab === 'plugins' && <PluginsTab plugins={plugins ?? []} loading={pluginsLoading} selectedId={selectedPlugin} onSelect={setSelectedPlugin} />}
         {activeTab === 'marketplace' && (
           marketplaceBrowseView ? (
             <MarketplaceBrowseView onBack={() => setMarketplaceBrowseView(false)} />
@@ -170,47 +174,41 @@ function StartTab({ onSessionCreated, onOpenSettings, settings }: StartTabProps)
   };
 
   return (
-    <div style={{ maxWidth: '800px', margin: '4rem auto', padding: '0 1.5rem', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1rem' }}>
+    <div style={{ padding: '2.5rem 0', maxWidth: '100%', boxSizing: 'border-box' }}>
+      {/* Stats row */}
+      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1rem', marginBottom: '2rem', maxWidth: '72rem' }}>
         <StatCard label="Total Sessions" value={loading ? '...' : String(stats?.total_sessions ?? 0)} />
         <StatCard label="Running" value={loading ? '...' : String(stats?.active_sessions ?? 0)} />
         <StatCard label="Total Cost" value={loading ? '...' : formatCost(stats?.total_cost_usd ?? 0)} />
         <StatCard label="Total Tokens" value={loading ? '...' : String(stats?.total_tokens ?? 0)} />
       </section>
 
-      <GlassPanel style={{ padding: '2rem' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          <h2 style={{ fontSize: '1.5rem', fontWeight: 600, margin: 0 }}>{t('portal.new_session')}</h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <TextField
-              value={prompt}
-              onChange={setPrompt}
-              placeholder="What can I help you with today?"
-              multiline
-              rows={4}
-            />
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
-              <Button variant="outline" onClick={onOpenSettings}>{t('portal.settings')}</Button>
-              <Button variant="primary" disabled={!prompt.trim() || launching} onClick={handleLaunch}>
-                {launching ? 'Launching...' : t('portal.launch')}
-              </Button>
-            </div>
+      {/* New session panel */}
+      <GlassPanel style={{ padding: '1.75rem', marginBottom: '2rem', maxWidth: '52rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          <h2 style={{ fontSize: '1.125rem', fontWeight: 800, letterSpacing: '-0.02em', margin: 0 }}>{t('portal.new_session')}</h2>
+          <TextField
+            value={prompt}
+            onChange={setPrompt}
+            placeholder="What can I help you with today?"
+            multiline
+            rows={4}
+          />
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+            <Button variant="outline" onClick={onOpenSettings}>{t('portal.settings')}</Button>
+            <Button variant="primary" disabled={!prompt.trim() || launching} onClick={handleLaunch}>
+              {launching ? 'Launching...' : t('portal.launch')}
+            </Button>
           </div>
         </div>
       </GlassPanel>
 
+      {/* Quick start */}
       <section>
         <h3 className="section-label">{t('portal.recent_projects')}</h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginTop: '1rem' }}>
-          <GlassPanel interactive style={{ padding: '1rem' }}>
-            <div style={{ fontWeight: 600 }}>jenny</div>
-            <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>PLACEHOLDER</div>
-          </GlassPanel>
-          <GlassPanel interactive style={{ padding: '1rem' }}>
-            <div style={{ fontWeight: 600 }}>jenny-portal</div>
-            <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>PLACEHOLDER</div>
-          </GlassPanel>
-        </div>
+        <p style={{ margin: '0.5rem 0 1rem', color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
+          No projects yet — start a session to see your working directory here.
+        </p>
       </section>
     </div>
   );
@@ -261,34 +259,42 @@ function SessionsTab({ selectedId: externalSelectedId, onSelect: externalOnSelec
 
   return (
     <SplitPane
-      masterWidth="320px"
+      masterWidth="360px"
       master={
-        loading ? (
-          <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--color-text-dim)' }}>Loading...</div>
-        ) : (
-          <>
+        <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, height: '100%' }}>
+          {/* Master header */}
+          <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+            <h2 style={{ margin: 0, fontSize: '0.9375rem', fontWeight: 800, letterSpacing: '-0.02em' }}>
+              Sessions
+            </h2>
             {projectFilter && (
-              <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>Filtered by project</span>
-                <Button variant="ghost" size="sm" onClick={handleShowAll}>
-                  {t('portal.show_all')}
-                </Button>
-              </div>
+              <Button variant="ghost" size="sm" onClick={handleShowAll}>
+                {t('portal.show_all')}
+              </Button>
             )}
-            <DataList
-              items={sessionItems}
-              selectedId={selectedId}
-              onSelect={setSelectedId}
-              selectionLabel="session"
-            />
-          </>
-        )
+          </div>
+          {/* Session list */}
+          <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+            {loading ? (
+              <div style={{ padding: '1.5rem', textAlign: 'center' }}>
+                <LoadingState label="Loading sessions…" variant="inline" />
+              </div>
+            ) : (
+              <DataList
+                items={sessionItems}
+                selectedId={selectedId}
+                onSelect={setSelectedId}
+                selectionLabel="session"
+              />
+            )}
+          </div>
+        </div>
       }
       detail={
         selectedId ? (
           <SessionDetail session={sessions?.find(s => s.id === selectedId)} onDeleted={handleSessionDeleted} />
         ) : (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--color-text-dim)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--color-text-dim)', fontSize: '0.875rem' }}>
             Select a session to view details
           </div>
         )
@@ -364,16 +370,33 @@ function SessionDetail({ session, onDeleted }: { session?: SessionMetadata; onDe
   };
 
   return (
-    <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', height: '100%', overflow: 'auto' }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-            <Badge variant={isRunning ? 'success' : 'default'} dot={isRunning}>{isRunning ? 'Running' : 'Exited'}</Badge>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--color-text-muted)' }}>{session?.id ?? ''}</span>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+      {/* Session header */}
+      <header style={{
+        padding: '1.25rem 1.5rem',
+        borderBottom: '1px solid var(--color-border)',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        flexShrink: 0,
+        gap: '1rem',
+      }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
+            <Badge variant={isRunning ? 'success' : 'default'} dot={isRunning}>
+              {isRunning ? 'Running' : 'Exited'}
+            </Badge>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--color-text-dim)' }}>
+              {session?.id ?? ''}
+            </span>
           </div>
-          <h2 style={{ margin: 0, fontSize: '1.25rem' }}>{session?.cwd ?? 'Session'}</h2>
+          <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {session?.cwd ?? 'Session'}
+          </h2>
         </div>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+
+        {/* Actions */}
+        <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0, alignItems: 'center' }}>
           {isRunning ? (
             <Button variant="danger" size="sm" onClick={() => session?.id && killSession(session.id)}>Stop</Button>
           ) : showResumeInput ? (
@@ -392,7 +415,6 @@ function SessionDetail({ session, onDeleted }: { session?: SessionMetadata; onDe
           ) : (
             <Button variant="primary" size="sm" onClick={() => setShowResumeInput(true)}>Resume</Button>
           )}
-          {/* Delete button is hidden for running sessions */}
           {!isRunning && (
             <Button variant="ghost" size="sm" onClick={handleDelete} disabled={deleting}>
               {deleting ? 'Deleting...' : 'Delete'}
@@ -401,21 +423,25 @@ function SessionDetail({ session, onDeleted }: { session?: SessionMetadata; onDe
         </div>
       </header>
 
-      <div className="divider" />
+      {/* Scrollable content */}
+      <div style={{ flex: 1, overflow: 'auto', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', minHeight: 0 }}>
+        {/* Stats row */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem' }}>
+          <StatCard label="Token Usage" value={session?.total_tokens ? String(session.total_tokens) : '0'} />
+          <StatCard label="Cost" value={formatCost(session?.total_cost)} />
+          <StatCard label="Model" value={session?.model ?? 'unknown'} />
+        </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem' }}>
-        <StatCard label="Token Usage" value={session?.total_tokens ? String(session.total_tokens) : '0'} />
-        <StatCard label="Cost" value={formatCost(session?.total_cost)} />
-        <StatCard label="Model" value={session?.model ?? 'unknown'} />
+        <div className="divider" />
+
+        <StreamPanel
+          title="Transcript"
+          sessionId={session?.id}
+          stream="transcript"
+          isRunning={isRunning}
+          fetchStream={async () => entries.map(e => JSON.stringify(e)).join('\n')}
+        />
       </div>
-
-      <StreamPanel
-        title="Transcript"
-        sessionId={session?.id}
-        stream="transcript"
-        isRunning={isRunning}
-        fetchStream={async () => entries.map(e => JSON.stringify(e)).join('\n')}
-      />
     </div>
   );
 }
@@ -462,15 +488,15 @@ function ProjectsTab({ onNavigate, onFilter }: ProjectsTabProps) {
 
   if (loading) {
     return (
-      <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-dim)' }}>
-        {t('common.loading')}
+      <div style={{ padding: '4rem 0', textAlign: 'center' }}>
+        <LoadingState label={t('common.loading')} variant="inline" />
       </div>
     );
   }
 
   if (groups.length === 0) {
     return (
-      <div style={{ padding: '4rem 2rem', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem' }}>
+      <div style={{ padding: '4rem 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem' }}>
         <EmptyState
           title={t('portal.no_projects')}
           hint={t('portal.no_projects.hint')}
@@ -483,8 +509,15 @@ function ProjectsTab({ onNavigate, onFilter }: ProjectsTabProps) {
   }
 
   return (
-    <div style={{ padding: '2rem', maxWidth: '1000px', margin: '0 auto' }}>
-      <h2 style={{ marginBottom: '1.5rem' }}>{t('portal.projects')}</h2>
+    <div style={{ padding: '2.5rem 0', maxWidth: '72rem' }}>
+      {/* Page header */}
+      <div style={{ marginBottom: '1.5rem' }}>
+        <h2 style={{ marginBottom: '0.25rem' }}>{t('portal.projects')}</h2>
+        <p style={{ margin: 0, color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>
+          {groups.length} {groups.length === 1 ? 'project' : 'projects'} grouped by working directory
+        </p>
+      </div>
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem' }}>
         {groups.map(group => (
           <GlassPanel
@@ -493,10 +526,10 @@ function ProjectsTab({ onNavigate, onFilter }: ProjectsTabProps) {
             style={{ padding: '1.5rem', cursor: 'pointer' }}
             onClick={() => onFilter(group.path)}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <div style={{ overflow: 'hidden' }}>
-                <h3 style={{ margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{group.name}</h3>
-                <code style={{ fontSize: '11px', color: 'var(--color-text-muted)', display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+              <div style={{ overflow: 'hidden', minWidth: 0 }}>
+                <h3 style={{ margin: 0, fontSize: '0.9375rem', fontWeight: 700, letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{group.name}</h3>
+                <code style={{ fontSize: '11px', color: 'var(--color-text-muted)', display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontFamily: 'var(--font-mono)' }}>
                   {group.path || '(no directory)'}
                 </code>
               </div>
@@ -504,13 +537,13 @@ function ProjectsTab({ onNavigate, onFilter }: ProjectsTabProps) {
                 {group.isActive ? 'Active' : 'Idle'}
               </Badge>
             </div>
-            <div style={{ marginTop: '1.5rem', display: 'flex', gap: '1rem' }}>
+            <div style={{ display: 'flex', gap: '1.5rem' }}>
               <div style={{ fontSize: '12px' }}>
-                <div style={{ color: 'var(--color-text-muted)' }}>Sessions</div>
+                <div style={{ color: 'var(--color-text-muted)', marginBottom: '0.125rem' }}>Sessions</div>
                 <div style={{ fontWeight: 600 }}>{group.totalSessions}</div>
               </div>
               <div style={{ fontSize: '12px' }}>
-                <div style={{ color: 'var(--color-text-muted)' }}>Total Cost</div>
+                <div style={{ color: 'var(--color-text-muted)', marginBottom: '0.125rem' }}>Total Cost</div>
                 <div style={{ fontWeight: 600 }}>${group.totalCost.toFixed(2)}</div>
               </div>
             </div>
@@ -571,24 +604,23 @@ function MarketplaceTab({ onNavigate, onBrowse }: MarketplaceTabProps) {
 
   if (totalInstalled === 0) {
     return (
-      <div style={{ padding: '4rem 2rem', textAlign: 'center' }}>
+      <div style={{ padding: '4rem 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1.5rem' }}>
         <EmptyState
           title={t('marketplace.empty_title')}
           hint={t('marketplace.empty_hint')}
         />
-        <div style={{ marginTop: '1.5rem' }}>
-          <Button variant="primary" onClick={onBrowse}>Browse Marketplace</Button>
-        </div>
+        <Button variant="primary" onClick={onBrowse}>Browse Marketplace</Button>
       </div>
     );
   }
 
   return (
-    <div style={{ padding: '2rem', maxWidth: '900px', margin: '0 auto' }}>
+    <div style={{ padding: '2.5rem 0', maxWidth: '72rem' }}>
+      {/* Page header */}
       <div style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
-          <h2 style={{ marginBottom: '0.5rem' }}>{t('portal.marketplace')}</h2>
-          <p style={{ color: 'var(--color-text-muted)', margin: 0 }}>
+          <h2 style={{ marginBottom: '0.25rem' }}>{t('portal.marketplace')}</h2>
+          <p style={{ color: 'var(--color-text-muted)', margin: 0, fontSize: '0.875rem' }}>
             {t('portal.marketplace_description', { count: totalInstalled })}
           </p>
         </div>
@@ -605,7 +637,7 @@ function MarketplaceTab({ onNavigate, onBrowse }: MarketplaceTabProps) {
           >
             <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>{cat.icon}</div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0 }}>{cat.name}</h3>
+              <h3 style={{ margin: 0, fontSize: '0.9375rem', fontWeight: 700 }}>{cat.name}</h3>
               <Badge variant={cat.count > 0 ? 'success' : 'default'}>
                 {t('portal.installed', { count: cat.count })}
               </Badge>
@@ -648,14 +680,12 @@ function MarketplaceBrowseView({ onBack }: MarketplaceBrowseViewProps) {
     catch { return DEFAULT_MARKETPLACE_URL; }
   });
 
-  // Single fetch helper used by both initial load and manual Browse/Reset
   const fetchFromUrl = async (url: string) => {
     setLoading(true);
     setError(null);
     try {
       const data = await apiGet<MarketplaceItem[]>(`/api/marketplace/browse?source=${encodeURIComponent(url)}`);
       setItems(data);
-      // Persist successful URL
       try { localStorage.setItem(URL_STORAGE_KEY, url); } catch {}
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch marketplace');
@@ -664,29 +694,19 @@ function MarketplaceBrowseView({ onBack }: MarketplaceBrowseViewProps) {
     }
   };
 
-  // Initial fetch on mount
-  React.useEffect(() => {
-    fetchFromUrl(sourceUrl);
-  }, []); // Only on mount
+  React.useEffect(() => { fetchFromUrl(sourceUrl); }, []);
 
-  // Get installed names from existing data using apiGet helper
   React.useEffect(() => {
     const updateInstalled = async () => {
       try {
         const skills: SkillInfo[] = await apiGet('/api/skills');
-        const names = new Set<string>(skills.map((s) => s.name));
-        setInstalled(names);
-      } catch {
-        // Ignore errors
-      }
+        setInstalled(new Set<string>(skills.map((s) => s.name)));
+      } catch {}
     };
     updateInstalled();
   }, []);
 
-  const handleBrowse = () => {
-    fetchFromUrl(sourceUrl);
-  };
-
+  const handleBrowse = () => fetchFromUrl(sourceUrl);
   const handleReset = () => {
     setSourceUrl(DEFAULT_MARKETPLACE_URL);
     fetchFromUrl(DEFAULT_MARKETPLACE_URL);
@@ -694,7 +714,6 @@ function MarketplaceBrowseView({ onBack }: MarketplaceBrowseViewProps) {
 
   const handleInstall = async (item: MarketplaceItem) => {
     if (installed.has(item.name) || installing) return;
-
     setInstalling(item.name);
     try {
       await apiPost('/api/marketplace/install', {
@@ -719,63 +738,45 @@ function MarketplaceBrowseView({ onBack }: MarketplaceBrowseViewProps) {
 
   const getTypeIcon = (type: string) => {
     switch (type) {
-      case 'skill':
-        return '⚡';
-      case 'mcp':
-        return '🔌';
-      case 'plugin':
-        return '🧩';
-      default:
-        return '📦';
+      case 'skill': return '⚡';
+      case 'mcp': return '🔌';
+      case 'plugin': return '🧩';
+      default: return '📦';
     }
   };
 
+  const pageHeader = (
+    <div style={{ marginBottom: '1.5rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
+        <Button variant="ghost" onClick={onBack}>← Back</Button>
+        <h2 style={{ margin: 0, fontSize: '1.125rem', fontWeight: 800, letterSpacing: '-0.02em' }}>{t('portal.marketplace')}</h2>
+      </div>
+      <MarketplaceURLBar
+        sourceUrl={sourceUrl}
+        onSourceUrlChange={setSourceUrl}
+        onBrowse={handleBrowse}
+        onReset={handleReset}
+        isDefaultUrl={sourceUrl === DEFAULT_MARKETPLACE_URL}
+        loading={loading}
+      />
+    </div>
+  );
+
   if (loading) {
     return (
-      <div style={{ padding: '4rem 2rem', textAlign: 'center' }}>
-        <div style={{ color: 'var(--color-text-dim)' }}>{t('common.loading')}</div>
+      <div style={{ padding: '2.5rem 0', maxWidth: '72rem' }}>
+        {pageHeader}
+        <div style={{ padding: '4rem 2rem', textAlign: 'center' }}>
+          <LoadingState label="Loading marketplace…" variant="full" />
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div style={{ padding: '2rem', maxWidth: '900px', margin: '0 auto' }}>
-        <div style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <Button variant="ghost" onClick={onBack}>← Back</Button>
-          <h2 style={{ margin: 0 }}>{t('portal.marketplace')}</h2>
-        </div>
-
-        {/* Marketplace URL input */}
-        <div style={{ marginBottom: '1.5rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          <input
-            type="text"
-            value={sourceUrl}
-            onChange={e => setSourceUrl(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleBrowse()}
-            aria-label="Marketplace URL"
-            style={{
-              flex: 1,
-              padding: '0.5rem 0.75rem',
-              borderRadius: '8px',
-              border: '1px solid var(--color-border)',
-              background: 'var(--color-surface)',
-              color: 'var(--color-text)',
-              fontFamily: 'var(--font-mono)',
-              fontSize: '0.8125rem',
-            }}
-            placeholder="https://raw.githubusercontent.com/.../index.json"
-          />
-          <Button variant="primary" size="sm" onClick={handleBrowse} disabled={loading}>
-            Browse
-          </Button>
-          {sourceUrl !== DEFAULT_MARKETPLACE_URL && (
-            <Button variant="ghost" size="sm" onClick={handleReset}>
-              Reset
-            </Button>
-          )}
-        </div>
-
+      <div style={{ padding: '2.5rem 0', maxWidth: '72rem' }}>
+        {pageHeader}
         <EmptyState
           title="Marketplace source unreachable"
           hint={`Failed to fetch from:\n${sourceUrl}\n\nEnter a custom marketplace URL above or ensure the source is available.`}
@@ -786,42 +787,8 @@ function MarketplaceBrowseView({ onBack }: MarketplaceBrowseViewProps) {
 
   if (items.length === 0) {
     return (
-      <div style={{ padding: '2rem', maxWidth: '900px', margin: '0 auto' }}>
-        <div style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <Button variant="ghost" onClick={onBack}>← Back</Button>
-          <h2 style={{ margin: 0 }}>{t('portal.marketplace')}</h2>
-        </div>
-
-        {/* Marketplace URL input */}
-        <div style={{ marginBottom: '1.5rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          <input
-            type="text"
-            value={sourceUrl}
-            onChange={e => setSourceUrl(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleBrowse()}
-            aria-label="Marketplace URL"
-            style={{
-              flex: 1,
-              padding: '0.5rem 0.75rem',
-              borderRadius: '8px',
-              border: '1px solid var(--color-border)',
-              background: 'var(--color-surface)',
-              color: 'var(--color-text)',
-              fontFamily: 'var(--font-mono)',
-              fontSize: '0.8125rem',
-            }}
-            placeholder="https://raw.githubusercontent.com/.../index.json"
-          />
-          <Button variant="primary" size="sm" onClick={handleBrowse} disabled={loading}>
-            Browse
-          </Button>
-          {sourceUrl !== DEFAULT_MARKETPLACE_URL && (
-            <Button variant="ghost" size="sm" onClick={handleReset}>
-              Reset
-            </Button>
-          )}
-        </div>
-
+      <div style={{ padding: '2.5rem 0', maxWidth: '72rem' }}>
+        {pageHeader}
         <EmptyState
           title="No items available"
           hint="No items found in the marketplace. Try a different URL or wait for items to be added."
@@ -831,60 +798,26 @@ function MarketplaceBrowseView({ onBack }: MarketplaceBrowseViewProps) {
   }
 
   return (
-    <div style={{ padding: '2rem', maxWidth: '900px', margin: '0 auto' }}>
-      <div style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
-        <Button variant="ghost" onClick={onBack}>← Back</Button>
-        <h2 style={{ margin: 0 }}>{t('portal.marketplace')}</h2>
-      </div>
-
-      {/* Marketplace URL input */}
-      <div style={{ marginBottom: '1.5rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-        <input
-          type="text"
-          value={sourceUrl}
-          onChange={e => setSourceUrl(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && handleBrowse()}
-          aria-label="Marketplace URL"
-          style={{
-            flex: 1,
-            padding: '0.5rem 0.75rem',
-            borderRadius: '8px',
-            border: '1px solid var(--color-border)',
-            background: 'var(--color-surface)',
-            color: 'var(--color-text)',
-            fontFamily: 'var(--font-mono)',
-            fontSize: '0.8125rem',
-          }}
-          placeholder="https://raw.githubusercontent.com/.../index.json"
-        />
-        <Button variant="primary" size="sm" onClick={handleBrowse} disabled={loading}>
-          Browse
-        </Button>
-        {sourceUrl !== DEFAULT_MARKETPLACE_URL && (
-          <Button variant="ghost" size="sm" onClick={handleReset}>
-            Reset
-          </Button>
-        )}
-      </div>
+    <div style={{ padding: '2.5rem 0', maxWidth: '72rem' }}>
+      {pageHeader}
 
       <div style={{ display: 'grid', gap: '1rem' }}>
         {items.map((item) => {
           const isInstalled = installed.has(item.name);
           const isInstalling = installing === item.name;
-
           return (
             <GlassPanel key={`${item.type}-${item.name}`} style={{ padding: '1.25rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div style={{ flex: 1, overflow: 'hidden' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem', flexWrap: 'wrap' }}>
                     <span style={{ fontSize: '1.25rem' }}>{getTypeIcon(item.type)}</span>
-                    <h3 style={{ margin: 0 }}>{item.name}</h3>
+                    <h3 style={{ margin: 0, fontSize: '0.9375rem', fontWeight: 700 }}>{item.name}</h3>
                     <Badge variant="default">{item.version}</Badge>
                     <Badge variant="default">{item.type}</Badge>
                   </div>
                   <p
                     style={{
-                      margin: '0.5rem 0',
+                      margin: 0,
                       color: 'var(--color-text-muted)',
                       fontSize: '0.875rem',
                       overflow: 'hidden',
@@ -896,17 +829,11 @@ function MarketplaceBrowseView({ onBack }: MarketplaceBrowseViewProps) {
                     {item.description || '(no description)'}
                   </p>
                 </div>
-                <div style={{ marginLeft: '1rem' }}>
+                <div style={{ flexShrink: 0 }}>
                   {isInstalled ? (
-                    <Button variant="primary" disabled>
-                      Installed
-                    </Button>
+                    <Button variant="primary" disabled>Installed</Button>
                   ) : (
-                    <Button
-                      variant="primary"
-                      disabled={isInstalling}
-                      onClick={() => handleInstall(item)}
-                    >
+                    <Button variant="primary" disabled={isInstalling} onClick={() => handleInstall(item)}>
                       {isInstalling ? 'Installing...' : 'Install'}
                     </Button>
                   )}
