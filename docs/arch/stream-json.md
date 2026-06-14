@@ -95,6 +95,22 @@ Emitted before each API iteration. **This is a jenny extension** — not part of
 }
 ```
 
+### `kind` Field
+
+All events include a `kind` field for Claude Code parser compatibility. **This is a jenny extension** — not part of the headless-agent reference format.
+
+```json
+{
+  "type": "assistant",
+  "kind": "assistant",
+  "message": { … },
+  "session_id": "sess_…",
+  "uuid": "…"
+}
+```
+
+The `kind` value matches the event `type` (e.g., `"assistant"`, `"user"`, `"result"`).
+
 ### `assistant` (Aggregated)
 
 Wraps the complete API-shaped assistant message after `content_block_stop`. Emitted **once per turn**, after all content blocks are received. Field order: `type`, `message`, `parent_tool_use_id`, `session_id`, `uuid`:
