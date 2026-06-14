@@ -36,7 +36,6 @@ export interface AppHeaderProps {
 
 /**
  * AppHeader — Full application header with brand, tab navigation, and controls
- * Matches Glimpse's exact header design: centered max-width, tab nav, locale/theme switchers
  *
  * @example
  * <AppHeader

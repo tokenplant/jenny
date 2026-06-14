@@ -1,5 +1,4 @@
 // ============================================
-// GLIMPSE UI — Component Library Root
 // Obsidian Glass: Dark-first glassmorphism UI framework
 // ============================================
 

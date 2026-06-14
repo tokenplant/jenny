@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { Theme } from '../types';
 
-const STORAGE_KEY = 'glimpse-theme';
+const STORAGE_KEY = 'jenny-portal';
 
 function getSystemTheme(): 'light' | 'dark' {
   if (typeof window === 'undefined') return 'dark';

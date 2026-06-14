@@ -207,7 +207,7 @@ function StartTab({ onSessionCreated, onOpenSettings, settings }: StartTabProps)
             <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>PLACEHOLDER</div>
           </GlassPanel>
           <GlassPanel interactive style={{ padding: '1rem' }}>
-            <div style={{ fontWeight: 600 }}>glimpse-ui</div>
+            <div style={{ fontWeight: 600 }}>jenny-portal</div>
             <div style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>PLACEHOLDER</div>
           </GlassPanel>
         </div>
@@ -648,23 +648,25 @@ function MarketplaceBrowseView({ onBack }: MarketplaceBrowseViewProps) {
     catch { return DEFAULT_MARKETPLACE_URL; }
   });
 
-  // Fetch marketplace items using apiGet helper
+  // Single fetch helper used by both initial load and manual Browse/Reset
+  const fetchFromUrl = async (url: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await apiGet<MarketplaceItem[]>(`/api/marketplace/browse?source=${encodeURIComponent(url)}`);
+      setItems(data);
+      // Persist successful URL
+      try { localStorage.setItem(URL_STORAGE_KEY, url); } catch {}
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch marketplace');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Initial fetch on mount
   React.useEffect(() => {
-    const fetchItems = async (url: string) => {
-      setLoading(true);
-      setError(null);
-      try {
-        const data = await apiGet<MarketplaceItem[]>(`/api/marketplace/browse?source=${encodeURIComponent(url)}`);
-        setItems(data);
-        // Persist successful URL
-        try { localStorage.setItem(URL_STORAGE_KEY, url); } catch {}
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch marketplace');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchItems(sourceUrl);
+    fetchFromUrl(sourceUrl);
   }, []); // Only on mount
 
   // Get installed names from existing data using apiGet helper
@@ -681,24 +683,13 @@ function MarketplaceBrowseView({ onBack }: MarketplaceBrowseViewProps) {
     updateInstalled();
   }, []);
 
-  const handleBrowse = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await apiGet<MarketplaceItem[]>(`/api/marketplace/browse?source=${encodeURIComponent(sourceUrl)}`);
-      setItems(data);
-      // Persist successful URL
-      try { localStorage.setItem(URL_STORAGE_KEY, sourceUrl); } catch {}
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch marketplace');
-    } finally {
-      setLoading(false);
-    }
+  const handleBrowse = () => {
+    fetchFromUrl(sourceUrl);
   };
 
   const handleReset = () => {
     setSourceUrl(DEFAULT_MARKETPLACE_URL);
-    handleBrowse();
+    fetchFromUrl(DEFAULT_MARKETPLACE_URL);
   };
 
   const handleInstall = async (item: MarketplaceItem) => {
@@ -762,6 +753,7 @@ function MarketplaceBrowseView({ onBack }: MarketplaceBrowseViewProps) {
             value={sourceUrl}
             onChange={e => setSourceUrl(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleBrowse()}
+            aria-label="Marketplace URL"
             style={{
               flex: 1,
               padding: '0.5rem 0.75rem',
@@ -807,6 +799,7 @@ function MarketplaceBrowseView({ onBack }: MarketplaceBrowseViewProps) {
             value={sourceUrl}
             onChange={e => setSourceUrl(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleBrowse()}
+            aria-label="Marketplace URL"
             style={{
               flex: 1,
               padding: '0.5rem 0.75rem',
@@ -851,6 +844,7 @@ function MarketplaceBrowseView({ onBack }: MarketplaceBrowseViewProps) {
           value={sourceUrl}
           onChange={e => setSourceUrl(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && handleBrowse()}
+          aria-label="Marketplace URL"
           style={{
             flex: 1,
             padding: '0.5rem 0.75rem',

@@ -1,5 +1,4 @@
 // ============================================
-// GLIMPSE UI — i18n System
 // Simple key-value translation with param replacement
 // ============================================
 
