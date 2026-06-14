@@ -280,6 +280,9 @@ type StreamMessage struct {
 	IsPartial         bool     `json:"is_partial,omitempty"`
 	ClaudeCodeVersion string   `json:"claude_code_version,omitempty"`
 	PermissionMode    string   `json:"permissionMode,omitempty"`
+	FastModeState     string   `json:"fast_mode_state,omitempty"`
+	OutputStyle      string   `json:"output_style,omitempty"`
+	MCPServers       []string `json:"mcp_servers,omitempty"`
 }
 
 // MarshalJSON implements custom marshaling for StreamMessage to:
@@ -349,6 +352,19 @@ func (s StreamMessage) MarshalJSON() ([]byte, error) {
 	}
 	if s.PermissionMode != "" {
 		fields = append(fields, `"permissionMode":`+encodeString(s.PermissionMode))
+	}
+	if s.FastModeState != "" {
+		fields = append(fields, `"fast_mode_state":`+encodeString(s.FastModeState))
+	}
+	if s.OutputStyle != "" {
+		fields = append(fields, `"output_style":`+encodeString(s.OutputStyle))
+	}
+	// Always emit mcp_servers as array (even if empty) for init events compatibility
+	if s.MCPServers != nil {
+		mcpBytes, _ := json.Marshal(s.MCPServers)
+		fields = append(fields, `"mcp_servers":`+string(mcpBytes))
+	} else {
+		fields = append(fields, `"mcp_servers":[]`)
 	}
 
 	return []byte("{" + strings.Join(fields, ",") + "}"), nil

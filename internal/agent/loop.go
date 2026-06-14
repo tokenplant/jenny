@@ -379,6 +379,11 @@ func RunStream(ctx context.Context, prompt string, tools []tool.Tool, cwd string
 		for i, t := range tools {
 			toolNames[i] = t.Name()
 		}
+		// Collect MCP server names from config
+		mcpServerNames := make([]string, 0, len(cfg.MCPConfig))
+		for name := range cfg.MCPConfig {
+			mcpServerNames = append(mcpServerNames, name)
+		}
 		initMsg := cli.StreamMessage{
 			Type:              "system",
 			Subtype:           "init",
@@ -390,6 +395,9 @@ func RunStream(ctx context.Context, prompt string, tools []tool.Tool, cwd string
 			Tools:             toolNames,
 			ClaudeCodeVersion: constants.Version,
 			PermissionMode:    "default",
+			FastModeState:     "off",
+			OutputStyle:      "default",
+			MCPServers:       mcpServerNames,
 		}
 		_ = cli.WriteStreamJSON(initMsg)
 	}

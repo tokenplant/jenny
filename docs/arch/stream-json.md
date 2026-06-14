@@ -65,12 +65,20 @@ First line after startup:
   "cwd": "/path/to/project",
   "session_id": "sess_…",
   "tools": ["Read", "Write", "Bash", …],
-  "mcp_servers": [{ "name": "…", "status": "connected" }],
+  "mcp_servers": [],
   "model": "deepseek-v4-flash",
   "permissionMode": "default",
+  "fast_mode_state": "off",
+  "output_style": "default",
+  "claude_code_version": "1.0.0",
   "uuid": "…"
 }
 ```
+
+Required fields for Claude Code compatibility:
+- `fast_mode_state`: Always `"off"` for regular mode. Signals whether the session uses fast mode.
+- `output_style`: Always `"default"`. Signals output formatting preferences.
+- `mcp_servers`: Array of MCP server names (strings). Empty `[]` if no MCP servers configured.
 
 Optional fields: `slash_commands`, `skills`, `plugins`.
 

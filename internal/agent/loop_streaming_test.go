@@ -1467,3 +1467,148 @@ func TestStreamJSON_HasKindField(t *testing.T) {
 	}
 }
 
+// TestInitEvent_HasFastModeState verifies AC1: init event includes fast_mode_state field with value "off".
+func TestInitEvent_HasFastModeState(t *testing.T) {
+	server := makeMockStreamServer(t, nil)
+	defer server.Close()
+
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key-00000")
+
+	cfg := StreamConfig{Enabled: true}
+	output, err := captureStreamOutput(t, &cfg)
+	if err != nil {
+		t.Fatalf("RunStream failed: %v", err)
+	}
+
+	lines := parseNDJSONLines(t, output)
+	if len(lines) == 0 {
+		t.Fatal("No output lines found")
+	}
+
+	// Find the init event (first event with type="system" and subtype="init")
+	var initEvent map[string]any
+	for _, line := range lines {
+		if line["type"] == "system" && line["subtype"] == "init" {
+			initEvent = line
+			break
+		}
+	}
+
+	if initEvent == nil {
+		t.Fatal("AC1 FAIL: no init event found in output")
+	}
+
+	// AC1: Verify fast_mode_state field exists and equals "off"
+	fastModeState, hasField := initEvent["fast_mode_state"].(string)
+	if !hasField {
+		t.Error("AC1 FAIL: init event missing fast_mode_state field")
+	} else if fastModeState != "off" {
+		t.Errorf("AC1 FAIL: fast_mode_state = %q, want \"off\"", fastModeState)
+	} else {
+		t.Log("AC1 PASS: init event has fast_mode_state=\"off\"")
+	}
+}
+
+// TestInitEvent_HasOutputStyle verifies AC2: init event includes output_style field with value "default".
+func TestInitEvent_HasOutputStyle(t *testing.T) {
+	server := makeMockStreamServer(t, nil)
+	defer server.Close()
+
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key-00000")
+
+	cfg := StreamConfig{Enabled: true}
+	output, err := captureStreamOutput(t, &cfg)
+	if err != nil {
+		t.Fatalf("RunStream failed: %v", err)
+	}
+
+	lines := parseNDJSONLines(t, output)
+	if len(lines) == 0 {
+		t.Fatal("No output lines found")
+	}
+
+	// Find the init event
+	var initEvent map[string]any
+	for _, line := range lines {
+		if line["type"] == "system" && line["subtype"] == "init" {
+			initEvent = line
+			break
+		}
+	}
+
+	if initEvent == nil {
+		t.Fatal("AC2 FAIL: no init event found in output")
+	}
+
+	// AC2: Verify output_style field exists and equals "default"
+	outputStyle, hasField := initEvent["output_style"].(string)
+	if !hasField {
+		t.Error("AC2 FAIL: init event missing output_style field")
+	} else if outputStyle != "default" {
+		t.Errorf("AC2 FAIL: output_style = %q, want \"default\"", outputStyle)
+	} else {
+		t.Log("AC2 PASS: init event has output_style=\"default\"")
+	}
+}
+
+// TestInitEvent_HasMCPServers verifies AC3: init event includes mcp_servers field as an array.
+func TestInitEvent_HasMCPServers(t *testing.T) {
+	server := makeMockStreamServer(t, nil)
+	defer server.Close()
+
+	t.Setenv("ANTHROPIC_BASE_URL", server.URL)
+	t.Setenv("ANTHROPIC_API_KEY", "test-key-00000")
+
+	cfg := StreamConfig{Enabled: true}
+	output, err := captureStreamOutput(t, &cfg)
+	if err != nil {
+		t.Fatalf("RunStream failed: %v", err)
+	}
+
+	lines := parseNDJSONLines(t, output)
+	if len(lines) == 0 {
+		t.Fatal("No output lines found")
+	}
+
+	// Find the init event
+	var initEvent map[string]any
+	for _, line := range lines {
+		if line["type"] == "system" && line["subtype"] == "init" {
+			initEvent = line
+			break
+		}
+	}
+
+	if initEvent == nil {
+		t.Fatal("AC3 FAIL: no init event found in output")
+	}
+
+	// AC3: Verify mcp_servers field exists and is an array
+	mcpServers, hasField := initEvent["mcp_servers"]
+	if !hasField {
+		t.Error("AC3 FAIL: init event missing mcp_servers field")
+		return
+	}
+
+	mcpArray, ok := mcpServers.([]any)
+	if !ok {
+		t.Error("AC3 FAIL: mcp_servers is not an array")
+		return
+	}
+
+	// Verify it's an empty array (no MCP servers configured)
+	if len(mcpArray) != 0 {
+		t.Logf("AC3: mcp_servers has %d server(s) (expected empty array)", len(mcpArray))
+	} else {
+		t.Log("AC3 PASS: init event has mcp_servers=[] (empty array)")
+	}
+
+	// Also verify all elements are strings
+	for i, item := range mcpArray {
+		if _, ok := item.(string); !ok {
+			t.Errorf("AC3 FAIL: mcp_servers[%d] is not a string", i)
+		}
+	}
+}
