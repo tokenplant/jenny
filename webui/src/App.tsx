@@ -628,6 +628,9 @@ function MarketplaceTab({ onNavigate, onBrowse }: MarketplaceTabProps) {
 
 // ── Marketplace Browse View ─────────────────────────────────────
 
+const DEFAULT_MARKETPLACE_URL = 'https://raw.githubusercontent.com/ipy/jenny-marketplace/main/index.json';
+const URL_STORAGE_KEY = 'jenny-marketplace-url';
+
 interface MarketplaceBrowseViewProps {
   onBack: () => void;
 }
@@ -640,24 +643,29 @@ function MarketplaceBrowseView({ onBack }: MarketplaceBrowseViewProps) {
   const [error, setError] = React.useState<string | null>(null);
   const [installed, setInstalled] = React.useState<Set<string>>(new Set());
   const [installing, setInstalling] = React.useState<string | null>(null);
+  const [sourceUrl, setSourceUrl] = React.useState<string>(() => {
+    try { return localStorage.getItem(URL_STORAGE_KEY) || DEFAULT_MARKETPLACE_URL; }
+    catch { return DEFAULT_MARKETPLACE_URL; }
+  });
 
   // Fetch marketplace items using apiGet helper
   React.useEffect(() => {
-    const fetchItems = async () => {
+    const fetchItems = async (url: string) => {
       setLoading(true);
       setError(null);
       try {
-        const data = await apiGet<MarketplaceItem[]>('/api/marketplace/browse');
+        const data = await apiGet<MarketplaceItem[]>(`/api/marketplace/browse?source=${encodeURIComponent(url)}`);
         setItems(data);
+        // Persist successful URL
+        try { localStorage.setItem(URL_STORAGE_KEY, url); } catch {}
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch marketplace');
-        toast.addToast({ kind: 'error', title: 'Failed to load marketplace', message: err instanceof Error ? err.message : 'Unknown error' });
       } finally {
         setLoading(false);
       }
     };
-    fetchItems();
-  }, [toast]);
+    fetchItems(sourceUrl);
+  }, []); // Only on mount
 
   // Get installed names from existing data using apiGet helper
   React.useEffect(() => {
@@ -672,6 +680,26 @@ function MarketplaceBrowseView({ onBack }: MarketplaceBrowseViewProps) {
     };
     updateInstalled();
   }, []);
+
+  const handleBrowse = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await apiGet<MarketplaceItem[]>(`/api/marketplace/browse?source=${encodeURIComponent(sourceUrl)}`);
+      setItems(data);
+      // Persist successful URL
+      try { localStorage.setItem(URL_STORAGE_KEY, sourceUrl); } catch {}
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch marketplace');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleReset = () => {
+    setSourceUrl(DEFAULT_MARKETPLACE_URL);
+    handleBrowse();
+  };
 
   const handleInstall = async (item: MarketplaceItem) => {
     if (installed.has(item.name) || installing) return;
@@ -724,10 +752,41 @@ function MarketplaceBrowseView({ onBack }: MarketplaceBrowseViewProps) {
       <div style={{ padding: '2rem', maxWidth: '900px', margin: '0 auto' }}>
         <div style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <Button variant="ghost" onClick={onBack}>← Back</Button>
+          <h2 style={{ margin: 0 }}>{t('portal.marketplace')}</h2>
         </div>
+
+        {/* Marketplace URL input */}
+        <div style={{ marginBottom: '1.5rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <input
+            type="text"
+            value={sourceUrl}
+            onChange={e => setSourceUrl(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleBrowse()}
+            style={{
+              flex: 1,
+              padding: '0.5rem 0.75rem',
+              borderRadius: '8px',
+              border: '1px solid var(--color-border)',
+              background: 'var(--color-surface)',
+              color: 'var(--color-text)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: '0.8125rem',
+            }}
+            placeholder="https://raw.githubusercontent.com/.../index.json"
+          />
+          <Button variant="primary" size="sm" onClick={handleBrowse} disabled={loading}>
+            Browse
+          </Button>
+          {sourceUrl !== DEFAULT_MARKETPLACE_URL && (
+            <Button variant="ghost" size="sm" onClick={handleReset}>
+              Reset
+            </Button>
+          )}
+        </div>
+
         <EmptyState
-          title={t('common.error')}
-          hint={error}
+          title="Marketplace source unreachable"
+          hint={`Failed to fetch from:\n${sourceUrl}\n\nEnter a custom marketplace URL above or ensure the source is available.`}
         />
       </div>
     );
@@ -738,10 +797,41 @@ function MarketplaceBrowseView({ onBack }: MarketplaceBrowseViewProps) {
       <div style={{ padding: '2rem', maxWidth: '900px', margin: '0 auto' }}>
         <div style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <Button variant="ghost" onClick={onBack}>← Back</Button>
+          <h2 style={{ margin: 0 }}>{t('portal.marketplace')}</h2>
         </div>
+
+        {/* Marketplace URL input */}
+        <div style={{ marginBottom: '1.5rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <input
+            type="text"
+            value={sourceUrl}
+            onChange={e => setSourceUrl(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleBrowse()}
+            style={{
+              flex: 1,
+              padding: '0.5rem 0.75rem',
+              borderRadius: '8px',
+              border: '1px solid var(--color-border)',
+              background: 'var(--color-surface)',
+              color: 'var(--color-text)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: '0.8125rem',
+            }}
+            placeholder="https://raw.githubusercontent.com/.../index.json"
+          />
+          <Button variant="primary" size="sm" onClick={handleBrowse} disabled={loading}>
+            Browse
+          </Button>
+          {sourceUrl !== DEFAULT_MARKETPLACE_URL && (
+            <Button variant="ghost" size="sm" onClick={handleReset}>
+              Reset
+            </Button>
+          )}
+        </div>
+
         <EmptyState
           title="No items available"
-          hint="No items found in the marketplace."
+          hint="No items found in the marketplace. Try a different URL or wait for items to be added."
         />
       </div>
     );
@@ -752,6 +842,35 @@ function MarketplaceBrowseView({ onBack }: MarketplaceBrowseViewProps) {
       <div style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
         <Button variant="ghost" onClick={onBack}>← Back</Button>
         <h2 style={{ margin: 0 }}>{t('portal.marketplace')}</h2>
+      </div>
+
+      {/* Marketplace URL input */}
+      <div style={{ marginBottom: '1.5rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+        <input
+          type="text"
+          value={sourceUrl}
+          onChange={e => setSourceUrl(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && handleBrowse()}
+          style={{
+            flex: 1,
+            padding: '0.5rem 0.75rem',
+            borderRadius: '8px',
+            border: '1px solid var(--color-border)',
+            background: 'var(--color-surface)',
+            color: 'var(--color-text)',
+            fontFamily: 'var(--font-mono)',
+            fontSize: '0.8125rem',
+          }}
+          placeholder="https://raw.githubusercontent.com/.../index.json"
+        />
+        <Button variant="primary" size="sm" onClick={handleBrowse} disabled={loading}>
+          Browse
+        </Button>
+        {sourceUrl !== DEFAULT_MARKETPLACE_URL && (
+          <Button variant="ghost" size="sm" onClick={handleReset}>
+            Reset
+          </Button>
+        )}
       </div>
 
       <div style={{ display: 'grid', gap: '1rem' }}>
