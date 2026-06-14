@@ -185,8 +185,7 @@ func TestAC8_DoubleStart(t *testing.T) {
 	_, err = startWithConfig(ctx, tmpDir, 10*time.Minute)
 	if err == nil {
 		t.Error("AC8 FAIL: second portal start should fail")
-	}
-	if !strings.Contains(err.Error(), "portal already running") {
+	} else if !strings.Contains(err.Error(), "portal already running") {
 		t.Errorf("AC8 FAIL: error should mention 'portal already running', got: %v", err)
 	}
 
