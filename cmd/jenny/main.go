@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"maps"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 
 	"github.com/ipy/jenny/internal/agent"
 	"github.com/ipy/jenny/internal/cli"
@@ -311,8 +313,9 @@ func run() error {
 	agentTool := tool.NewAgentToolWithSwarms(localRunner, asyncRunner, flags.SwarmsEnabled)
 	tools = append(tools, agentTool)
 
-	// Create context
-	ctx := context.Background()
+	// Create context that cancels on Ctrl+C (SIGINT) or SIGTERM
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	// Determine redact mode: CLI flag wins over JENNY_REDACT env var.
 	// Default is "recover" if neither is set.

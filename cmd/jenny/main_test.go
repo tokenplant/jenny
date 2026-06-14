@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
 	"maps"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 	"testing"
 
 	"github.com/ipy/jenny/internal/agent"
@@ -778,5 +781,38 @@ func TestShouldLaunchPortal_OtherArgs(t *testing.T) {
 		if shouldLaunchPortal() {
 			t.Errorf("shouldLaunchPortal() = true for args %v, want false (CLI mode)", args)
 		}
+	}
+}
+
+// TestSignalContext_Cancellable tests AC1/AC2: signal.NotifyContext creates a
+// cancellable context that cancels on SIGINT/SIGTERM.
+func TestSignalContext_Cancellable(t *testing.T) {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	// AC1: context should not be cancelled initially
+	if ctx.Err() != nil {
+		t.Errorf("ctx.Err() = %v, want nil (not cancelled)", ctx.Err())
+	}
+
+	// Simulate signal by calling stop()
+	stop()
+
+	// AC1: context should be cancelled after signal
+	if ctx.Err() != context.Canceled {
+		t.Errorf("ctx.Err() = %v, want context.Canceled", ctx.Err())
+	}
+}
+
+// TestSignalContext_MultipleSignals tests that calling stop() multiple times is safe.
+func TestSignalContext_MultipleSignals(t *testing.T) {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	stop()
+	stop() // Should not panic
+
+	if ctx.Err() != context.Canceled {
+		t.Errorf("ctx.Err() = %v, want context.Canceled", ctx.Err())
 	}
 }
