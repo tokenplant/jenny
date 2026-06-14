@@ -249,13 +249,21 @@ Always the last line on successful run. Note: `parent_tool_use_id` is NOT presen
       "maxOutputTokens": 32000
     }
   },
+  "ttft_ms": 1203,
+  "terminal_reason": "completed",
+  "api_error_status": null,
   "permission_denials": [],
   "fast_mode_state": "off",
   "uuid": "…"
 }
 ```
 
-Field order: `type`, `subtype`, `is_error`, `duration_ms`, `duration_api_ms`, `num_turns`, `result`, `stop_reason`, `session_id`, `total_cost_usd`, `usage`, `modelUsage`, `permission_denials`, `fast_mode_state`, `uuid`.
+Field order: `type`, `subtype`, `is_error`, `duration_ms`, `duration_api_ms`, `num_turns`, `result`, `stop_reason`, `session_id`, `total_cost_usd`, `usage`, `modelUsage`, `ttft_ms`, `terminal_reason`, `api_error_status`, `permission_denials`, `fast_mode_state`, `uuid`.
+
+New result event fields:
+- `ttft_ms`: Time to first token in milliseconds. Measured from API call start to first content block received. Omitted if zero.
+- `terminal_reason`: Maps the stop reason to a stable string. `"completed"` for end_turn/stop_sequence, `"max_tokens"` for max_tokens. Omitted if empty.
+- `api_error_status`: `null` on successful API response. Contains the error message string when the API call fails permanently (after retry exhaustion). Always present.
 
 Error subtypes: `error`, `error_max_tokens`, `error_max_turns`, `error_budget`.
 
