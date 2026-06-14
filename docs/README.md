@@ -70,6 +70,7 @@ Specifications for the core agent engine and infrastructure.
 | [mcp-client.md](./arch/mcp-client.md) | MCP stdio client implementation |
 | [mcp-config.md](./arch/mcp-config.md) | MCP server configuration |
 | [message-normalization.md](./arch/message-normalization.md) | Cross-provider message normalization |
+| [multi-provider-routing.md](./arch/multi-provider-routing.md) | Multi-provider and model routing with stickiness |
 | [parallel-tool-execution.md](./arch/parallel-tool-execution.md) | Concurrent tool execution |
 | [provider-architecture.md](./arch/provider-architecture.md) | API provider and client architecture |
 | [provider-aware-fixes.md](./arch/provider-aware-fixes.md) | Provider-specific API fix rationale |
@@ -171,6 +172,7 @@ Registry → QueryEngine → git → system prompt → Read/Glob/Grep → securi
 | Feature | Spec |
 |---------|------|
 | Message normalization | [message-normalization.md](./arch/message-normalization.md), [universal-normalization-architecture.md](./arch/universal-normalization-architecture.md) |
+| Multi-provider routing | [multi-provider-routing.md](./arch/multi-provider-routing.md) |
 | Context compaction | [context-compaction.md](./arch/context-compaction.md) |
 | Sandbox | [sandbox.md](./patterns/sandbox.md) |
 | Notebook edit | [notebook-edit.md](./tools/notebook-edit.md) |

@@ -50,6 +50,7 @@ type Portal struct {
 	mu          sync.Mutex
 	lastAccess  time.Time
 	lockPath    string
+	lockFile    *os.File
 	pid         int
 	exitFunc    func() // injectable exit function for testing
 }
@@ -170,33 +171,37 @@ func (p *Portal) writeLockfileWithLock() error {
 		}
 		return fmt.Errorf("portal already running")
 	}
-	defer lockFile.Close()
 
 	// We have the lock - check if it's stale or fresh
-	// Read the existing lockfile (if any) to check PID
-	if existingData, err := os.ReadFile(p.lockPath); err == nil {
-		var existingLF LockfileData
-		if json.Unmarshal(existingData, &existingLF) == nil {
-			// Check if the existing PID is alive
-			if isProcessAlive(existingLF.PID) {
-				// Existing portal is still running - we lost the race
-				return fmt.Errorf("portal already running on port %d", existingLF.Port)
-			}
+	// Use the ALREADY OPEN lockFile to read data, avoiding the "sharing violation" on Windows.
+	var existingLF LockfileData
+	decoder := json.NewDecoder(lockFile)
+	if err := decoder.Decode(&existingLF); err == nil {
+		// Check if the existing PID is alive
+		if isProcessAlive(existingLF.PID) {
+			lockFile.Close()
+			return fmt.Errorf("portal already running on port %d", existingLF.Port)
 		}
 	}
 
 	// Write directly to the locked file.
 	// We don't use os.Rename here because it fails on Windows when the destination is open.
 	if err := lockFile.Truncate(0); err != nil {
+		lockFile.Close()
 		return fmt.Errorf("truncating lockfile: %w", err)
 	}
 	if _, err := lockFile.Seek(0, 0); err != nil {
+		lockFile.Close()
 		return fmt.Errorf("seeking lockfile: %w", err)
 	}
 	if _, err := lockFile.Write(data); err != nil {
+		lockFile.Close()
 		return fmt.Errorf("writing lockfile: %w", err)
 	}
 
+	// Store the lock handle so it's held for the duration of the portal process.
+	// It will be closed in p.Shutdown().
+	p.lockFile = lockFile
 	return nil
 }
 
@@ -220,9 +225,14 @@ func (p *Portal) Shutdown(ctx context.Context) error {
 		p.idleTimer.Stop()
 	}
 
-	// Remove URL file first, then lockfile
+	// Remove URL file first
 	urlPath := p.lockPath[:len(p.lockPath)-len("portal.lock")] + "portal.url"
 	os.Remove(urlPath)
+
+	// Close and remove lockfile
+	if p.lockFile != nil {
+		p.lockFile.Close()
+	}
 	os.Remove(p.lockPath)
 
 	// Shutdown server

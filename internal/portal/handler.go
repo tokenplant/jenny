@@ -896,6 +896,7 @@ func (p *Portal) handleListSkills(w http.ResponseWriter, r *http.Request) {
 
 		// Replace home dir with tilde-prefixed path for display
 		displayPath := strings.Replace(skillPath, homeDir, "~/.jenny", 1)
+		displayPath = filepath.ToSlash(displayPath)
 
 		skills = append(skills, SkillInfo{
 			Name:           entry.Name(),
