@@ -249,6 +249,7 @@ func (e *QueryEngine) compactMessages(ctx context.Context, messages []api.Messag
 const inSessionCompactPrompt = `The context window is approaching its limit. Provide a comprehensive summary of our entire conversation so far.
 
 Include:
+- Explicit goal of the initial request
 - All key decisions and conclusions
 - Code changes made with file paths
 - Outstanding tasks or unresolved questions
@@ -311,7 +312,7 @@ func (e *QueryEngine) forkSummaryAgent(ctx context.Context, messages []api.Messa
 	summaryMessages := prepareSummaryMessages(messages)
 
 	// Create a summary system prompt
-	summarySystemPrompt := "You are a helpful assistant that summarizes conversations concisely. Provide a brief summary of the key points from the conversation above. Focus on the essential information, decisions made, and any outstanding tasks or questions."
+	summarySystemPrompt := "You are a helpful assistant that summarizes conversations concisely. Provide a brief summary of the key points from the conversation above. Focus on the initial goal, essential information, decisions made, and any outstanding tasks or questions."
 
 	// Make the summary API call with retries
 	var lastErr error
