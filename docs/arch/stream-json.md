@@ -34,7 +34,7 @@ Every event carries these fields in declaration order:
 |-------|------|-------------|
 | `type` | string | Event type identifier |
 | `session_id` | string | Stable session identifier |
-| `parent_tool_use_id` | string\|null | Parent tool use ID for nested events; `null` for top-level |
+| `parent_tool_use_id` | string | Parent tool use ID for nested events; omitted when nil |
 | `uuid` | string | Unique event identifier |
 
 ## Message Sequence (Typical Turn)
@@ -306,7 +306,7 @@ When output is capped due to `max_tokens`, the `result` event includes `error_ma
 - **AC4:** `session_id` consistent across init, turns, and result.
 - **AC5:** Partial events only when `--include-partial-messages` and SSE enabled.
 - **AC6:** `total_cost_usd` appears exactly once — on the terminal `result` event.
-- **AC7:** Every event carries `parent_tool_use_id` (null for top-level).
+- **AC7:** `parent_tool_use_id` is present when non-nil; omitted when nil (top-level events).
 - **AC8:** Field order matches reference format: `type`, then `event|message|payload`, then `session_id`, `parent_tool_use_id`, `uuid`, then remaining fields.
 
 ## Related
