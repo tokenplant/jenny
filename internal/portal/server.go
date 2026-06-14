@@ -218,25 +218,13 @@ func (p *Portal) AuthToken() string {
 // Shutdown gracefully shuts down the portal server.
 func (p *Portal) Shutdown(ctx context.Context) error {
 	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	// Stop idle timer
 	if p.idleTimer != nil {
 		p.idleTimer.Stop()
 	}
+	p.mu.Unlock()
 
-	// Remove URL file first
-	urlPath := p.lockPath[:len(p.lockPath)-len("portal.lock")] + "portal.url"
-	os.Remove(urlPath)
-
-	// Close and remove lockfile
-	if p.lockFile != nil {
-		p.lockFile.Close()
-	}
-	os.Remove(p.lockPath)
-
-	// Shutdown server
-	return p.server.Shutdown(ctx)
+	p.terminate(false)
+	return nil
 }
 
 // PortalURLFile returns the path to the portal URL file.
@@ -260,17 +248,34 @@ func (p *Portal) resetIdleTimer() {
 		p.idleTimer.Stop()
 	}
 	p.idleTimer = time.AfterFunc(p.idleTimeout, func() {
-		// Timer expired - exit
-		// Clean up URL file first, then lockfile
-		urlPath := p.lockPath[:len(p.lockPath)-len("portal.lock")] + "portal.url"
-		os.Remove(urlPath)
-		os.Remove(p.lockPath)
+		p.terminate(true)
+	})
+}
+
+// terminate performs cleanup and either exits the process or shuts down the server.
+func (p *Portal) terminate(shouldExit bool) {
+	// Clean up URL file first
+	urlPath := p.lockPath[:len(p.lockPath)-len("portal.lock")] + "portal.url"
+	os.Remove(urlPath)
+
+	// Close and remove lockfile
+	p.mu.Lock()
+	if p.lockFile != nil {
+		p.lockFile.Close()
+		p.lockFile = nil
+	}
+	p.mu.Unlock()
+	os.Remove(p.lockPath)
+
+	if shouldExit {
 		if p.exitFunc != nil {
 			p.exitFunc()
 		} else {
 			os.Exit(0)
 		}
-	})
+	} else {
+		p.server.Shutdown(context.Background())
+	}
 }
 
 // runIdleMonitor monitors the last access time and triggers shutdown.
@@ -287,15 +292,7 @@ func (p *Portal) runIdleMonitor(ctx context.Context) {
 			idle := time.Since(p.lastAccess)
 			p.mu.Unlock()
 			if idle >= p.idleTimeout {
-				// Clean up URL file first, then lockfile
-				urlPath := p.lockPath[:len(p.lockPath)-len("portal.lock")] + "portal.url"
-				os.Remove(urlPath)
-				os.Remove(p.lockPath)
-				if p.exitFunc != nil {
-					p.exitFunc()
-				} else {
-					os.Exit(0)
-				}
+				p.terminate(true)
 				return
 			}
 		}

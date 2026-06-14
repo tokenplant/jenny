@@ -17,8 +17,11 @@ func flock(path string) (*os.File, error) {
 		return nil, err
 	}
 
-	// Use LockFileEx for Windows byte-range exclusive locking via golang.org/x/sys/windows
+	// Use LockFileEx for Windows byte-range exclusive locking via golang.org/x/sys/windows.
+	// We lock a range beyond the typical size of the lockfile (e.g., at offset 4096)
+	// so that other processes can still read the JSON data at the beginning of the file.
 	var ol windows.Overlapped
+	ol.Offset = 4096
 	if err := windows.LockFileEx(windows.Handle(f.Fd()), windows.LOCKFILE_EXCLUSIVE_LOCK|windows.LOCKFILE_FAIL_IMMEDIATELY, 0, 1, 0, &ol); err != nil {
 		f.Close()
 		return nil, err
