@@ -6,8 +6,6 @@ status: complete
 spec: complete
 code: complete
 version: "0.4.0"
-iteration: 39
-milestone: Iteration 39 — portal is complete at v0.4.0, no remaining work
 package: internal/portal
 depends_on:
   - agent-loop

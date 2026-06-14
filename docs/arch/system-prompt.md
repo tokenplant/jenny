@@ -127,7 +127,7 @@ When tool search enabled: omit deferred tool **descriptions** from API schemas (
 - **AC3:** Git status injected with 2000 char cap.
 - **AC4:** Deferred tools omitted from schemas when tool search on.
 - **AC5:** appendSystemPrompt appended unless override suppresses.
-- **AC6:** Default intro opens with "You are an AI assistant"
+- **AC6:** Default intro includes "autonomous" and "non-interactive" identity keywords
 - **AC7:** Assembled prompt >= 1000 chars with default tools and no git repo
 - **AC8:** Default intro includes bash-safety language ("destructive" or "rm -rf")
 - **AC9:** Default prompt names Glob and Grep as search tools

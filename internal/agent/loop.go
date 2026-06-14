@@ -147,7 +147,7 @@ func RebuildMessages(entries []session.TranscriptEntry) []api.Message {
 }
 
 // defaultSystemPrompt is the system prompt sent to the API.
-const defaultSystemPrompt = "You are an AI assistant that can use tools to help answer user questions. When you use tools, carefully review the results and incorporate them into your response."
+const defaultSystemPrompt = "You are an autonomous AI assistant with tools to search, read, write, and execute safe operations. You operate in a non-interactive mode."
 
 // Run executes the agent loop with the given prompt and tools.
 // maxIterations controls the maximum loop iterations; <= 0 means unlimited.

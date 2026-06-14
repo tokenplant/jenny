@@ -56,7 +56,7 @@ Continue with user prompt
 The frozen system prompt is persisted as a transcript `state` entry with field `SystemPrompt`:
 
 ```
-{"type":"state","system_prompt":"You are an AI assistant with access to..."}
+{"type":"state","system_prompt":"You are an expert software engineering assistant with tools..."}
 ```
 
 On resume loaded at `engine.go:131-149`:

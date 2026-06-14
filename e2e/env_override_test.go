@@ -129,7 +129,7 @@ func TestSystemPromptOverride(t *testing.T) {
 	if !strings.Contains(sysText, "CUSTOM_SYS_SENTINEL") {
 		t.Errorf("system prompt does not contain CUSTOM_SYS_SENTINEL")
 	}
-	if strings.Contains(sysText, "You are an AI assistant") {
+	if (strings.Contains(sysText, "autonomous") || strings.Contains(sysText, "non-interactive")) {
 		t.Error("system prompt still contains default text after --system-prompt override")
 	}
 }
@@ -155,7 +155,7 @@ func TestAppendSystemPrompt(t *testing.T) {
 	}
 
 	sysText := extractSystemText(reqs[0].Body)
-	if !strings.Contains(sysText, "You are an AI assistant") {
+	if !(strings.Contains(sysText, "autonomous") || strings.Contains(sysText, "non-interactive")) {
 		t.Error("system prompt missing default text after --append-system-prompt")
 	}
 	if !strings.Contains(sysText, "APPEND_SENTINEL_XYZ") {
