@@ -60,6 +60,54 @@ func Compare(tc *TestCase, actual *CapturedOutput, workDir string) CompareResult
 	}
 }
 
+// CompareJSONLines compares jenny's parsed NDJSON lines against the reference binary's output.
+// It returns a list of human-readable differences for each event.
+func CompareJSONLines(jennyResult, refResult RunResult) []string {
+	var diffs []string
+	minLines := len(jennyResult.Parsed)
+	if len(refResult.Parsed) < minLines {
+		minLines = len(refResult.Parsed)
+	}
+	for i := 0; i < minLines; i++ {
+		diff := diffFields(jennyResult.Parsed[i], refResult.Parsed[i])
+		diffs = append(diffs, diff...)
+	}
+	if len(jennyResult.Parsed) != len(refResult.Parsed) {
+		diffs = append(diffs, fmt.Sprintf(
+			"line count: jenny=%d reference=%d",
+			len(jennyResult.Parsed), len(refResult.Parsed)))
+	}
+	return diffs
+}
+
+// diffFields compares two JSON objects field by field and returns differences.
+func diffFields(jenny, ref map[string]any) []string {
+	var diffs []string
+	// Check ref keys not in jenny
+	for k := range ref {
+		if _, ok := jenny[k]; !ok {
+			diffs = append(diffs, fmt.Sprintf("missing field %q in jenny", k))
+		}
+	}
+	// Check jenny keys not in ref
+	for k := range jenny {
+		if _, ok := ref[k]; !ok {
+			diffs = append(diffs, fmt.Sprintf("extra field %q in jenny", k))
+		}
+	}
+	// Check common key values
+	for k, jv := range jenny {
+		rv, ok := ref[k]
+		if !ok {
+			continue
+		}
+		if fmt.Sprintf("%v", jv) != fmt.Sprintf("%v", rv) {
+			diffs = append(diffs, fmt.Sprintf("field %q differs: jenny=%v reference=%v", k, jv, rv))
+		}
+	}
+	return diffs
+}
+
 func compareOutput(prefix string, exp *StdoutExpectation, actual string) []DiffDetail {
 	var diffs []DiffDetail
 

@@ -107,7 +107,7 @@ func (sr *SuiteRunner) RunOne(tc *TestCase) TestResult {
 	// Build args and env based on invocation kind, expanding ${WORK_DIR}
 	args, env := sr.buildArgs(tc), sr.buildEnv(tc, workDir)
 
-	// Run the target
+	// Run the target (jenny)
 	res := RunTargetInDir(nil, sr.Config, workDir, env, args...)
 
 	// Capture output
@@ -126,19 +126,30 @@ func (sr *SuiteRunner) RunOne(tc *TestCase) TestResult {
 		}
 	}
 
+	// Run reference binary comparison if requested
+	var refResult RunResult
+	if tc.Expected.StreamJSON != nil && tc.Expected.StreamJSON.CompareToReference {
+		refResult = RunReferenceTargetInDir(nil, sr.Config, workDir, env, args...)
+	}
+
 	// Compare against expectations
 	cmp := Compare(tc, actual, workDir)
 
 	if cmp.Pass {
-		return TestResult{
+		result := TestResult{
 			ID:       tc.ID,
 			Category: tc.Category,
 			Status:   "pass",
 			Duration: time.Since(start).Milliseconds(),
 		}
+		// If reference comparison was requested, compute and store diffs
+		if refResult.Parsed != nil {
+			result.ReferenceDiff = CompareJSONLines(res, refResult)
+		}
+		return result
 	}
 
-	return TestResult{
+	result := TestResult{
 		ID:       tc.ID,
 		Category: tc.Category,
 		Status:   "fail",
@@ -146,6 +157,11 @@ func (sr *SuiteRunner) RunOne(tc *TestCase) TestResult {
 		Diff:     cmp.Diff,
 		Actual:   actual,
 	}
+	// If reference comparison was requested, compute and store diffs
+	if refResult.Parsed != nil {
+		result.ReferenceDiff = CompareJSONLines(res, refResult)
+	}
+	return result
 }
 
 // buildArgs constructs CLI args from the invocation spec.

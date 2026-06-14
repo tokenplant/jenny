@@ -432,3 +432,106 @@ func TestStreamJSONSessionIDMatch(t *testing.T) {
 		},
 	})
 }
+
+// TestStreamJSON_ReferenceAlignment runs stream-json envelope tests against both jenny
+// and the reference binary (if REFERENCE_BIN is set). It compares field-by-field and
+// logs any differences found between the two outputs.
+func TestStreamJSON_ReferenceAlignment(t *testing.T) {
+	runE2ESuite(t, []*harness.TestCase{
+		{
+			ID:          "stream-json.alignment.all-lines-valid-json",
+			Category:    "stream-json",
+			Description: "every stdout line is valid JSON in stream-json mode (vs reference)",
+			Target: harness.TargetInvocation{
+				Kind:     "prompt",
+				Prompt:   "say hi",
+				Format:   "stream-json",
+				Cassette: "echo-hello",
+			},
+			Expected: harness.ExpectedBehavior{
+				ExitCode: 0,
+				StreamJSON: &harness.StreamJSONExpectation{
+					CompareToReference: true,
+					AllLinesValidJSON:  true,
+				},
+			},
+		},
+		{
+			ID:          "stream-json.alignment.session-id-consistent",
+			Category:    "stream-json",
+			Description: "session_id is identical across all events (vs reference)",
+			Target: harness.TargetInvocation{
+				Kind:     "prompt",
+				Prompt:   "say hi",
+				Format:   "stream-json",
+				Cassette: "echo-hello",
+			},
+			Expected: harness.ExpectedBehavior{
+				ExitCode: 0,
+				StreamJSON: &harness.StreamJSONExpectation{
+					CompareToReference:  true,
+					SessionIDConsistent: true,
+				},
+			},
+		},
+		{
+			ID:          "stream-json.alignment.uuids-unique",
+			Category:    "stream-json",
+			Description: "every event uuid is unique (vs reference)",
+			Target: harness.TargetInvocation{
+				Kind:     "prompt",
+				Prompt:   "say hi",
+				Format:   "stream-json",
+				Cassette: "echo-hello",
+			},
+			Expected: harness.ExpectedBehavior{
+				ExitCode: 0,
+				StreamJSON: &harness.StreamJSONExpectation{
+					CompareToReference: true,
+					UUIDsUnique:        true,
+				},
+			},
+		},
+		{
+			ID:          "stream-json.alignment.init-event-type",
+			Category:    "stream-json",
+			Description: "init event has type=system subtype=init (vs reference)",
+			Target: harness.TargetInvocation{
+				Kind:     "prompt",
+				Prompt:   "say hi",
+				Format:   "stream-json",
+				Cassette: "echo-hello",
+			},
+			Expected: harness.ExpectedBehavior{
+				ExitCode: 0,
+				StreamJSON: &harness.StreamJSONExpectation{
+					CompareToReference: true,
+					FirstEvent: &harness.EventExpectation{
+						Type:    "system",
+						Subtype: "init",
+					},
+				},
+			},
+		},
+		{
+			ID:          "stream-json.alignment.final-result-event",
+			Category:    "stream-json",
+			Description: "final event is type=result (vs reference)",
+			Target: harness.TargetInvocation{
+				Kind:     "prompt",
+				Prompt:   "say hi",
+				Format:   "stream-json",
+				Cassette: "echo-hello",
+			},
+			Expected: harness.ExpectedBehavior{
+				ExitCode: 0,
+				StreamJSON: &harness.StreamJSONExpectation{
+					CompareToReference: true,
+					LastEvent: &harness.EventExpectation{
+						Type: "result",
+					},
+				},
+			},
+		},
+	})
+}

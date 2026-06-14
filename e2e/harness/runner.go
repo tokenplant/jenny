@@ -38,6 +38,10 @@ var (
 	binaryOnce sync.Once
 	binaryPath string
 	binaryErr  error
+
+	referenceOnce sync.Once
+	referenceErr error
+	referencePath string
 )
 
 // RunTarget builds the target binary (once per test binary) and runs it with
@@ -130,8 +134,15 @@ func RunTargetInDir(t E2ETB, cfg *Config, dir string, env []string, args ...stri
 }
 
 // buildBinary compiles the target binary and returns its path.
+// If JENNY_BIN environment variable is set, it returns that path instead of building.
 func buildBinary() (string, error) {
 	binaryOnce.Do(func() {
+		// Override with JENNY_BIN if provided
+		if override := os.Getenv("JENNY_BIN"); override != "" {
+			binaryPath = override
+			return
+		}
+
 		tmpDir := filepath.Join(os.TempDir(), "e2e_test_jenny")
 		if err := os.MkdirAll(tmpDir, 0o755); err != nil {
 			binaryErr = err
@@ -180,6 +191,126 @@ func findRepoRoot() (string, error) {
 			return "", fmt.Errorf("go.mod not found from %s", cwd)
 		}
 		dir = parent
+	}
+}
+
+// resolveReferenceBinary resolves the REFERENCE_BIN environment variable to an absolute path.
+// It validates that the path exists and points to a file (not a directory).
+func resolveReferenceBinary() (string, error) {
+	referenceOnce.Do(func() {
+		ref := os.Getenv("REFERENCE_BIN")
+		if ref == "" {
+			referenceErr = fmt.Errorf("REFERENCE_BIN not set")
+			return
+		}
+		if info, err := os.Stat(ref); err != nil {
+			referenceErr = fmt.Errorf("REFERENCE_BIN %q: %w", ref, err)
+			return
+		} else if info.IsDir() {
+			referenceErr = fmt.Errorf("REFERENCE_BIN %q is a directory, not a file", ref)
+			return
+		}
+		// Resolve to absolute path
+		abs, err := filepath.Abs(ref)
+		if err != nil {
+			referenceErr = fmt.Errorf("resolve REFERENCE_BIN: %w", err)
+			return
+		}
+		referencePath = abs
+	})
+	if referenceErr != nil {
+		return "", referenceErr
+	}
+	return referencePath, nil
+}
+
+// RunReferenceTarget runs the reference binary (e.g., claude) with the given args.
+// If REFERENCE_BIN is not set, it calls t.Skip(). The returned RunResult has the same
+// structure as RunTarget() but uses the reference binary.
+func RunReferenceTarget(t E2ETB, cfg *Config, env []string, args ...string) RunResult {
+	return RunReferenceTargetInDir(t, cfg, "", env, args...)
+}
+
+// RunReferenceTargetInDir runs the reference binary in the specified directory.
+func RunReferenceTargetInDir(t E2ETB, cfg *Config, dir string, env []string, args ...string) RunResult {
+	if t != nil {
+		t.Helper()
+	}
+
+	bin, err := resolveReferenceBinary()
+	if err != nil {
+		if t != nil {
+			t.Skipf("reference binary not available: %v", err)
+		}
+		return RunResult{}
+	}
+
+	if dir == "" {
+		repoRoot, err := findRepoRoot()
+		if err != nil {
+			if t != nil {
+				t.Fatalf("find repo root: %v", err)
+			}
+			return RunResult{}
+		}
+		dir = repoRoot
+	}
+
+	cmd := exec.Command(bin, args...)
+	cmd.Env = append(os.Environ(), env...)
+	cmd.Dir = dir
+
+	var stdoutBuf, stderrBuf bytes.Buffer
+	cmd.Stdout = &stdoutBuf
+	cmd.Stderr = &stderrBuf
+
+	start := time.Now()
+	if err := cmd.Start(); err != nil {
+		if t != nil {
+			t.Fatalf("start reference binary: %v", err)
+		}
+		return RunResult{}
+	}
+
+	runErr := cmd.Wait()
+	exitCode := 0
+	if runErr != nil {
+		if exitErr, ok := runErr.(*exec.ExitError); ok {
+			exitCode = exitErr.ExitCode()
+		} else {
+			exitCode = 1
+		}
+	}
+	duration := time.Since(start)
+
+	// Split stdout into lines.
+	var lines []string
+	scanner := bufio.NewScanner(strings.NewReader(stdoutBuf.String()))
+	scanner.Buffer(make([]byte, 64*1024), 16*1024*1024)
+	for scanner.Scan() {
+		lines = append(lines, scanner.Text())
+	}
+
+	// Parse lines as JSON, skipping blanks and lines that fail to parse.
+	var parsed []map[string]any
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		var m map[string]any
+		if err := json.Unmarshal([]byte(line), &m); err == nil {
+			parsed = append(parsed, m)
+		}
+	}
+
+	return RunResult{
+		Lines:      lines,
+		Parsed:     parsed,
+		Stdout:     stdoutBuf.String(),
+		Stderr:     stderrBuf.String(),
+		ExitCode:   exitCode,
+		Dir:        cmd.Dir,
+		DurationMs: duration.Milliseconds(),
 	}
 }
 

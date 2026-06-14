@@ -43,5 +43,12 @@ func runE2ESuite(t *testing.T, tests []*harness.TestCase) {
 		case "error":
 			t.Errorf("ERROR %s: %s", r.ID, r.Message)
 		}
+		// Log reference diffs if present
+		if len(r.ReferenceDiff) > 0 {
+			t.Logf("  reference alignment diffs for %s:", r.ID)
+			for _, d := range r.ReferenceDiff {
+				t.Logf("  DIFF: %s", d)
+			}
+		}
 	}
 }

@@ -110,6 +110,8 @@ type StreamJSONExpectation struct {
 	EventCount *LengthExpectation
 	// EventAssertions are per-event custom assertions (index-based).
 	EventAssertions []IndexedEventExpectation
+	// CompareToReference compares each NDJSON line against the reference binary's output.
+	CompareToReference bool
 }
 
 // EventExpectation specifies assertions on a single NDJSON event.
@@ -281,6 +283,8 @@ type TestResult struct {
 	Diff       []DiffDetail
 	Actual     *CapturedOutput
 	SkipReason string
+	// ReferenceDiff contains field-by-field differences between jenny and reference binary output.
+	ReferenceDiff []string
 }
 
 // DiffDetail represents a single difference.

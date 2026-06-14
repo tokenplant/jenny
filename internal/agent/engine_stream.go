@@ -38,6 +38,7 @@ func (e *QueryEngine) buildModelUsage() any {
 			"cacheReadInputTokens":     usage.CacheReadInputTokens,
 			"cacheCreationInputTokens": usage.CacheCreationInputTokens,
 			"webSearchRequests":        0,
+			"costUSD":                  usage.CostUSD,
 			"contextWindow":            params.ContextWindow,
 			"maxOutputTokens":          params.MaxOutputTokens,
 		}
