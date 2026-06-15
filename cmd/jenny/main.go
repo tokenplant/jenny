@@ -10,6 +10,7 @@ import (
 	"syscall"
 
 	"github.com/ipy/jenny/internal/agent"
+	"github.com/ipy/jenny/internal/api/router"
 	"github.com/ipy/jenny/internal/cli"
 	"github.com/ipy/jenny/internal/constants"
 	"github.com/ipy/jenny/internal/log"
@@ -117,6 +118,12 @@ func run() error {
 
 	// Set verbose mode in the logger (re-runs resetLogger to enable debug level)
 	log.SetVerbose(flags.Verbose)
+
+	// Initialize the multi-provider router from ~/.jenny/routes.yaml (or env).
+	// Idempotent: subsequent calls are no-ops.
+	if err := router.Init(""); err != nil && err != router.ErrNoProviders {
+		log.Warn("router initialization skipped", "err", err)
+	}
 
 	// Get working directory
 	cwd, err := os.Getwd()

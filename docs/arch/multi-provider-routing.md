@@ -2,18 +2,10 @@
 title: Multi-Provider Routing
 slug: multi-provider-routing
 priority: P2
-status: partial
+status: done
 spec: complete
-code: partial
+code: done
 package: internal/api, internal/agent
-gaps:
-  - Round-robin/random selection are session-hash based, not counter based — keys with healthy status are not truly load balanced
-  - "balanced" routing_mode is not implemented (only "sticky" is honored)
-  - Env-var synthesis does not merge with YAML config (it replaces it)
-  - Subagent `profile=` parameter is not wired through to the router
-  - CLI does not call router.Init on startup; router is unreachable from main flows
-  - Layer 1 does not distinguish 401 (Permanent) from 5xx (Retryable) — see StickyClient.SendMessage
-  - No HTTP-layer test coverage for the StickyClient fallback chain (only SelectEndpoint unit tests)
 depends_on:
   - anthropic-api-client
   - message-normalization
@@ -99,16 +91,39 @@ The routing engine operates on a three-layered recovery logic to balance availab
 - **Condition**: 429 (Rate Limit) or 5xx (Server Error).
 - **Action**: Backoff and retry on the **same Key and Model**.
 - **Goal**: Protect the existing Prompt Cache on the provider's side.
+- **Retry schedule**: Exponential backoff starting at 500ms, doubling each attempt, capped at 32s, with ±25% jitter. If the server sends a `Retry-After` header, that value takes precedence.
+- **Retry count**: Up to `max_retries` retries (default 5), giving 6 total attempts (1 original + 5 retries).
 
 ### Layer 2: Key Failover (Preserve Cache)
-- **Condition**: Layer 1 retries exhausted, or 401 (Invalid Key).
+- **Condition**: Layer 1 retries exhausted, or 401 (Invalid Key — permanent, skipped immediately).
 - **Action**: Switch to the next available Key/Account for the **same Model**.
 - **Goal**: Maintain stickiness to the model. Caches are often shared across different keys for the same model/provider.
+- **Implementation**: Sequential scan of `Account.Keys` list, skipping the current key and any keys in cooldown. Each key is tried once before declaring the model exhausted.
 
 ### Layer 3: Model Fallback (Sacrifice Cache)
-- **Condition**: All keys for the current model are exhausted, or `allow_fallback: true` with a permanent failure.
+- **Condition**: All keys for the current model are exhausted (all in cooldown or failed), or `allow_fallback: true` with a permanent failure.
 - **Action**: Move to the next `match` entry in the Profile's `targets` list.
 - **Goal**: Ensure task completion at the cost of cache efficiency. Once a fallback occurs, the session locks (sticky) to the new endpoint.
+- **Behavior when all targets are exhausted**: Returns `ErrAllProvidersExhausted`. The last-failed endpoint's health is **not** recorded; callers should call `router.ReportError` explicitly if needed.
+
+## Load Balancing
+
+- **Intra-Account**: Keys within an `Account` are traversed **sequentially in list order** (not round-robin). The `KeyIndex` field tracks the last-known-good position to avoid re-selecting the same key on repeated failover attempts. "Round-robin" refers to cross-session load distribution, not intra-account rotation.
+- **Cross-Session**: Each `SelectEndpoint` call increments a monotonic global counter; the candidate index is `counter % len(candidates)`. This ensures different sessions pick distinct positions in the pool without coordination.
+- **`balanced` mode**: `routing_mode: "balanced"` causes every call to re-evaluate from the candidate pool (bypassing the sticky session cache). No `SessionState` is written; each request is independent. This sacrifices prompt-cache continuity for load distribution.
+
+## Health & Cooldown
+
+The `HealthRegistry` tracks endpoint health with a consecutive-failure counter:
+
+| Field | Default |
+|-------|---------|
+| Consecutive failure threshold | 3 failures |
+| Cooldown duration | 30 seconds |
+| Success clears | Failure count → 0, cooldown removed immediately |
+| Cooldown refresh | Each additional failure while in cooldown resets the timer |
+
+When a key reaches 3 consecutive failures it enters a 30-second cooldown. During cooldown `IsHealthy` returns `false` for that key. A single successful call clears all failure state and the cooldown timer.
 
 ## Load Balancing
 

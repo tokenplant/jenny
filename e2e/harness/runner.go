@@ -338,6 +338,9 @@ func RunJennyInDir(t testing.TB, dir string, env []string, args ...string) RunRe
 		dir = repoRoot
 	}
 
+	// Inject --verbose for stream-json (required by some binaries like claude)
+	args = injectVerboseForStreamJSON(args)
+
 	cmd := exec.Command(bin, args...)
 	cmd.Env = append(os.Environ(), env...)
 	cmd.Dir = dir
@@ -399,4 +402,34 @@ var uuidV4Re = regexp.MustCompile(
 // IsValidUUID checks if a string is a valid UUID v4.
 func IsValidUUID(s string) bool {
 	return uuidV4Re.MatchString(s)
+}
+
+// injectVerboseForStreamJSON adds --verbose if --output-format stream-json is present.
+// Some binaries (e.g. claude) require --verbose with stream-json output.
+func injectVerboseForStreamJSON(args []string) []string {
+	hasStreamJSON := false
+	hasVerbose := false
+
+	for i, arg := range args {
+		if arg == "--output-format" && i+1 < len(args) && args[i+1] == "stream-json" {
+			hasStreamJSON = true
+		}
+		if arg == "--verbose" {
+			hasVerbose = true
+		}
+	}
+
+	if !hasStreamJSON || hasVerbose {
+		return args
+	}
+
+	// Insert --verbose right after "stream-json"
+	result := make([]string, 0, len(args)+1)
+	for i, arg := range args {
+		result = append(result, arg)
+		if arg == "stream-json" && i > 0 && args[i-1] == "--output-format" {
+			result = append(result, "--verbose")
+		}
+	}
+	return result
 }

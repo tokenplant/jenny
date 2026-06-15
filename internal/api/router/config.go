@@ -143,7 +143,7 @@ func applyDefaults(cfg *Config) {
 			profile.SelectionPolicy = "round_robin"
 		}
 		if profile.RetryPolicy.MaxRetries == 0 {
-			profile.RetryPolicy.MaxRetries = 3
+			profile.RetryPolicy.MaxRetries = 5
 		}
 		if profile.RetryPolicy.Backoff == "" {
 			profile.RetryPolicy.Backoff = "exponential"

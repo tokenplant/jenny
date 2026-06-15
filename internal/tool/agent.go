@@ -24,6 +24,7 @@ type SubagentParams struct {
 	Isolation       string
 	RunInBackground bool
 	Name            string // Swarm agent name (empty means unnamed subagent)
+	Profile         string // Router profile name for multi-provider routing (e.g., "vision")
 }
 
 // SubagentResult holds the result of a subagent execution.
@@ -218,6 +219,12 @@ func (t *AgentTool) Execute(ctx context.Context, input map[string]any, cwd strin
 		name = n
 	}
 
+	// Extract profile parameter (router profile for multi-provider routing)
+	var profile string
+	if p, ok := input["profile"].(string); ok {
+		profile = p
+	}
+
 	// AC2: Check swarm mode feature flag
 	if name != "" && !t.swarmsEnabled {
 		return &ToolResult{
@@ -244,6 +251,7 @@ func (t *AgentTool) Execute(ctx context.Context, input map[string]any, cwd strin
 		Isolation:       isolation,
 		RunInBackground: runInBackground,
 		Name:            name,
+		Profile:         profile,
 	}
 
 	// Handle async mode

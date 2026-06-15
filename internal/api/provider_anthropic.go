@@ -174,7 +174,7 @@ func (p *anthropicProvider) doSendMessage(ctx context.Context, messages []Messag
 
 	maxTokens := p.maxTokens
 	if maxTokens == 0 {
-		maxTokens = 64000
+		maxTokens = 32000
 	}
 
 	reqBody := AnthropicRequest{
@@ -404,7 +404,7 @@ func (p *anthropicProvider) SendMessageStream(ctx context.Context, messages []Me
 
 		maxTokens := p.maxTokens
 		if maxTokens == 0 {
-			maxTokens = 64000
+			maxTokens = 32000
 		}
 
 		reqBody := AnthropicRequest{

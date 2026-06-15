@@ -8,7 +8,11 @@ code: done
 defer_to: P3
 package: internal/cli, internal/agent
 gaps:
-  []
+  - "kind" field emitted on every event — Claude Code SDK schema does not include this
+  - "tool_call started/completed" format — Claude Code uses "tool_progress" instead
+  - "stream_request_start" emitted before each API iteration — Claude Code discards this internally
+  - jenny emits one "assistant" per turn (aggregated); Claude Code emits one per content block with shared message.id
+  - Missing `system/subtype: thinking_tokens` events emitted during thinking blocks
 depends_on:
   - cli
   - agent-loop
@@ -66,21 +70,32 @@ First line after startup:
   "session_id": "sess_…",
   "tools": ["Read", "Write", "Bash", …],
   "mcp_servers": [],
-  "model": "deepseek-v4-flash",
+  "model": "MiniMax-M2.7",
   "permissionMode": "default",
   "fast_mode_state": "off",
   "output_style": "default",
-  "claude_code_version": "1.0.0",
-  "uuid": "…"
+  "claude_code_version": "2.1.172",
+  "apiKeySource": "none",
+  "analytics_disabled": true,
+  "product_feedback_disabled": true,
+  "uuid": "…",
+  "memory_paths": { "auto": "/path/to/memory/" },
+  "agents": ["claude", "Explore", …],
+  "slash_commands": ["adapt", "audit", …],
+  "skills": ["adapt", "audit", …],
+  "plugins": [{ "name": "gopls-lsp", "path": "…", "source": "…" }]
 }
 ```
 
-Required fields for Claude Code compatibility:
-- `fast_mode_state`: Always `"off"` for regular mode. Signals whether the session uses fast mode.
-- `output_style`: Always `"default"`. Signals output formatting preferences.
-- `mcp_servers`: Array of MCP server names (strings). Empty `[]` if no MCP servers configured.
+Required fields:
+- `cwd`, `session_id`, `tools`, `mcp_servers`, `model`, `permissionMode`, `fast_mode_state`, `output_style`, `claude_code_version`, `uuid`
 
-Optional fields: `slash_commands`, `skills`, `plugins`.
+Common optional fields:
+- `apiKeySource`: Source of API key (`"none"` for no API key)
+- `analytics_disabled`, `product_feedback_disabled`: Boolean flags
+- `memory_paths`: Object with `auto` path for session memory directory
+- `agents`: Array of available agent names
+- `slash_commands`, `skills`, `plugins`: Feature enablement lists
 
 ### `stream_request_start`
 
@@ -97,7 +112,7 @@ Emitted before each API iteration. **This is a jenny extension** — not part of
 
 ### `kind` Field
 
-All events include a `kind` field for Claude Code parser compatibility. **This is a jenny extension** — not part of the headless-agent reference format.
+All events include a `kind` field for Claude Code parser compatibility. **jenny extension** — Claude Code does not emit this field.
 
 ```json
 {
@@ -111,9 +126,30 @@ All events include a `kind` field for Claude Code parser compatibility. **This i
 
 The `kind` value matches the event `type` (e.g., `"assistant"`, `"user"`, `"result"`).
 
+### `usage` Field on `assistant` Messages
+
+The `assistant` message includes a `usage` field in its `message` sub-object, populated from per-turn `message_start` / `message_delta` stream event accumulation:
+
+```json
+{
+  "type": "assistant",
+  "message": {
+    "id": "msg_…",
+    "type": "message",
+    "role": "assistant",
+    "model": "deepseek-v4-flash",
+    "content": [ … ],
+    "stop_reason": null,
+    "stop_sequence": null,
+    "usage": { "input_tokens": 100, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0, "output_tokens": 50, "service_tier": "standard" }
+  },
+  …
+}
+```
+
 ### `assistant` (Aggregated)
 
-Wraps the complete API-shaped assistant message after `content_block_stop`. Emitted **once per turn**, after all content blocks are received. Field order: `type`, `message`, `parent_tool_use_id`, `session_id`, `uuid`:
+Emitted **once per content block** (thinking, text, or tool_use), not once per turn. Multiple `assistant` events that share the same `message.id` belong to the same API turn. Field order: `type`, `message`, `parent_tool_use_id`, `session_id`, `uuid`:
 
 ```json
 {
@@ -138,11 +174,11 @@ Wraps the complete API-shaped assistant message after `content_block_stop`. Emit
 }
 ```
 
-Note: `parent_tool_use_id` comes before `session_id` in field order. `stop_reason` and `stop_sequence` are always present (null when not set).
+Note: `parent_tool_use_id` comes before `session_id` in field order. `stop_reason` and `stop_sequence` are always present (null when not set). The `usage` field is populated from per-turn stream event accumulation (see `usage` field on `assistant` Messages above).
 
 ### `user` (Aggregated Tool Results)
 
-Emitted after the last `tool_call` `completed` event in a batch, before the next `stream_request_start`. Includes `timestamp` (ISO-8601) and `tool_use_result`:
+Emitted after tool execution completes, before the next API iteration. Includes `timestamp` (ISO-8601) and `tool_use_result`:
 
 ```json
 {
@@ -152,8 +188,8 @@ Emitted after the last `tool_call` `completed` event in a batch, before the next
     "content": [
       {
         "type": "tool_result",
-        "tool_use_id": "toolu_…",
-        "content": "…",
+        "tool_use_id": "call_…",
+        "content": "tool output text",
         "is_error": false
       }
     ]
@@ -162,30 +198,30 @@ Emitted after the last `tool_call` `completed` event in a batch, before the next
   "session_id": "sess_…",
   "uuid": "…",
   "timestamp": "2026-06-09T13:21:29.644Z",
-  "tool_use_result": { "stdout": "…", "stderr": "", "interrupted": false, "isImage": false, "noOutputExpected": false }
+  "tool_use_result": { "type": "text", "file": { "filePath": "…", "content": "…", "numLines": 10, "startLine": 1, "totalLines": 10 } }
 }
 ```
 
-For errors, `tool_use_result` is a string: `"Error: …"`
+`tool_use_result` format:
+- **File read success**: `object` with `type: "text"` and `file` metadata (filePath, content, numLines, startLine, totalLines)
+- **Error/permission denied**: `string` containing the error message. The `content` array's `tool_result` block has `is_error: true`
 
-### Flat `tool_use` (legacy headless parsers)
+### `tool_progress` (Claude Code uses `tool_progress`, not `tool_call`)
 
-When emitting flat tool events (not full assistant wrapper), use **`parameters`**, not `tool_input`:
-
-```json
-{
-  "type": "tool_use",
-  "tool_name": "Read",
-  "parameters": { "file_path": "foo.go" },
-  "session_id": "sess_…"
-}
-```
-
-### `tool_call` started / completed
+Claude Code emits `tool_progress` for long-running tool progress updates. jenny emits `tool_call started/completed` instead — this is a jenny-specific format.
 
 ```json
+// jenny-only (not in Claude Code SDK schema)
 { "type": "tool_call", "subtype": "started", "tool_name": "Bash", "tool_use_id": "…", "session_id": "sess_…", "parent_tool_use_id": null, "uuid": "…" }
 { "type": "tool_call", "subtype": "completed", "tool_use_id": "…", "is_error": false, "session_id": "sess_…", "parent_tool_use_id": null, "uuid": "…" }
+```
+
+### `stream_request_start` (jenny extension)
+
+Emitted before each API iteration. **jenny extension** — Claude Code QueryEngine discards this internally and does not emit it to SDK consumers.
+
+```json
+{ "type": "stream_request_start", "session_id": "sess_…", "parent_tool_use_id": null, "uuid": "…" }
 ```
 
 ### `stream_event` (partial messages)
@@ -207,6 +243,8 @@ For `content_block_start`, inner `content_block` has only relevant fields (e.g.,
 For `message_delta`, inner `delta` has only `stop_reason` and `stop_sequence` (no `container` or `stop_details`).
 
 For `message_start`, the `message` object always includes `stop_reason` and `stop_sequence` fields (null when not yet set).
+
+For `tool_progress`, inner event contains tool progress for long-running operations.
 
 Requires live SSE streaming from API (see [`sse-streaming.md`](./sse-streaming.md)).
 
@@ -235,8 +273,12 @@ Always the last line on successful run. Note: `parent_tool_use_id` is NOT presen
   "type": "result",
   "subtype": "success",
   "is_error": false,
+  "api_error_status": null,
   "duration_ms": 3000,
   "duration_api_ms": 2800,
+  "ttft_ms": 1203,
+  "ttft_stream_ms": 1000,
+  "time_to_request_ms": 50,
   "num_turns": 2,
   "result": "Final assistant text",
   "stop_reason": "end_turn",
@@ -265,19 +307,19 @@ Always the last line on successful run. Note: `parent_tool_use_id` is NOT presen
       "maxOutputTokens": 32000
     }
   },
-  "ttft_ms": 1203,
   "terminal_reason": "completed",
-  "api_error_status": null,
   "permission_denials": [],
   "fast_mode_state": "off",
   "uuid": "…"
 }
 ```
 
-Field order: `type`, `subtype`, `is_error`, `duration_ms`, `duration_api_ms`, `num_turns`, `result`, `stop_reason`, `session_id`, `total_cost_usd`, `usage`, `modelUsage`, `ttft_ms`, `terminal_reason`, `api_error_status`, `permission_denials`, `fast_mode_state`, `uuid`.
+Field order: `type`, `subtype`, `is_error`, `api_error_status`, `duration_ms`, `duration_api_ms`, `ttft_ms`, `ttft_stream_ms`, `time_to_request_ms`, `num_turns`, `result`, `stop_reason`, `session_id`, `total_cost_usd`, `usage`, `modelUsage`, `terminal_reason`, `permission_denials`, `fast_mode_state`, `uuid`.
 
 New result event fields:
 - `ttft_ms`: Time to first token in milliseconds. Measured from API call start to first content block received. Omitted if zero.
+- `ttft_stream_ms`: Time from API call start to first token received on the stream. Omitted if zero.
+- `time_to_request_ms`: Time to build and send the API request. Omitted if zero.
 - `terminal_reason`: Maps the stop reason to a stable string. `"completed"` for end_turn/stop_sequence, `"max_tokens"` for max_tokens. Omitted if empty.
 - `api_error_status`: `null` on successful API response. Contains the error message string when the API call fails permanently (after retry exhaustion). Always present.
 

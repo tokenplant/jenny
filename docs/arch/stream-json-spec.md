@@ -46,9 +46,11 @@ Emitted when the user provides input or a **tool returns a result**. Tool result
 ```
 
 ### 3.2 Assistant Message (`type: "assistant"`)
-Emitted when an assistant turn completes. Contains the full history of thinking, text, and tool calls for that turn.
+Emitted when a content block completes. Multiple `assistant` events may share the same `message.id` — one per content block in the turn.
 
-**One event per API turn**: Exactly ONE `assistant` event is emitted per API turn. Its `message.content` array contains ALL content blocks for that turn in order (thinking, text, tool_use). Implementations MUST NOT emit one `assistant` event per tool_use block.
+**One event per content block**: Claude Code emits one `assistant` per content block (thinking, text, or tool_use), not one per turn. Content blocks that share the same `message.id` belong to the same API turn. Implementations MUST emit one `assistant` event per content_block_stop.
+
+**`usage` field**: The `message` sub-object includes a `usage` field with accumulated token counts for this turn (input tokens, output tokens, cache tokens).
 
 **Content block ordering rule**: Thinking blocks appear before text blocks in `message.content` and MUST NOT be merged into the text block. A thinking block is always emitted as its own object with `type: "thinking"`.
 
@@ -91,7 +93,7 @@ A second correct example showing the text-only and tool-only variants (each stil
 **Incorrect pattern (duplication — do not use):** Emitting one `assistant` per `tool_use` causes text to be repeated across events when a turn contains text followed by multiple tool calls. The above turn must produce exactly ONE `assistant` line.
 
 ### 3.3 Streaming Event (`type: "stream_event"`)
-Emitted for incremental updates. `event` field contains a standard Anthropic stream event.
+Emitted for incremental updates when `--include-partial-messages` is set. `event` field contains a standard Anthropic stream event.
 
 ```json
 {
@@ -177,11 +179,13 @@ The very first message emitted. Includes environment context.
 {
   "type": "system",
   "subtype": "init",
-  "claude_code_version": "0.25.0",
+  "claude_code_version": "2.1.172",
   "cwd": "/Users/user/project",
   "tools": ["Bash", "Edit", "Read", "Grep"],
   "model": "claude-3-7-sonnet-20250219",
   "permissionMode": "default",
+  "fast_mode_state": "off",
+  "output_style": "default",
   "session_id": "...",
   "uuid": "..."
 }
@@ -191,18 +195,24 @@ The very first message emitted. Includes environment context.
 - `subtype: "status"`: Emitted for `permissionMode` changes.
 - `subtype: "session_state_changed"`: Emitted with `state: "idle"` or `state: "busy"`.
 - `subtype: "task_started"`: Emitted when a background task (like a subagent) begins.
+- `subtype: "thinking_tokens"`: Emitted during extended thinking. Each event carries `estimated_tokens` (running total) and `estimated_tokens_delta` (increment since last event).
 
 ---
 
 ## 6. Comparison: `jenny` vs Official Spec
 
-| Feature | `jenny` (Bad) | Official Spec (Good) |
+| Feature | `jenny` | Official Spec |
 | :--- | :--- | :--- |
-| **Tool Results** | Flat `{"type":"tool_result", ...}` | Wrapped `{"type":"user", "message": {"content": [{"type":"tool_result"}]}}` |
-| **Thinking** | Often missing or custom flat field | `stream_event` deltas or `assistant` thinking blocks |
-| **IDs** | Missing `uuid` and `session_id` on stream lines | `session_id` and `uuid` mandatory on EVERY line |
-| **Tool Inputs** | `{"parameters": {...}}` | `{"input": {...}}` inside a `tool_use` block |
-| **Indexing** | Custom `message_idx` field | Indexing is implicit in the transcript order |
+| **Tool Results** | ✅ Wrapped in user message | ✅ Wrapped in user message |
+| **Thinking** | ✅ stream_event or assistant blocks | ✅ stream_event or assistant blocks |
+| **IDs** | ✅ session_id + uuid on every line | ✅ session_id + uuid on every line |
+| **Tool Inputs** | ✅ input inside tool_use | ✅ input inside tool_use |
+| **`usage` on `assistant`** | ✅ Included | ✅ Included |
+| **One `assistant` per content block** | ❌ jenny emits one per turn | Spec requires one per turn; Claude Code does one per block |
+| **`kind` field** | ❌ jenny extension | Not present |
+| **`tool_call` started/completed** | ❌ jenny uses tool_call | Spec uses `tool_progress` |
+| **`thinking_tokens` system events** | ❌ Not present | Claude Code emits `system/subtype: thinking_tokens` during thinking |
+| **`stream_request_start`** | ❌ jenny extension | Not emitted to SDK consumers |
 
 ## 7. Implementation Guide for `jenny`
 1. **Refactor Envelope**: Ensure every `WriteStreamJSON` call injects a valid `session_id` and a fresh `uuid`.

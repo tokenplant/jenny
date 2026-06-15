@@ -409,7 +409,7 @@ func (r *Router) nextKeyLocked(state *SessionState, current *ActiveEndpoint) *Ac
 						Profile:      r.profileName,
 					}
 				}
-				if i >= state.KeyIndex {
+				if i > state.KeyIndex {
 					break
 				}
 			}

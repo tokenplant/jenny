@@ -29,7 +29,7 @@ func NewStickyClient(sessionID string, router *Router) *StickyClient {
 	return &StickyClient{
 		router:      router,
 		sessionID:   sessionID,
-		maxRetries:  3,
+		maxRetries:  5,
 		backoffType: "exponential",
 	}
 }
@@ -116,6 +116,7 @@ func (s *StickyClient) SendMessage(ctx context.Context, messages []api.Message, 
 	}
 
 	// L3: Model fallback
+	// L3: Model fallback
 	if nextTarget := s.tryNextTarget(); nextTarget != nil {
 		s.endpoint = nextTarget
 		if err := s.ensureClient(); err == nil {
@@ -126,6 +127,14 @@ func (s *StickyClient) SendMessage(ctx context.Context, messages []api.Message, 
 			}
 		}
 	}
+
+	// L3 exhausted: record failure so HealthRegistry is aware before returning
+	s.router.healthRegistry.RecordFailure(
+		s.endpoint.Provider,
+		s.endpoint.Account,
+		s.endpoint.Model,
+		s.endpoint.APIKey,
+	)
 
 	return nil, fmt.Errorf("all routing layers exhausted")
 }
@@ -218,9 +227,7 @@ func (s *StickyClient) computeBackoff(attempt int, retryAfter *time.Duration) ti
 	maxDelay := 32 * time.Second
 
 	delay := baseDelay * time.Duration(1<<uint(attempt))
-	if delay > maxDelay {
-		delay = maxDelay
-	}
+	delay = min(delay, maxDelay)
 
 	jitter := time.Duration(rand.Float64() * float64(delay) * 0.25)
 	delay = delay + jitter
@@ -253,13 +260,15 @@ func (s *StickyClient) tryNextTarget() *ActiveEndpoint {
 		return nil
 	}
 
-	next, err := s.router.NextEndpoint(s.sessionID, s.endpoint)
-	if err != nil {
+	// Call nextTargetLocked directly (not NextEndpoint) so we don't
+	// advance TargetIndex again. NextEndpoint already advanced it when
+	// tryNextKey returned nil (L2 exhausted). We just need to read the
+	// result that was stored in state.Endpoint.
+	state := s.router.GetStickyEndpoint(s.sessionID)
+	if state == nil {
 		return nil
 	}
-
-	if next.Model != s.endpoint.Model {
-		return next
-	}
-	return nil
+	// After L2 exhaustion, NextEndpoint stored the next target in
+	// state.Endpoint. Return it directly.
+	return state
 }

@@ -172,7 +172,12 @@ func (sr *SuiteRunner) buildArgs(tc *TestCase) []string {
 	case "cli":
 		args = tc.Target.Args
 	case "prompt":
-		args = []string{"--output-format", tc.Target.Format, "-p", tc.Target.Prompt}
+		args = []string{"--output-format", tc.Target.Format}
+		// stream-json requires --verbose on some binaries (e.g. claude)
+		if tc.Target.Format == "stream-json" {
+			args = append(args, "--verbose")
+		}
+		args = append(args, "-p", tc.Target.Prompt)
 		args = append(args, tc.Target.Args...)
 	case "subprocess":
 		args = tc.Target.Args

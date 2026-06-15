@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ipy/jenny/internal/api"
+	"github.com/ipy/jenny/internal/api/router"
 	"github.com/ipy/jenny/internal/git"
 	"github.com/ipy/jenny/internal/session"
 	"github.com/ipy/jenny/internal/tool"
@@ -358,6 +359,16 @@ func (r *LocalSubagentRunner) RunSubagent(ctx context.Context, params tool.Subag
 	}
 
 	// Run the subagent synchronously
+	// If a router profile is specified, switch to it for the duration of this
+	// subagent call, then restore the parent's profile so routing for the
+	// main session is unaffected.
+	if params.Profile != "" && router.IsInitialized() {
+		if r := router.GetRouter(); r != nil {
+			prevProfile := r.GetProfile()
+			r.SetProfile(params.Profile)
+			defer r.SetProfile(prevProfile)
+		}
+	}
 	output, _, err := RunStream(ctx, params.Prompt, subagentTools, cwd, streamCfg, params.Model, WithClient(r.client))
 
 	// AC4: Interrupt yields partial result - capture output even on cancellation

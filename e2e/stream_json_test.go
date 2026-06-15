@@ -316,7 +316,7 @@ func TestStreamJSONAssistantEvent(t *testing.T) {
 		{
 			ID:          "stream-json.assistant.one-per-turn",
 			Category:    "stream-json",
-			Description: "exactly one assistant event per API turn for text-only response",
+			Description: "exactly one assistant event per API turn for text-only response (jenny behavior; Claude Code emits one per content block)",
 			Target: harness.TargetInvocation{
 				Kind:     "prompt",
 				Prompt:   "say hi",
@@ -327,6 +327,35 @@ func TestStreamJSONAssistantEvent(t *testing.T) {
 				ExitCode: 0,
 				StreamJSON: &harness.StreamJSONExpectation{
 					HasEventTypes: []string{"system", "assistant", "result"},
+				},
+			},
+		},
+		{
+			ID:          "stream-json.assistant.has-usage",
+			Category:    "stream-json",
+			Description: "assistant message includes usage field in message sub-object",
+			Target: harness.TargetInvocation{
+				Kind:     "prompt",
+				Prompt:   "say hi",
+				Format:   "stream-json",
+				Cassette: "echo-hello",
+			},
+			Expected: harness.ExpectedBehavior{
+				ExitCode: 0,
+				StreamJSON: &harness.StreamJSONExpectation{
+					HasEventTypes: []string{"assistant"},
+					EventAssertions: []harness.IndexedEventExpectation{
+						{
+							Index: -1, TypeFilter: "assistant",
+							Expect: harness.EventExpectation{
+								Nested: map[string]*harness.EventExpectation{
+									"message": {
+										HasFields: []string{"usage"},
+									},
+								},
+							},
+						},
+					},
 				},
 			},
 		},
@@ -529,6 +558,108 @@ func TestStreamJSON_ReferenceAlignment(t *testing.T) {
 					CompareToReference: true,
 					LastEvent: &harness.EventExpectation{
 						Type: "result",
+					},
+				},
+			},
+		},
+	})
+}
+
+// TestStreamJSONGap_ResultExtendedFields tests that jenny is MISSING extended result timing fields.
+// This test documents a known gap: Claude Code emits ttft_ms, ttft_stream_ms, time_to_request_ms on result.
+func TestStreamJSONGap_ResultExtendedFields(t *testing.T) {
+	runE2ESuite(t, []*harness.TestCase{
+		{
+			ID:          "stream-json.result.has-extended-timing",
+			Category:    "stream-json",
+			Description: "result event includes ttft_ms, ttft_stream_ms, time_to_request_ms fields",
+			Target: harness.TargetInvocation{
+				Kind:     "prompt",
+				Prompt:   "say hi",
+				Format:   "stream-json",
+				Cassette: "echo-hello",
+			},
+			Expected: harness.ExpectedBehavior{
+				ExitCode: 0,
+				StreamJSON: &harness.StreamJSONExpectation{
+					LastEvent: &harness.EventExpectation{
+						Type:      "result",
+						HasFields: []string{"ttft_ms", "ttft_stream_ms", "time_to_request_ms", "terminal_reason", "api_error_status"},
+					},
+				},
+			},
+		},
+		{
+			ID:          "stream-json.result.api-error-status-null-on-success",
+			Category:    "stream-json",
+			Description: "result event has api_error_status=null on successful run",
+			Target: harness.TargetInvocation{
+				Kind:     "prompt",
+				Prompt:   "say hi",
+				Format:   "stream-json",
+				Cassette: "echo-hello",
+			},
+			Expected: harness.ExpectedBehavior{
+				ExitCode: 0,
+				StreamJSON: &harness.StreamJSONExpectation{
+					LastEvent: &harness.EventExpectation{
+						Type:      "result",
+						FieldEquals: map[string]any{
+							"api_error_status": nil,
+						},
+					},
+				},
+			},
+		},
+	})
+}
+
+// TestStreamJSONUserToolResultFormat verifies tool_use_result format variations.
+func TestStreamJSONUserToolResultFormat(t *testing.T) {
+	runE2ESuite(t, []*harness.TestCase{
+		{
+			ID:          "stream-json.user.tool-result-is-object-or-string",
+			Category:    "stream-json",
+			Description: "tool_use_result is either an object (file read) or string (error/permission denied)",
+			Target: harness.TargetInvocation{
+				Kind:             "prompt",
+				Prompt:           "run echo hello",
+				Format:           "stream-json",
+				Cassette:         "tool-use-turn1",
+				CassetteSequence: []string{"tool-use-turn1", "tool-use-turn2"},
+				Args:             []string{"--dangerously-skip-permissions"},
+			},
+			Expected: harness.ExpectedBehavior{
+				ExitCode: 0,
+				StreamJSON: &harness.StreamJSONExpectation{
+					HasEventTypes: []string{"user"},
+				},
+			},
+		},
+	})
+}
+
+// TestStreamJSONGap_InitExtendedFields tests that jenny is MISSING extended init fields.
+// This test documents a known gap: Claude Code includes apiKeySource, analytics_disabled, memory_paths, agents, plugins.
+func TestStreamJSONGap_InitExtendedFields(t *testing.T) {
+	runE2ESuite(t, []*harness.TestCase{
+		{
+			ID:          "stream-json.init.has-extended-fields",
+			Category:    "stream-json",
+			Description: "init event includes apiKeySource, analytics_disabled, memory_paths, agents, plugins",
+			Target: harness.TargetInvocation{
+				Kind:     "prompt",
+				Prompt:   "say hi",
+				Format:   "stream-json",
+				Cassette: "echo-hello",
+			},
+			Expected: harness.ExpectedBehavior{
+				ExitCode: 0,
+				StreamJSON: &harness.StreamJSONExpectation{
+					FirstEvent: &harness.EventExpectation{
+						Type:          "system",
+						HasFields:     []string{"apiKeySource", "analytics_disabled", "memory_paths", "agents", "plugins", "skills", "slash_commands"},
+						FieldNotEmpty: []string{"agents", "skills"},
 					},
 				},
 			},
