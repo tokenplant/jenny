@@ -213,6 +213,10 @@ func (sr *SuiteRunner) buildEnv(tc *TestCase, workDir string) []string {
 	if tc.Target.Kind == "prompt" && sr.Config.CassetteDir != "" {
 		if sr.mockServer == nil {
 			sr.mockServer = mockapi.NewMockServer(mockapi.WithCassetteDir(sr.Config.CassetteDir))
+			// Apply any pending delay that was set before mock server was created
+			if sr.pendingDelay > 0 && tc.Target.Cassette != "" {
+				sr.mockServer.SetDelay(tc.Target.Cassette, sr.pendingDelay)
+			}
 		}
 
 		// Register multi-turn sequence if specified

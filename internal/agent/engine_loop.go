@@ -237,11 +237,9 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 		}
 
 		// Emit stream_request_start before each API iteration (AC4)
-		// Also record firstStreamTime here for ttft_stream_ms calculation (R2 fix)
-		// ttft_stream_ms measures time from API call start to first stream event,
-		// which is the stream_request_start event itself
+		// Note: firstStreamTime is set when first content block arrives (not here),
+		// so ttft_stream_ms measures time from API call start to first content block
 		if e.streamCfg.Enabled {
-			e.firstStreamTime = time.Now()
 			msg := StreamMessage{
 				Type:            "stream_request_start",
 				SessionID:       sessionID,
@@ -349,8 +347,8 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 		apiStartTime := time.Now()
 		// Reset timing fields for TTFT calculation per API call
 		e.firstTokenTime = time.Time{}
-		// NOTE: Do NOT reset firstStreamTime here - it's set when stream_request_start is emitted
-		// and should be preserved for ttft_stream_ms calculation (R2 fix)
+		// NOTE: Do NOT reset firstStreamTime here - it's set when first content block arrives
+		// during streaming and should be preserved for ttft_stream_ms calculation
 		e.lastAPIStartTime = apiStartTime
 		dynamicSuffix := DynamicSystemSuffix(e.streamCfg, cwd)
 		blocksChan, streamResult := e.client.SendMessageStream(
