@@ -343,8 +343,9 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 		// Use streaming API (AC1)
 		// Track API call duration (AC3: duration_api_ms)
 		apiStartTime := time.Now()
-		// Reset firstTokenTime and lastAPIStartTime for TTFT calculation per API call
+		// Reset timing fields for TTFT calculation per API call
 		e.firstTokenTime = time.Time{}
+		e.firstStreamTime = time.Time{}
 		e.lastAPIStartTime = apiStartTime
 		dynamicSuffix := DynamicSystemSuffix(e.streamCfg, cwd)
 		blocksChan, streamResult := e.client.SendMessageStream(
