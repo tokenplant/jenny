@@ -202,18 +202,12 @@ func (s StreamMessage) MarshalJSON() ([]byte, error) {
 		if s.StopReason != "" {
 			fields = append(fields, `"stop_reason":`+encodeString(s.StopReason))
 		}
-		// ttft_ms: time to first token (omitted when zero)
-		if s.TTFTMs > 0 {
-			fields = append(fields, fmt.Sprintf(`"ttft_ms":%d`, s.TTFTMs))
-		}
-		// ttft_stream_ms: time to first stream event (omitted when zero)
-		if s.TTFTStreamMs > 0 {
-			fields = append(fields, fmt.Sprintf(`"ttft_stream_ms":%d`, s.TTFTStreamMs))
-		}
-		// time_to_request_ms: pre-API processing time (omitted when zero)
-		if s.TimeToRequestMs > 0 {
-			fields = append(fields, fmt.Sprintf(`"time_to_request_ms":%d`, s.TimeToRequestMs))
-		}
+		// ttft_ms: time to first token (always emitted to match Claude Code format)
+		fields = append(fields, fmt.Sprintf(`"ttft_ms":%d`, s.TTFTMs))
+		// ttft_stream_ms: time to first stream event (always emitted to match Claude Code format)
+		fields = append(fields, fmt.Sprintf(`"ttft_stream_ms":%d`, s.TTFTStreamMs))
+		// time_to_request_ms: pre-API processing time (always emitted to match Claude Code format)
+		fields = append(fields, fmt.Sprintf(`"time_to_request_ms":%d`, s.TimeToRequestMs))
 		// terminal_reason: mapped from stop_reason (omitted when empty)
 		if s.TerminalReason != "" {
 			fields = append(fields, `"terminal_reason":`+encodeString(s.TerminalReason))
