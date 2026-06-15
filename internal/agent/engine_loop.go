@@ -376,6 +376,11 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 			// ... (existing block processing)
 			// Handle raw stream_event passthrough
 			if block.Type == "stream_event" && e.streamCfg.Enabled && e.streamCfg.IncludePartial {
+				// AC1: Capture firstStreamTime at the first SSE stream event (message_start),
+				// not at content block processing. This measures time to first stream event.
+				if e.firstStreamTime.IsZero() {
+					e.firstStreamTime = time.Now()
+				}
 				// Capture message ID from MessageStartEvent
 				if msgStart, ok := block.RawEvent.(api.AnthropicStreamEvent); ok && msgStart.Type == api.EventMessageStart && msgStart.Message != nil {
 					e.currentMessageID = msgStart.Message.ID
@@ -415,10 +420,7 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 
 			switch block.Block.Type {
 			case api.BlockTypeText:
-				// Track firstStreamTime and TTFT: record time when first content block arrives
-				if e.firstStreamTime.IsZero() {
-					e.firstStreamTime = time.Now()
-				}
+				// Track TTFT: record time when first content block arrives
 				if e.firstTokenTime.IsZero() {
 					e.firstTokenTime = time.Now()
 				}
@@ -429,19 +431,13 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 					textOutput.WriteString(block.Block.Text)
 				}
 			case api.BlockTypeThinking:
-				// Track firstStreamTime and TTFT: record time when first content block arrives
-				if e.firstStreamTime.IsZero() {
-					e.firstStreamTime = time.Now()
-				}
+				// Track TTFT: record time when first content block arrives
 				if e.firstTokenTime.IsZero() {
 					e.firstTokenTime = time.Now()
 				}
 				thinkingBlocks = append(thinkingBlocks, thinkingBlock{Text: block.Block.Thinking, Signature: block.Block.Signature})
 			case api.BlockTypeToolUse:
-				// Track firstStreamTime and TTFT: record time when first content block arrives
-				if e.firstStreamTime.IsZero() {
-					e.firstStreamTime = time.Now()
-				}
+				// Track TTFT: record time when first content block arrives
 				if e.firstTokenTime.IsZero() {
 					e.firstTokenTime = time.Now()
 				}
