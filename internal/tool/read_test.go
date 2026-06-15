@@ -402,15 +402,18 @@ func TestReadTool_Dedup(t *testing.T) {
 		t.Fatalf("second read should indicate file unchanged, got: %s", result.Content)
 	}
 
-	// AC2: Modify file (change mtime), read again should return new content
-	err = os.Chtimes(testFile, time.Now(), time.Now().Add(time.Second))
-	if err != nil {
-		t.Fatalf("failed to change mtime: %v", err)
-	}
+	// AC2: Modify file (change mtime), read again should return new content.
+	// WriteFile must come BEFORE Chtimes so the explicit future mtime is not
+	// overwritten by the write syscall updating mtime back to "now" (which
+	// could round to the original creation mtime within filesystem resolution).
 	newContent := []byte("line 1\nline 2 modified\nline 3\n")
 	err = os.WriteFile(testFile, newContent, 0644)
 	if err != nil {
 		t.Fatalf("failed to modify test file: %v", err)
+	}
+	err = os.Chtimes(testFile, time.Now(), time.Now().Add(time.Second))
+	if err != nil {
+		t.Fatalf("failed to change mtime: %v", err)
 	}
 
 	result, err = tool.Execute(context.Background(), map[string]any{
