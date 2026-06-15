@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.17.0] - 2026-06-15
 
 ### Completed
-- **stream-json alignment**: Project goal fully achieved after 17 iterations
+- **stream-json alignment**: Project goal fully achieved after 20 iterations
   - All gap tests pass: TestStreamJSONGap_ResultExtendedFields and TestStreamJSONGap_InitExtendedFields
   - All stream-json format differences resolved with Claude Code headless behavior
   - Init event fields: fast_mode_state, output_style, mcp_servers, apiKeySource, analytics_disabled, skills
