@@ -100,6 +100,22 @@ func (e *QueryEngine) finalizeAsEndTurn(ctx context.Context, resp *api.Response,
 				ttftMs = 0
 			}
 		}
+		// Calculate TTFT stream (time to first stream event) in milliseconds
+		var ttftStreamMs int64
+		if !e.firstStreamTime.IsZero() && !e.lastAPIStartTime.IsZero() {
+			ttftStreamMs = e.firstStreamTime.Sub(e.lastAPIStartTime).Milliseconds()
+			if ttftStreamMs < 0 {
+				ttftStreamMs = 0
+			}
+		}
+		// Calculate time to request (pre-API processing time) in milliseconds
+		var timeToRequestMs int64
+		if !e.turnStartTime.IsZero() && !e.lastAPIStartTime.IsZero() {
+			timeToRequestMs = e.lastAPIStartTime.Sub(e.turnStartTime).Milliseconds()
+			if timeToRequestMs < 0 {
+				timeToRequestMs = 0
+			}
+		}
 
 		msg := StreamMessage{
 			Type:            "result",
@@ -112,6 +128,8 @@ func (e *QueryEngine) finalizeAsEndTurn(ctx context.Context, resp *api.Response,
 			IsError:         false,
 			StopReason:      string(resp.StopReason),
 			TTFTMs:          ttftMs,
+			TTFTStreamMs:    ttftStreamMs,
+			TimeToRequestMs: timeToRequestMs,
 			TerminalReason:  mapTerminalReason(string(resp.StopReason)),
 			APIErrorStatus:  nil,
 			DurationMs:      time.Since(e.startTime).Milliseconds(),

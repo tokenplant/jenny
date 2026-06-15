@@ -156,6 +156,12 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 	maxIterations := e.streamCfg.MaxIterations
 
 	for i := 0; maxIterations <= 0 || i < maxIterations; i++ {
+		// Record turn start time for time_to_request_ms calculation
+		e.turnStartTime = time.Now()
+		// Reset firstStreamTime and firstTokenTime for this turn
+		e.firstStreamTime = time.Time{}
+		e.firstTokenTime = time.Time{}
+
 		// Check if context is already cancelled/timed out before attempting API call
 		if ctx.Err() != nil {
 			return "", ctx.Err()
@@ -405,7 +411,10 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 
 			switch block.Block.Type {
 			case api.BlockTypeText:
-				// Track TTFT: record time when first content block arrives
+				// Track firstStreamTime and TTFT: record time when first content block arrives
+				if e.firstStreamTime.IsZero() {
+					e.firstStreamTime = time.Now()
+				}
 				if e.firstTokenTime.IsZero() {
 					e.firstTokenTime = time.Now()
 				}
@@ -416,13 +425,19 @@ func (e *QueryEngine) runLoop(ctx context.Context, messages []api.Message, cwd, 
 					textOutput.WriteString(block.Block.Text)
 				}
 			case api.BlockTypeThinking:
-				// Track TTFT: record time when first content block arrives
+				// Track firstStreamTime and TTFT: record time when first content block arrives
+				if e.firstStreamTime.IsZero() {
+					e.firstStreamTime = time.Now()
+				}
 				if e.firstTokenTime.IsZero() {
 					e.firstTokenTime = time.Now()
 				}
 				thinkingBlocks = append(thinkingBlocks, thinkingBlock{Text: block.Block.Thinking, Signature: block.Block.Signature})
 			case api.BlockTypeToolUse:
-				// Track TTFT: record time when first content block arrives
+				// Track firstStreamTime and TTFT: record time when first content block arrives
+				if e.firstStreamTime.IsZero() {
+					e.firstStreamTime = time.Now()
+				}
 				if e.firstTokenTime.IsZero() {
 					e.firstTokenTime = time.Now()
 				}

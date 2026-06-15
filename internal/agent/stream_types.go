@@ -131,6 +131,8 @@ type StreamMessage struct {
 	Result            string             `json:"result,omitempty"`
 	StopReason        string             `json:"stop_reason,omitempty"`
 	TTFTMs            int64              `json:"ttft_ms,omitempty"`
+	TTFTStreamMs      int64              `json:"ttft_stream_ms,omitempty"`
+	TimeToRequestMs    int64              `json:"time_to_request_ms,omitempty"`
 	TerminalReason    string             `json:"terminal_reason,omitempty"`
 	APIErrorStatus    *string            `json:"api_error_status,omitempty"`
 	ParentToolUseID   *string            `json:"parent_tool_use_id,omitempty"`
@@ -203,6 +205,14 @@ func (s StreamMessage) MarshalJSON() ([]byte, error) {
 		// ttft_ms: time to first token (omitted when zero)
 		if s.TTFTMs > 0 {
 			fields = append(fields, fmt.Sprintf(`"ttft_ms":%d`, s.TTFTMs))
+		}
+		// ttft_stream_ms: time to first stream event (omitted when zero)
+		if s.TTFTStreamMs > 0 {
+			fields = append(fields, fmt.Sprintf(`"ttft_stream_ms":%d`, s.TTFTStreamMs))
+		}
+		// time_to_request_ms: pre-API processing time (omitted when zero)
+		if s.TimeToRequestMs > 0 {
+			fields = append(fields, fmt.Sprintf(`"time_to_request_ms":%d`, s.TimeToRequestMs))
 		}
 		// terminal_reason: mapped from stop_reason (omitted when empty)
 		if s.TerminalReason != "" {
